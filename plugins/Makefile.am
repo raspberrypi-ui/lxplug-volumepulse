@@ -9,15 +9,15 @@ endif
 pkglib_LTLIBRARIES = $(DYNAMIC_PLUGINS)
 
 EXTRA_LTLIBRARIES = \
-	volumealsabt.la
+	volumepulse.la
 
 pkglibdir = $(libdir)/lxpanel/plugins
 
 # volumealsabt
-volumealsabt_la_SOURCES = \
+volumepulse_la_SOURCES = \
 	volumealsabt/volumealsabt.c
 
-volumealsabt_la_CFLAGS = \
+volumepulse_la_CFLAGS = \
 	-I$(top_srcdir) \
 	-DPACKAGE_DATA_DIR=\""$(datadir)/lxpanel"\" \
 	-DPACKAGE_LOCALE_DIR=\""$(prefix)/$(DATADIRNAME)/locale"\" \
@@ -26,7 +26,7 @@ volumealsabt_la_CFLAGS = \
 	$(PACKAGE_CFLAGS) \
 	$(G_CAST_CHECKS)
 
-volumealsabt_la_LDFLAGS = \
+volumepulse_la_LDFLAGS = \
 	$(PACKAGE_LIBS) \
 	-module @LXPANEL_MODULE@ \
 	-lasound \

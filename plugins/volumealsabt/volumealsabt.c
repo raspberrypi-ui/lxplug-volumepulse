@@ -3075,14 +3075,14 @@ static void volumealsa_destructor (gpointer user_data)
     g_free (vol);
 }
 
-FM_DEFINE_MODULE (lxpanel_gtk, volumealsabt)
+FM_DEFINE_MODULE (lxpanel_gtk, volumepulse)
 
 /* Plugin descriptor */
 
 LXPanelPluginInit fm_module_init_lxpanel_gtk = 
 {
-    .name = N_("Volume Control (ALSA/BT)"),
-    .description = N_("Display and control volume for ALSA and Bluetooth devices"),
+    .name = N_("Volume Control (PulseAudio)"),
+    .description = N_("Display and control volume for PulseAudio"),
     .new_instance = volumealsa_constructor,
     .config = volumealsa_configure,
     .reconfigure = volumealsa_panel_configuration_changed,
