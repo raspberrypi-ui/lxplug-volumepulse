@@ -61,6 +61,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <alsa/asoundlib.h>
 #include <poll.h>
 #include <libfm/fm-gtk.h>
+#include <pulse/pulseaudio.h>
 
 #include "plugin.h"
 
@@ -122,6 +123,12 @@ typedef struct {
     /* HDMI devices */
     guint hdmis;                        /* Number of HDMI devices */
     char *mon_names[2];                 /* Names of HDMI devices */
+
+    /* PulseAudio interface */
+    pa_threaded_mainloop *pa_mainloop;
+    pa_context *pa_context;
+    pa_context_state_t pa_state;
+
 } VolumeALSAPlugin;
 
 typedef enum {
@@ -240,6 +247,18 @@ static void playback_switch_toggled_event (GtkToggleButton *togglebutton, gpoint
 static void capture_switch_toggled_event (GtkToggleButton *togglebutton, gpointer user_data);
 static void enum_changed_event (GtkComboBox *combo, gpointer *user_data);
 static GtkWidget *find_box_child (GtkWidget *container, gint type, const char *name);
+
+/* PulseAudio */
+static void pulse_init (VolumeALSAPlugin *vol);
+static void pulse_disconnect (VolumeALSAPlugin *vol);
+static void pulse_close (VolumeALSAPlugin *vol);
+static void pa_error_handler (VolumeALSAPlugin *vol, char *name);
+static void pa_wait (VolumeALSAPlugin *vol, pa_operation *op);
+static void pa_cb_state (pa_context *pacontext, void *userdata);
+static void pa_cb_server_info (pa_context *context, const pa_server_info *i, void *userdata);
+static void pa_cb_get_sink_list (pa_context *context, const pa_sink_info *i, int eol, void *userdata);
+static int pulse_get_default_sink (VolumeALSAPlugin *vol);
+static int pulse_get_sinks (VolumeALSAPlugin *vol);
 
 /* Plugin */
 static GtkWidget *volumealsa_configure (LXPanel *panel, GtkWidget *plugin);
@@ -1853,6 +1872,9 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
     def_card = asound_get_default_card ();
     def_inp = asound_get_default_input ();
 
+    pulse_get_sinks (vol);
+    pulse_get_default_sink (vol);
+
     vol->menu_popup = gtk_menu_new ();
 
     // create input selector...
@@ -2836,6 +2858,173 @@ static GtkWidget *find_box_child (GtkWidget *container, gint type, const char *n
     return NULL;
 }
 
+/*----------------------------------------------------------------------------*/
+/* PulseAudio controller                                                      */
+/*----------------------------------------------------------------------------*/
+
+static void pulse_init (VolumeALSAPlugin *vol)
+{
+    pa_proplist *paprop;
+    pa_mainloop_api *paapi;
+
+    vol->pa_context = NULL;
+    vol->pa_mainloop = pa_threaded_mainloop_new ();
+    pa_threaded_mainloop_start (vol->pa_mainloop);
+
+    pa_threaded_mainloop_lock (vol->pa_mainloop);
+    paapi = pa_threaded_mainloop_get_api (vol->pa_mainloop);
+
+    paprop = pa_proplist_new ();
+    pa_proplist_sets (paprop, PA_PROP_APPLICATION_NAME, "unknown");
+    pa_proplist_sets (paprop, PA_PROP_MEDIA_ROLE, "music");
+    vol->pa_context = pa_context_new_with_proplist (paapi, "unknown", paprop);
+    pa_proplist_free (paprop);
+
+    if (vol->pa_context == NULL)
+    {
+        pa_threaded_mainloop_unlock (vol->pa_mainloop);
+        pa_error_handler (vol, "create context");
+        return;
+    }
+
+    vol->pa_state = PA_CONTEXT_UNCONNECTED;
+
+    pa_context_set_state_callback (vol->pa_context, &pa_cb_state, vol);
+    pa_context_connect (vol->pa_context, NULL, PA_CONTEXT_NOAUTOSPAWN, NULL);
+
+    while (vol->pa_state != PA_CONTEXT_READY && vol->pa_state != PA_CONTEXT_FAILED)
+    {
+        pa_threaded_mainloop_wait (vol->pa_mainloop);
+    }
+
+    pa_threaded_mainloop_unlock (vol->pa_mainloop);
+
+    if (vol->pa_state != PA_CONTEXT_READY)
+    {
+        pa_error_handler (vol, "init context");
+        return;
+    }
+}
+
+static void pulse_disconnect (VolumeALSAPlugin *vol)
+{
+    if (vol->pa_context != NULL)
+    {
+        pa_threaded_mainloop_lock (vol->pa_mainloop);
+        pa_context_disconnect (vol->pa_context);
+        pa_context_unref (vol->pa_context);
+        vol->pa_context = NULL;
+        pa_threaded_mainloop_unlock (vol->pa_mainloop);
+    }
+}
+
+static void pulse_close (VolumeALSAPlugin *vol)
+{
+    if (vol->pa_mainloop != NULL)
+    {
+        pa_threaded_mainloop_stop (vol->pa_mainloop);
+        pa_threaded_mainloop_free (vol->pa_mainloop);
+    }
+}
+
+static void pa_error_handler (VolumeALSAPlugin *vol, char *name)
+{
+    int rc;
+
+    if (vol->pa_context != NULL)
+    {
+        rc = pa_context_errno (vol->pa_context);
+        g_warning ("%s: err:%d %s\n", name, rc, pa_strerror (rc));
+        pulse_disconnect (vol);
+    }
+    pulse_close (vol);
+}
+
+static void pa_wait (VolumeALSAPlugin *vol, pa_operation *op)
+{
+    int retval;
+
+    while (pa_operation_get_state (op) == PA_OPERATION_RUNNING)
+    {
+        pa_threaded_mainloop_wait (vol->pa_mainloop);
+    }
+    pa_operation_unref (op);
+}
+
+static void pa_cb_state (pa_context *pacontext, void *userdata)
+{
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
+    if (pacontext == NULL)
+    {
+        vol->pa_state = PA_CONTEXT_FAILED;
+        pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+        return;
+    }
+
+    vol->pa_state = pa_context_get_state (pacontext);
+    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
+static void pa_cb_server_info (pa_context *context, const pa_server_info *i, void *userdata)
+{
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
+    printf ("Default sink : %s\n", i->default_sink_name);
+    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
+static void pa_cb_get_sink_list (pa_context *context, const pa_sink_info *i, int eol, void *userdata)
+{
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
+    if (!eol)
+    {
+        const char *api = pa_proplist_gets (i->proplist, "device.api");
+        printf ("%d {%s} {%s} {%s} {%s}\n", i->index, i->name, i->description, api, 
+            strcmp (api, "alsa") ? "" : pa_proplist_gets (i->proplist, "alsa.name"));
+    }
+    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
+static int pulse_get_default_sink (VolumeALSAPlugin *vol)
+{
+    pa_operation *op;
+
+    pa_threaded_mainloop_lock (vol->pa_mainloop);
+
+    op = pa_context_get_server_info (vol->pa_context, &pa_cb_server_info, vol);
+    if (!op)
+    {
+        pa_threaded_mainloop_unlock (vol->pa_mainloop);
+        pa_error_handler (vol, "get server info");
+        return 0;
+    }
+    pa_wait (vol, op);
+
+    pa_threaded_mainloop_unlock (vol->pa_mainloop);
+    return 1;
+}
+
+static int pulse_get_sinks (VolumeALSAPlugin *vol)
+{
+    pa_operation *op;
+
+    pa_threaded_mainloop_lock (vol->pa_mainloop);
+
+    op = pa_context_get_sink_info_list (vol->pa_context, &pa_cb_get_sink_list, vol);
+    if (!op)
+    {
+        pa_threaded_mainloop_unlock (vol->pa_mainloop);
+        pa_error_handler (vol, "get sink info list");
+        return 0;
+    }
+    pa_wait (vol, op);
+
+    pa_threaded_mainloop_unlock (vol->pa_mainloop);
+    return 1;
+}
+
 
 /*----------------------------------------------------------------------------*/
 /* Plugin structure                                                           */
@@ -3051,6 +3240,9 @@ static GtkWidget *volumealsa_constructor (LXPanel *panel, config_setting_t *sett
     volumealsa_update_display (vol);
     gtk_widget_show_all (p);
 
+    /* set up PulseAudio context */
+    pulse_init (vol);
+
     vol->stopped = FALSE;
     return p;
 }
@@ -3062,6 +3254,9 @@ static void volumealsa_destructor (gpointer user_data)
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
 
     asound_deinitialize (vol);
+
+    pulse_disconnect (vol);
+    pulse_close (vol);
 
     /* If the dialog box is open, dismiss it. */
     if (vol->popup_window != NULL) gtk_widget_destroy (vol->popup_window);

@@ -30,6 +30,7 @@ volumepulse_la_LDFLAGS = \
 	$(PACKAGE_LIBS) \
 	-module @LXPANEL_MODULE@ \
 	-lasound \
+	-lpulse \
 	-lxml2
 
 install-exec-hook:
