@@ -132,6 +132,9 @@ typedef struct {
     pa_context_state_t pa_state;
     char *pa_default_sink;
     char *pa_default_source;
+    int pa_channels;
+    int pa_volume;
+    int pa_mute;
 
 } VolumeALSAPlugin;
 
@@ -270,6 +273,11 @@ static char *bluez_to_pa_sink_name (char *bluez_name);
 static char *bluez_to_pa_source_name (char *bluez_name);
 static char *pa_sink_to_bluez_name (char *pa_name);
 static char *pa_source_to_bluez_name (char *pa_name);
+static int pulse_set_volume (VolumeALSAPlugin *vol, int volume);
+static int pulse_get_volume (VolumeALSAPlugin *vol);
+static int pulse_set_mute (VolumeALSAPlugin *vol, int mute);
+static int pulse_get_mute (VolumeALSAPlugin *vol);
+static int pulse_get_default_sink_info (VolumeALSAPlugin *vol);
 
 /* Plugin */
 static GtkWidget *volumealsa_configure (LXPanel *panel, GtkWidget *plugin);
@@ -1628,8 +1636,8 @@ static void volumealsa_update_display (VolumeALSAPlugin *vol)
     else
     {
         /* read current mute and volume status */
-        mute = asound_is_muted (vol);
-        level = asound_get_volume (vol);
+        mute = pulse_get_mute (vol);
+        level = pulse_get_volume (vol);
         if (mute) level = 0;
     }
 
@@ -2396,8 +2404,8 @@ static void volumealsa_build_popup_window (GtkWidget *p)
 static void volumealsa_popup_scale_changed (GtkRange *range, VolumeALSAPlugin *vol)
 {
     /* Reflect the value of the control to the sound system. */
-    if (!asound_is_muted (vol))
-        asound_set_volume (vol, gtk_range_get_value (range));
+    if (!pulse_get_mute (vol))
+        pulse_set_volume (vol, gtk_range_get_value (range));
 
     /* Redraw the controls. */
     volumealsa_update_display (vol);
@@ -2423,7 +2431,7 @@ static void volumealsa_popup_scale_scrolled (GtkScale *scale, GdkEventScroll *ev
 static void volumealsa_popup_mute_toggled (GtkWidget *widget, VolumeALSAPlugin *vol)
 {
     /* Reflect the mute toggle to the sound system. */
-    asound_set_mute (vol, gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (widget)));
+    pulse_set_mute (vol, gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (widget)));
 
     /* Redraw the controls. */
     volumealsa_update_display (vol);
@@ -2839,6 +2847,8 @@ static GtkWidget *find_box_child (GtkWidget *container, gint type, const char *n
 /* PulseAudio controller                                                      */
 /*----------------------------------------------------------------------------*/
 
+#define PA_VOL_SCALE 655
+
 static void pa_cb_state (pa_context *pacontext, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
@@ -3031,6 +3041,37 @@ static int pulse_get_sinks (VolumeALSAPlugin *vol)
     return 1;
 }
 
+static void pa_cb_get_sink_info (pa_context *context, const pa_sink_info *i, int eol, void *userdata)
+{
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+    if (!eol)
+    {
+        vol->pa_channels = i->volume.channels;
+        vol->pa_volume = i->volume.values[0];
+        vol->pa_mute = i->mute;
+    }
+    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
+static int pulse_get_default_sink_info (VolumeALSAPlugin *vol)
+{
+    pa_operation *op;
+
+    pa_threaded_mainloop_lock (vol->pa_mainloop);
+
+    op = pa_context_get_sink_info_by_name (vol->pa_context, vol->pa_default_sink, &pa_cb_get_sink_info, vol);
+    if (!op)
+    {
+        pa_threaded_mainloop_unlock (vol->pa_mainloop);
+        pa_error_handler (vol, "get sink info");
+        return 0;
+    }
+    pa_wait (vol, op);
+
+    pa_threaded_mainloop_unlock (vol->pa_mainloop);
+    return 1;
+}
+
 static void pa_cb_set_default_sink (pa_context *context, int success, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
@@ -3042,10 +3083,8 @@ static void pa_cb_get_sink_input_list (pa_context *context, const pa_sink_input_
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
 
-    if (!eol)
-    {
-        pa_context_move_sink_input_by_name (context, i->index, vol->pa_default_sink, NULL, NULL);
-    }
+    if (!eol) pa_context_move_sink_input_by_name (context, i->index, vol->pa_default_sink, NULL, NULL);
+
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
@@ -3079,6 +3118,74 @@ static int pulse_set_default_sink (VolumeALSAPlugin *vol, const char *sinkname)
 
     pa_threaded_mainloop_unlock (vol->pa_mainloop);
     return 1;
+}
+
+static void pa_cb_set_volume (pa_context *context, int success, void *userdata)
+{
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
+    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
+static int pulse_set_volume (VolumeALSAPlugin *vol, int volume)
+{
+    pa_operation *op;
+    pa_cvolume cvol;
+    cvol.channels = vol->pa_channels;
+    cvol.values[0] = volume * PA_VOL_SCALE;
+    cvol.values[1] = volume * PA_VOL_SCALE;
+
+    pa_threaded_mainloop_lock (vol->pa_mainloop);
+
+    op = pa_context_set_sink_volume_by_name (vol->pa_context, vol->pa_default_sink, &cvol, &pa_cb_set_volume, vol);
+    if (!op)
+    {
+        pa_threaded_mainloop_unlock (vol->pa_mainloop);
+        pa_error_handler (vol, "set sink volume");
+        return 0;
+    }
+    pa_wait (vol, op);
+
+    pa_threaded_mainloop_unlock (vol->pa_mainloop);
+    return 1;
+}
+
+static int pulse_get_volume (VolumeALSAPlugin *vol)
+{
+    pulse_get_default_sink_info (vol);
+    return vol->pa_volume / PA_VOL_SCALE;
+}
+
+static void pa_cb_set_mute (pa_context *context, int success, void *userdata)
+{
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
+    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
+static int pulse_set_mute (VolumeALSAPlugin *vol, int mute)
+{
+    pa_operation *op;
+
+    pa_threaded_mainloop_lock (vol->pa_mainloop);
+
+    op = pa_context_set_sink_mute_by_name (vol->pa_context, vol->pa_default_sink, mute, &pa_cb_set_volume, vol);
+    if (!op)
+    {
+        pa_threaded_mainloop_unlock (vol->pa_mainloop);
+        pa_error_handler (vol, "set sink mute");
+        return 0;
+    }
+    pa_wait (vol, op);
+
+    pa_threaded_mainloop_unlock (vol->pa_mainloop);
+    return 1;
+}
+
+static int pulse_get_mute (VolumeALSAPlugin *vol)
+{
+    pulse_get_default_sink_info (vol);
+    return vol->pa_mute;
 }
 
 static char *bluez_to_pa_sink_name (char *bluez_name)
@@ -3221,24 +3328,24 @@ static gboolean volumealsa_control_msg (GtkWidget *plugin, const char *cmd)
 
     if (!strncmp (cmd, "mute", 4))
     {
-        asound_set_mute (vol, asound_is_muted (vol) ? 0 : 1);
+        pulse_set_mute (vol, pulse_get_mute (vol) ? 0 : 1);
         volumealsa_update_display (vol);
         return TRUE;
     }
 
     if (!strncmp (cmd, "volu", 4))
     {
-        if (asound_is_muted (vol)) asound_set_mute (vol, 0);
+        if (pulse_get_mute (vol)) pulse_set_mute (vol, 0);
         else
         {
-            int volume = asound_get_volume (vol);
+            int volume = pulse_get_volume (vol);
             if (volume < 100)
             {
                 volume += 5;
                 volume /= 5;
                 volume *= 5;
             }
-            asound_set_volume (vol, volume);
+            pulse_set_volume (vol, volume);
         }
         volumealsa_update_display (vol);
         return TRUE;
@@ -3246,17 +3353,17 @@ static gboolean volumealsa_control_msg (GtkWidget *plugin, const char *cmd)
 
     if (!strncmp (cmd, "vold", 4))
     {
-        if (asound_is_muted (vol)) asound_set_mute (vol, 0);
+        if (pulse_get_mute (vol)) pulse_set_mute (vol, 0);
         else
         {
-            int volume = asound_get_volume (vol);
+            int volume = pulse_get_volume (vol);
             if (volume > 0)
             {
                 volume -= 1; // effectively -5 + 4 for rounding...
                 volume /= 5;
                 volume *= 5;
             }
-            asound_set_volume (vol, volume);
+            pulse_set_volume (vol, volume);
         }
         volumealsa_update_display (vol);
         return TRUE;
@@ -3343,12 +3450,13 @@ static GtkWidget *volumealsa_constructor (LXPanel *panel, config_setting_t *sett
     /* Set up for multiple HDMIs */
     vol->hdmis = hdmi_monitors (vol);
 
+    /* set up PulseAudio context */
+    pulse_init (vol);
+    pulse_get_defaults (vol);
+
     /* Update the display, show the widget, and return. */
     volumealsa_update_display (vol);
     gtk_widget_show_all (p);
-
-    /* set up PulseAudio context */
-    pulse_init (vol);
 
     vol->stopped = FALSE;
     return p;
