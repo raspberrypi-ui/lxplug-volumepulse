@@ -265,7 +265,7 @@ static void pa_match_alsa (GtkWidget *widget, gpointer data);
 static void pa_cb_get_sink_list (pa_context *context, const pa_sink_info *i, int eol, void *userdata);
 static int pulse_get_defaults (VolumeALSAPlugin *vol);
 static int pulse_get_sinks (VolumeALSAPlugin *vol);
-static void pulse_set_default_sink (VolumeALSAPlugin *vol, const char *sinkname);
+static int pulse_set_default_sink (VolumeALSAPlugin *vol, const char *sinkname);
 static char *bluez_to_pa_sink_name (char *bluez_name);
 static char *bluez_to_pa_source_name (char *bluez_name);
 static char *pa_sink_to_bluez_name (char *pa_name);
@@ -3033,10 +3033,54 @@ static int pulse_get_sinks (VolumeALSAPlugin *vol)
     return 1;
 }
 
-static void pulse_set_default_sink (VolumeALSAPlugin *vol, const char *sinkname)
+static void pa_cb_get_sink_input_list (pa_context *context, const pa_sink_input_info *i, int eol, void *userdata)
 {
-    pa_context_set_default_sink (vol->pa_context, sinkname, NULL, NULL);
-    // do some magic here to move any current streams to the new sink...
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
+    if (!eol)
+    {
+        pa_context_move_sink_input_by_name (context, i->index, vol->pa_default_sink, NULL, NULL);
+    }
+    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
+static void pa_cb_set_default_sink (pa_context *context, int success, void *userdata)
+{
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
+    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
+static int pulse_set_default_sink (VolumeALSAPlugin *vol, const char *sinkname)
+{
+    pa_operation *op;
+
+    if (vol->pa_default_sink) g_free (vol->pa_default_sink);
+    vol->pa_default_sink = g_strdup (sinkname);
+
+    // move any current streams to the new sink
+    pa_threaded_mainloop_lock (vol->pa_mainloop);
+
+    op = pa_context_set_default_sink (vol->pa_context, sinkname, &pa_cb_set_default_sink, vol);
+    if (!op)
+    {
+        pa_threaded_mainloop_unlock (vol->pa_mainloop);
+        pa_error_handler (vol, "set default sink");
+        return 0;
+    }
+    pa_wait (vol, op);
+
+    op = pa_context_get_sink_input_info_list (vol->pa_context, &pa_cb_get_sink_input_list, vol);
+    if (!op)
+    {
+        pa_threaded_mainloop_unlock (vol->pa_mainloop);
+        pa_error_handler (vol, "get sink input info list");
+        return 0;
+    }
+    pa_wait (vol, op);
+
+    pa_threaded_mainloop_unlock (vol->pa_mainloop);
+    return 1;
 }
 
 static char *bluez_to_pa_sink_name (char *bluez_name)
