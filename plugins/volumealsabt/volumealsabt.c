@@ -80,7 +80,6 @@ typedef struct {
 } mixer_info_t;
 
 typedef struct {
-
     /* plugin */
     GtkWidget *plugin;                  /* Back pointer to widget */
     LXPanel *panel;                     /* Back pointer to panel */
@@ -130,12 +129,11 @@ typedef struct {
     pa_threaded_mainloop *pa_mainloop;
     pa_context *pa_context;
     pa_context_state_t pa_state;
-    char *pa_default_sink;
-    char *pa_default_source;
-    int pa_channels;
-    int pa_volume;
-    int pa_mute;
-
+    char *pa_default_sink;              /* current default sink name */
+    char *pa_default_source;            /* current default source name */
+    int pa_channels;                    /* number of channels on default sink */
+    int pa_volume;                      /* volume setting on default sink */
+    int pa_mute;                        /* mute setting on default sink */
 } VolumeALSAPlugin;
 
 typedef enum {
@@ -225,6 +223,7 @@ static gboolean volumealsa_button_press_event (GtkWidget *widget, GdkEventButton
 
 /* Menu popup */
 static GtkWidget *volumealsa_menu_item_add (VolumeALSAPlugin *vol, GtkWidget *menu, const char *label, const char *name, gboolean selected, gboolean input, GCallback cb);
+static void volumealsa_menu_show_default (GtkWidget *widget, gpointer data);
 static void volumealsa_build_device_menu (VolumeALSAPlugin *vol);
 static void volumealsa_set_external_output (GtkWidget *widget, VolumeALSAPlugin *vol);
 static void volumealsa_set_external_input (GtkWidget *widget, VolumeALSAPlugin *vol);
@@ -260,24 +259,20 @@ static void pulse_init (VolumeALSAPlugin *vol);
 static void pulse_disconnect (VolumeALSAPlugin *vol);
 static void pulse_close (VolumeALSAPlugin *vol);
 static void pa_error_handler (VolumeALSAPlugin *vol, char *name);
-static void pa_wait (VolumeALSAPlugin *vol, pa_operation *op);
-static void pa_cb_state (pa_context *pacontext, void *userdata);
-static void pa_match_default (GtkWidget *widget, gpointer data);
-static void pa_cb_server_info (pa_context *context, const pa_server_info *i, void *userdata);
-static void pa_match_alsa (GtkWidget *widget, gpointer data);
-static void pa_cb_get_sink_list (pa_context *context, const pa_sink_info *i, int eol, void *userdata);
 static int pulse_get_defaults (VolumeALSAPlugin *vol);
-static int pulse_get_sinks (VolumeALSAPlugin *vol);
+static int pulse_update_alsa_names (VolumeALSAPlugin *vol);
 static int pulse_set_default_sink (VolumeALSAPlugin *vol, const char *sinkname);
-static char *bluez_to_pa_sink_name (char *bluez_name);
-static char *bluez_to_pa_source_name (char *bluez_name);
-static char *pa_sink_to_bluez_name (char *pa_name);
-static char *pa_source_to_bluez_name (char *pa_name);
+static int pulse_move_streams_to_default_sink (VolumeALSAPlugin *vol);
+static void pulse_change_sink (VolumeALSAPlugin *vol, const char *sinkname);
+static int pulse_get_default_sink_info (VolumeALSAPlugin *vol);
 static int pulse_set_volume (VolumeALSAPlugin *vol, int volume);
 static int pulse_get_volume (VolumeALSAPlugin *vol);
 static int pulse_set_mute (VolumeALSAPlugin *vol, int mute);
 static int pulse_get_mute (VolumeALSAPlugin *vol);
-static int pulse_get_default_sink_info (VolumeALSAPlugin *vol);
+static char *bluez_to_pa_sink_name (char *bluez_name);
+static char *bluez_to_pa_source_name (char *bluez_name);
+static char *pa_sink_to_bluez_name (char *pa_name);
+static char *pa_source_to_bluez_name (char *pa_name);
 
 /* Plugin */
 static GtkWidget *volumealsa_configure (LXPanel *panel, GtkWidget *plugin);
@@ -553,7 +548,7 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
         else
         {
             paname = bluez_to_pa_sink_name (vol->bt_conname);
-            pulse_set_default_sink (vol, paname);
+            pulse_change_sink (vol, paname);
         }
         g_free (paname);
 
@@ -1892,6 +1887,20 @@ static GtkWidget *volumealsa_menu_item_add (VolumeALSAPlugin *vol, GtkWidget *me
     return mi;
 }
 
+static void volumealsa_menu_show_default (GtkWidget *widget, gpointer data)
+{
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) data;
+    char *bt_sink = pa_sink_to_bluez_name (vol->pa_default_sink);
+
+    if (!g_strcmp0 (gtk_widget_get_name (widget), vol->pa_default_sink) || !g_strcmp0 (gtk_widget_get_name (widget), bt_sink))
+    {
+        GtkWidget *image = gtk_image_new ();
+        lxpanel_plugin_set_menu_icon (vol->panel, image, "dialog-ok-apply");
+        gtk_image_menu_item_set_image (GTK_IMAGE_MENU_ITEM (widget), image);
+    }
+    g_free (bt_sink);
+}
+
 static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
 {
     GtkWidget *mi;
@@ -2108,10 +2117,13 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
     }
 
     /* update the menu item names, which are currently ALSA device names, to PulseAudio device names */
-    pulse_get_sinks (vol);
+    pulse_update_alsa_names (vol);
 
-    /* show the selected fallback sink and source */
+    /* update the fallback sink and source */
     pulse_get_defaults (vol);
+
+    /* select the fallbacks in the menu */
+    gtk_container_foreach (GTK_CONTAINER (vol->outputs), volumealsa_menu_show_default, vol);
 
     if (bt_dev || ext_dev)
     {
@@ -2170,7 +2182,7 @@ static void volumealsa_set_external_output (GtkWidget *widget, VolumeALSAPlugin 
         g_free (bt_name);
     }
 
-    pulse_set_default_sink (vol, gtk_widget_get_name (widget));
+    pulse_change_sink (vol, gtk_widget_get_name (widget));
     //asound_initialize (vol);
     volumealsa_update_display (vol);
 }
@@ -2255,7 +2267,7 @@ static void volumealsa_set_bluetooth_output (GtkWidget *widget, VolumeALSAPlugin
     {
         DEBUG ("Device %s is already connected", widget->name);
         char *paname = bluez_to_pa_sink_name (vol->bt_conname);
-        pulse_set_default_sink (vol, paname);
+        pulse_change_sink (vol, paname);
         g_free (paname);
         //asound_initialize (vol);
         volumealsa_update_display (vol);
@@ -2847,7 +2859,14 @@ static GtkWidget *find_box_child (GtkWidget *container, gint type, const char *n
 /* PulseAudio controller                                                      */
 /*----------------------------------------------------------------------------*/
 
-#define PA_VOL_SCALE 655
+/* Initialisation / teardown
+ * -------------------------
+ * The PulseAudio controller runs asynchronously in a new thread.
+ * The initial functions are to set up and tear down the controller,
+ * which is subsequently accessed by its context, which is created
+ * during the init function and a pointer to which is stored in the
+ * plugin global data structure
+ */
 
 static void pa_cb_state (pa_context *pacontext, void *userdata)
 {
@@ -2945,71 +2964,91 @@ static void pa_error_handler (VolumeALSAPlugin *vol, char *name)
     pulse_close (vol);
 }
 
-static void pa_wait (VolumeALSAPlugin *vol, pa_operation *op)
+static void pa_cb_generic_success (pa_context *context, int success, void *userdata)
 {
-    while (pa_operation_get_state (op) == PA_OPERATION_RUNNING)
-    {
-        pa_threaded_mainloop_wait (vol->pa_mainloop);
-    }
-    pa_operation_unref (op);
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
+    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
-static void pa_match_default (GtkWidget *widget, gpointer data)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) data;
-    char *bt_sink = pa_sink_to_bluez_name (vol->pa_default_sink);
+/* Generic operations
+ * ------------------
+ *
+ * Access to the controller is via asynchronous functions which request
+ * information or settings. Because the plugin itself runs synchronously,
+ * all controller access functions are wrapped in code which waits for
+ * them to complete. Returned values, where appropriate, are written to
+ * the plugin global data structure via callbacks from the async functions.
+ * The macros below are the boilerplate around each async call.
+ */
 
-    if (!g_strcmp0 (gtk_widget_get_name (widget), vol->pa_default_sink) || !g_strcmp0 (gtk_widget_get_name (widget), bt_sink))
-    {
-        GtkWidget *image = gtk_image_new ();
-        lxpanel_plugin_set_menu_icon (vol->panel, image, "dialog-ok-apply");
-        gtk_image_menu_item_set_image (GTK_IMAGE_MENU_ITEM (widget), image);
-    }
-    g_free (bt_sink);
-}
+#define START_PA_OPERATION \
+    pa_operation *op; \
+    pa_threaded_mainloop_lock (vol->pa_mainloop);
 
-static void pa_cb_server_info (pa_context *context, const pa_server_info *i, void *userdata)
+#define END_PA_OPERATION(name) \
+    if (!op) \
+    { \
+        pa_threaded_mainloop_unlock (vol->pa_mainloop); \
+        pa_error_handler (vol, name); \
+        return 0; \
+    } \
+    while (pa_operation_get_state (op) == PA_OPERATION_RUNNING) \
+    { \
+        pa_threaded_mainloop_wait (vol->pa_mainloop); \
+    } \
+    pa_operation_unref (op); \
+    pa_threaded_mainloop_unlock (vol->pa_mainloop); \
+    return 1;
+
+/* Get defaults
+ * ------------
+ *
+ * Updates the names of the current default sink and source in the plugin
+ * global data structure.
+ */
+
+static void pa_cb_get_server_info (pa_context *context, const pa_server_info *i, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
 
     if (vol->pa_default_sink) g_free (vol->pa_default_sink);
     vol->pa_default_sink = g_strdup (i->default_sink_name);
+
     if (vol->pa_default_source) g_free (vol->pa_default_source);
     vol->pa_default_source = g_strdup (i->default_source_name);
 
-    gtk_container_foreach (GTK_CONTAINER (vol->outputs), pa_match_default, vol);
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
 static int pulse_get_defaults (VolumeALSAPlugin *vol)
 {
-    pa_operation *op;
-
-    pa_threaded_mainloop_lock (vol->pa_mainloop);
-
-    op = pa_context_get_server_info (vol->pa_context, &pa_cb_server_info, vol);
-    if (!op)
-    {
-        pa_threaded_mainloop_unlock (vol->pa_mainloop);
-        pa_error_handler (vol, "get server info");
-        return 0;
-    }
-    pa_wait (vol, op);
-
-    pa_threaded_mainloop_unlock (vol->pa_mainloop);
-    return 1;
+    START_PA_OPERATION
+    op = pa_context_get_server_info (vol->pa_context, &pa_cb_get_server_info, vol);
+    END_PA_OPERATION ("get_server_info")
 }
 
-static void pa_match_alsa (GtkWidget *widget, gpointer data)
+/* Updating ALSA names in menu
+ * ---------------------------
+ *
+ * The device select menu looks at ALSA and Bluez to find audio devices,
+ * which are stored with their ALSA or Bluez names. After discovery, the
+ * update_names function is called which invokes the get_sink_info_list
+ * operation, which causes a callback for each PulseAudio sink. In this
+ * callback, the ALSA name of that sink is looked for in the menu, and is
+ * replaced with the PulseAudio name.
+ */
+
+static void replace_alsa_on_match (GtkWidget *widget, gpointer data)
 {
     pa_sink_info *i = (pa_sink_info *) data;
-
     const char *alsaname = pa_proplist_gets (i->proplist, "alsa.card_name");
+
     if (!strcmp (alsaname, gtk_widget_get_name (widget)))
         gtk_widget_set_name (widget, i->name);
 }
 
-static void pa_cb_get_sink_list (pa_context *context, const pa_sink_info *i, int eol, void *userdata)
+static void pa_cb_get_sink_info_list (pa_context *context, const pa_sink_info *i, int eol, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
 
@@ -3017,137 +3056,93 @@ static void pa_cb_get_sink_list (pa_context *context, const pa_sink_info *i, int
     {
         const char *api = pa_proplist_gets (i->proplist, "device.api");
         if (!strcmp (api, "alsa"))
-            gtk_container_foreach (GTK_CONTAINER (vol->outputs), pa_match_alsa, (void *) i);
+            gtk_container_foreach (GTK_CONTAINER (vol->outputs), replace_alsa_on_match, (void *) i);
     }
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
-static int pulse_get_sinks (VolumeALSAPlugin *vol)
+static int pulse_update_alsa_names (VolumeALSAPlugin *vol)
 {
-    pa_operation *op;
-
-    pa_threaded_mainloop_lock (vol->pa_mainloop);
-
-    op = pa_context_get_sink_info_list (vol->pa_context, &pa_cb_get_sink_list, vol);
-    if (!op)
-    {
-        pa_threaded_mainloop_unlock (vol->pa_mainloop);
-        pa_error_handler (vol, "get sink info list");
-        return 0;
-    }
-    pa_wait (vol, op);
-
-    pa_threaded_mainloop_unlock (vol->pa_mainloop);
-    return 1;
+    START_PA_OPERATION
+    op = pa_context_get_sink_info_list (vol->pa_context, &pa_cb_get_sink_info_list, vol);
+    END_PA_OPERATION ("get_sink_info_list")
 }
 
-static void pa_cb_get_sink_info (pa_context *context, const pa_sink_info *i, int eol, void *userdata)
+/* Changing default sink
+ * ---------------------
+ *
+ * The top-level change_sink function first calls the set_default_sink operation.
+ * The get_sink_input_info_list operation is then called, which returns a callback
+ * for each current sink input stream. The callback then in turn calls the
+ * move_sink_input_by_name operation for each input stream to move it to the
+ * new default sink.
+ */
+
+static int pulse_set_default_sink (VolumeALSAPlugin *vol, const char *sinkname)
+{
+    START_PA_OPERATION
+    op = pa_context_set_default_sink (vol->pa_context, sinkname, &pa_cb_generic_success, vol);
+    END_PA_OPERATION ("set_default_sink")
+}
+
+static void pa_cb_get_sink_input_info_list (pa_context *context, const pa_sink_input_info *i, int eol, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
+    if (!eol)
+    {
+        pa_context_move_sink_input_by_name (context, i->index, vol->pa_default_sink, &pa_cb_generic_success, vol);
+    }
+
+    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
+static int pulse_move_streams_to_default_sink (VolumeALSAPlugin *vol)
+{
+    START_PA_OPERATION
+    op = pa_context_get_sink_input_info_list (vol->pa_context, &pa_cb_get_sink_input_info_list, vol);
+    END_PA_OPERATION ("get_sink_input_info_list")
+}
+
+static void pulse_change_sink (VolumeALSAPlugin *vol, const char *sinkname)
+{
+    if (vol->pa_default_sink) g_free (vol->pa_default_sink);
+    vol->pa_default_sink = g_strdup (sinkname);
+
+    pulse_set_default_sink (vol, sinkname);
+    pulse_move_streams_to_default_sink (vol);
+}
+
+/* Volume and mute control
+ * -----------------------
+ *
+ * For get operations, the generic get_sink_info operation is called on the
+ * current default sink; the values are written into the global structure
+ * by the callbacks, and the top-level functions return them from there.
+ * For set operations, the specific set_sink_xxx operations are called.
+ */
+
+#define PA_VOL_SCALE 655    /* GTK volume scale is 0-100; PA scale is 0-65535 */
+
+static void pa_cb_get_sink_info_by_name (pa_context *context, const pa_sink_info *i, int eol, void *userdata)
+{
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
     if (!eol)
     {
         vol->pa_channels = i->volume.channels;
         vol->pa_volume = i->volume.values[0];
         vol->pa_mute = i->mute;
     }
+
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
 static int pulse_get_default_sink_info (VolumeALSAPlugin *vol)
 {
-    pa_operation *op;
-
-    pa_threaded_mainloop_lock (vol->pa_mainloop);
-
-    op = pa_context_get_sink_info_by_name (vol->pa_context, vol->pa_default_sink, &pa_cb_get_sink_info, vol);
-    if (!op)
-    {
-        pa_threaded_mainloop_unlock (vol->pa_mainloop);
-        pa_error_handler (vol, "get sink info");
-        return 0;
-    }
-    pa_wait (vol, op);
-
-    pa_threaded_mainloop_unlock (vol->pa_mainloop);
-    return 1;
-}
-
-static void pa_cb_set_default_sink (pa_context *context, int success, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static void pa_cb_get_sink_input_list (pa_context *context, const pa_sink_input_info *i, int eol, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    if (!eol) pa_context_move_sink_input_by_name (context, i->index, vol->pa_default_sink, NULL, NULL);
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static int pulse_set_default_sink (VolumeALSAPlugin *vol, const char *sinkname)
-{
-    pa_operation *op;
-
-    if (vol->pa_default_sink) g_free (vol->pa_default_sink);
-    vol->pa_default_sink = g_strdup (sinkname);
-
-    // move any current streams to the new sink
-    pa_threaded_mainloop_lock (vol->pa_mainloop);
-
-    op = pa_context_set_default_sink (vol->pa_context, sinkname, &pa_cb_set_default_sink, vol);
-    if (!op)
-    {
-        pa_threaded_mainloop_unlock (vol->pa_mainloop);
-        pa_error_handler (vol, "set default sink");
-        return 0;
-    }
-    pa_wait (vol, op);
-
-    op = pa_context_get_sink_input_info_list (vol->pa_context, &pa_cb_get_sink_input_list, vol);
-    if (!op)
-    {
-        pa_threaded_mainloop_unlock (vol->pa_mainloop);
-        pa_error_handler (vol, "get sink input info list");
-        return 0;
-    }
-    pa_wait (vol, op);
-
-    pa_threaded_mainloop_unlock (vol->pa_mainloop);
-    return 1;
-}
-
-static void pa_cb_set_volume (pa_context *context, int success, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static int pulse_set_volume (VolumeALSAPlugin *vol, int volume)
-{
-    pa_operation *op;
-    pa_cvolume cvol;
-    cvol.channels = vol->pa_channels;
-    cvol.values[0] = volume * PA_VOL_SCALE;
-    cvol.values[1] = volume * PA_VOL_SCALE;
-
-    pa_threaded_mainloop_lock (vol->pa_mainloop);
-
-    op = pa_context_set_sink_volume_by_name (vol->pa_context, vol->pa_default_sink, &cvol, &pa_cb_set_volume, vol);
-    if (!op)
-    {
-        pa_threaded_mainloop_unlock (vol->pa_mainloop);
-        pa_error_handler (vol, "set sink volume");
-        return 0;
-    }
-    pa_wait (vol, op);
-
-    pa_threaded_mainloop_unlock (vol->pa_mainloop);
-    return 1;
+    START_PA_OPERATION
+    op = pa_context_get_sink_info_by_name (vol->pa_context, vol->pa_default_sink, &pa_cb_get_sink_info_by_name, vol);
+    END_PA_OPERATION ("get_sink_info_by_name")
 }
 
 static int pulse_get_volume (VolumeALSAPlugin *vol)
@@ -3156,37 +3151,37 @@ static int pulse_get_volume (VolumeALSAPlugin *vol)
     return vol->pa_volume / PA_VOL_SCALE;
 }
 
-static void pa_cb_set_mute (pa_context *context, int success, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static int pulse_set_mute (VolumeALSAPlugin *vol, int mute)
-{
-    pa_operation *op;
-
-    pa_threaded_mainloop_lock (vol->pa_mainloop);
-
-    op = pa_context_set_sink_mute_by_name (vol->pa_context, vol->pa_default_sink, mute, &pa_cb_set_volume, vol);
-    if (!op)
-    {
-        pa_threaded_mainloop_unlock (vol->pa_mainloop);
-        pa_error_handler (vol, "set sink mute");
-        return 0;
-    }
-    pa_wait (vol, op);
-
-    pa_threaded_mainloop_unlock (vol->pa_mainloop);
-    return 1;
-}
-
 static int pulse_get_mute (VolumeALSAPlugin *vol)
 {
     pulse_get_default_sink_info (vol);
     return vol->pa_mute;
 }
+
+static int pulse_set_volume (VolumeALSAPlugin *vol, int volume)
+{
+    pa_cvolume cvol;
+    cvol.channels = vol->pa_channels;
+    cvol.values[0] = volume * PA_VOL_SCALE;
+    cvol.values[1] = volume * PA_VOL_SCALE;
+
+    START_PA_OPERATION
+    op = pa_context_set_sink_volume_by_name (vol->pa_context, vol->pa_default_sink, &cvol, &pa_cb_generic_success, vol);
+    END_PA_OPERATION ("set_sink_volume_by_name")
+}
+
+static int pulse_set_mute (VolumeALSAPlugin *vol, int mute)
+{
+    START_PA_OPERATION
+    op = pa_context_set_sink_mute_by_name (vol->pa_context, vol->pa_default_sink, mute, &pa_cb_generic_success, vol);
+    END_PA_OPERATION ("set_sink_mute_by_name");
+}
+
+/* Bluetooth name remapping
+ * ------------------------
+ *
+ * Helper functions to remap PulseAudio sink and source names to and from
+ * Bluez device names.
+ */
 
 static char *bluez_to_pa_sink_name (char *bluez_name)
 {
