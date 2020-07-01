@@ -2839,6 +2839,21 @@ static GtkWidget *find_box_child (GtkWidget *container, gint type, const char *n
 /* PulseAudio controller                                                      */
 /*----------------------------------------------------------------------------*/
 
+static void pa_cb_state (pa_context *pacontext, void *userdata)
+{
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
+    if (pacontext == NULL)
+    {
+        vol->pa_state = PA_CONTEXT_FAILED;
+        pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+        return;
+    }
+
+    vol->pa_state = pa_context_get_state (pacontext);
+    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
 static void pulse_init (VolumeALSAPlugin *vol)
 {
     pa_proplist *paprop;
@@ -2922,28 +2937,11 @@ static void pa_error_handler (VolumeALSAPlugin *vol, char *name)
 
 static void pa_wait (VolumeALSAPlugin *vol, pa_operation *op)
 {
-    int retval;
-
     while (pa_operation_get_state (op) == PA_OPERATION_RUNNING)
     {
         pa_threaded_mainloop_wait (vol->pa_mainloop);
     }
     pa_operation_unref (op);
-}
-
-static void pa_cb_state (pa_context *pacontext, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    if (pacontext == NULL)
-    {
-        vol->pa_state = PA_CONTEXT_FAILED;
-        pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-        return;
-    }
-
-    vol->pa_state = pa_context_get_state (pacontext);
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
 static void pa_match_default (GtkWidget *widget, gpointer data)
@@ -2973,6 +2971,25 @@ static void pa_cb_server_info (pa_context *context, const pa_server_info *i, voi
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
+static int pulse_get_defaults (VolumeALSAPlugin *vol)
+{
+    pa_operation *op;
+
+    pa_threaded_mainloop_lock (vol->pa_mainloop);
+
+    op = pa_context_get_server_info (vol->pa_context, &pa_cb_server_info, vol);
+    if (!op)
+    {
+        pa_threaded_mainloop_unlock (vol->pa_mainloop);
+        pa_error_handler (vol, "get server info");
+        return 0;
+    }
+    pa_wait (vol, op);
+
+    pa_threaded_mainloop_unlock (vol->pa_mainloop);
+    return 1;
+}
+
 static void pa_match_alsa (GtkWidget *widget, gpointer data)
 {
     pa_sink_info *i = (pa_sink_info *) data;
@@ -2995,25 +3012,6 @@ static void pa_cb_get_sink_list (pa_context *context, const pa_sink_info *i, int
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
-static int pulse_get_defaults (VolumeALSAPlugin *vol)
-{
-    pa_operation *op;
-
-    pa_threaded_mainloop_lock (vol->pa_mainloop);
-
-    op = pa_context_get_server_info (vol->pa_context, &pa_cb_server_info, vol);
-    if (!op)
-    {
-        pa_threaded_mainloop_unlock (vol->pa_mainloop);
-        pa_error_handler (vol, "get server info");
-        return 0;
-    }
-    pa_wait (vol, op);
-
-    pa_threaded_mainloop_unlock (vol->pa_mainloop);
-    return 1;
-}
-
 static int pulse_get_sinks (VolumeALSAPlugin *vol)
 {
     pa_operation *op;
@@ -3033,6 +3031,13 @@ static int pulse_get_sinks (VolumeALSAPlugin *vol)
     return 1;
 }
 
+static void pa_cb_set_default_sink (pa_context *context, int success, void *userdata)
+{
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
+    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
 static void pa_cb_get_sink_input_list (pa_context *context, const pa_sink_input_info *i, int eol, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
@@ -3041,13 +3046,6 @@ static void pa_cb_get_sink_input_list (pa_context *context, const pa_sink_input_
     {
         pa_context_move_sink_input_by_name (context, i->index, vol->pa_default_sink, NULL, NULL);
     }
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static void pa_cb_set_default_sink (pa_context *context, int success, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
