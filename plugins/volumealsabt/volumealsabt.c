@@ -2326,7 +2326,7 @@ static void volumealsa_set_bluetooth_input (GtkWidget *widget, VolumeALSAPlugin 
         pulse_change_source (vol, paname);
         g_free (paname);
 
-        /* disconnect old Bluetooth output device */
+        /* disconnect old Bluetooth input device */
         if (idevice) bt_disconnect_device (vol, idevice);
     }
     else
