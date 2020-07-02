@@ -265,6 +265,7 @@ static int pulse_update_alsa_sink_names (VolumeALSAPlugin *vol);
 static int pulse_update_alsa_source_names (VolumeALSAPlugin *vol);
 static int pulse_set_default_sink (VolumeALSAPlugin *vol, const char *sinkname);
 static int pulse_move_streams_to_default_sink (VolumeALSAPlugin *vol);
+static int pulse_move_streams_to_default_source (VolumeALSAPlugin *vol);
 static void pulse_change_sink (VolumeALSAPlugin *vol, const char *sinkname);
 static int pulse_set_default_source (VolumeALSAPlugin *vol, const char *sourcename);
 static void pulse_change_source (VolumeALSAPlugin *vol, const char *sourcename);
@@ -278,6 +279,8 @@ static char *bluez_to_pa_source_name (char *bluez_name);
 static char *pa_sink_to_bluez_name (char *pa_name);
 static char *pa_source_to_bluez_name (char *pa_name);
 static int pa_bt_sink_source_compare (char *sink, char *source);
+static int pulse_set_best_profile (VolumeALSAPlugin *vol, const char *card);
+static int pulse_set_all_profiles (VolumeALSAPlugin *vol);
 
 /* Plugin */
 static GtkWidget *volumealsa_configure (LXPanel *panel, GtkWidget *plugin);
@@ -3141,13 +3144,32 @@ static int pulse_set_default_source (VolumeALSAPlugin *vol, const char *sourcena
     END_PA_OPERATION ("set_default_source")
 }
 
+static void pa_cb_get_source_output_info_list (pa_context *context, const pa_source_output_info *i, int eol, void *userdata)
+{
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
+    if (!eol)
+    {
+        pa_context_move_source_output_by_name (context, i->index, vol->pa_default_source, &pa_cb_generic_success, vol);
+    }
+
+    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
+static int pulse_move_streams_to_default_source (VolumeALSAPlugin *vol)
+{
+    START_PA_OPERATION
+    op = pa_context_get_source_output_info_list (vol->pa_context, &pa_cb_get_source_output_info_list, vol);
+    END_PA_OPERATION ("get_source_output_info_list")
+}
+
 static void pulse_change_source (VolumeALSAPlugin *vol, const char *sourcename)
 {
     if (vol->pa_default_source) g_free (vol->pa_default_source);
     vol->pa_default_source = g_strdup (sourcename);
 
     pulse_set_default_source (vol, sourcename);
-    //pulse_move_streams_to_default_sink (vol); !!!!!
+    pulse_move_streams_to_default_source (vol);
 }
 
 /* Volume and mute control
