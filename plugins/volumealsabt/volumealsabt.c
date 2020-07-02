@@ -3294,17 +3294,16 @@ static void pa_cb_get_card_info_by_name (pa_context *c, const pa_card_info *i, i
 
     if (!eol)
     {
-        int count = 0, priority = 0;
-        pa_card_profile_info *profile = i->profiles;
-        while (count < i->n_profiles)
+        int priority = 0;
+        pa_card_profile_info2 **profile = i->profiles2;
+        while (*profile)
         {
-            if (profile->priority > priority)
+            if ((*profile)->priority > priority)
             {
-                pa_context_set_card_profile_by_name (vol->pa_context, i->name, profile->name, &pa_cb_generic_success, vol);
-                priority = profile->priority;
+                pa_context_set_card_profile_by_name (vol->pa_context, i->name, (*profile)->name, &pa_cb_generic_success, vol);
+                priority = (*profile)->priority;
             }
             profile++;
-            count++;
         }
     }
 
