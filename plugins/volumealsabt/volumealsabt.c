@@ -1911,7 +1911,7 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
 {
     GtkWidget *mi;
     gint devices = 0, inputs = 0, card_num, def_card, def_inp;
-    gboolean ext_dev = FALSE, bt_dev = FALSE, osel = FALSE, isel = FALSE;
+    gboolean ext_dev = FALSE, bt_dev = FALSE, ext_inp = FALSE, osel = FALSE, isel = FALSE;
 
     def_card = asound_get_default_card ();
     def_inp = asound_get_default_input ();
@@ -1978,13 +1978,14 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
 
             // either create a menu, or add a separator if there already is one
             if (!inputs) vol->inputs = gtk_menu_new ();
-            else
+            else if (!ext_inp)
             {
                 mi = gtk_separator_menu_item_new ();
                 gtk_menu_shell_append (GTK_MENU_SHELL (vol->inputs), mi);
             }
             volumealsa_menu_item_add (vol, vol->inputs, nam, nam, card_num == def_inp, TRUE, G_CALLBACK (volumealsa_set_external_input));
             if (card_num == def_inp) isel = TRUE;
+            ext_inp = TRUE;
             inputs++;
         }
     }
@@ -3279,6 +3280,51 @@ static int pa_bt_sink_source_compare (char *sink, char *source)
     return strncmp (sink + 11, source + 12, 17);
 }
 
+/* Profiles
+ * --------
+ *
+ * Under PA, cards have various profiles which control which sources and sinks
+ * are available to the system. PA should choose the best profile automatically.
+ * But sometimes it doesn't...
+ */
+
+static void pa_cb_get_card_info_by_name (pa_context *c, const pa_card_info *i, int eol, void *userdata)
+{
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
+    if (!eol)
+    {
+        int count = 0, priority = 0;
+        pa_card_profile_info *profile = i->profiles;
+        while (count < i->n_profiles)
+        {
+            if (profile->priority > priority)
+            {
+                pa_context_set_card_profile_by_name (vol->pa_context, i->name, profile->name, &pa_cb_generic_success, vol);
+                priority = profile->priority;
+            }
+            profile++;
+            count++;
+        }
+    }
+
+    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
+static int pulse_set_best_profile (VolumeALSAPlugin *vol, const char *card)
+{
+    START_PA_OPERATION
+    op = pa_context_get_card_info_by_name (vol->pa_context, card, &pa_cb_get_card_info_by_name, vol);
+    END_PA_OPERATION ("get_card_info_by_name")
+}
+
+static int pulse_set_all_profiles (VolumeALSAPlugin *vol)
+{
+    START_PA_OPERATION
+    op = pa_context_get_card_info_list	(vol->pa_context, &pa_cb_get_card_info_by_name, vol);
+    END_PA_OPERATION ("get_card_info_list")
+}
+
 /*----------------------------------------------------------------------------*/
 /* Plugin structure                                                           */
 /*----------------------------------------------------------------------------*/
@@ -3491,6 +3537,7 @@ static GtkWidget *volumealsa_constructor (LXPanel *panel, config_setting_t *sett
 
     /* set up PulseAudio context */
     pulse_init (vol);
+    pulse_set_all_profiles (vol);
     pulse_get_defaults (vol);
 
     /* Update the display, show the widget, and return. */
