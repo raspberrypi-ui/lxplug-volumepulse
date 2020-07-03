@@ -134,6 +134,7 @@ typedef struct {
     int pa_channels;                    /* number of channels on default sink */
     int pa_volume;                      /* volume setting on default sink */
     int pa_mute;                        /* mute setting on default sink */
+    char *pa_profile;                   /* current profile for card */
 } VolumeALSAPlugin;
 
 typedef enum {
@@ -274,14 +275,17 @@ static int pulse_set_volume (VolumeALSAPlugin *vol, int volume);
 static int pulse_get_volume (VolumeALSAPlugin *vol);
 static int pulse_set_mute (VolumeALSAPlugin *vol, int mute);
 static int pulse_get_mute (VolumeALSAPlugin *vol);
-static char *bluez_to_pa_sink_name (char *bluez_name);
+static char *bluez_to_pa_sink_name (char *bluez_name, char *profile);
 static char *bluez_to_pa_source_name (char *bluez_name);
+static char *bluez_to_pa_card_name (char *bluez_name);
 static char *pa_sink_to_bluez_name (char *pa_name);
 static char *pa_source_to_bluez_name (char *pa_name);
 static int pa_bt_sink_source_compare (char *sink, char *source);
 static int pa_bluez_device_same (const char *padev, const char *btdev);
 static int pulse_set_best_profile (VolumeALSAPlugin *vol, const char *card);
 static int pulse_set_all_profiles (VolumeALSAPlugin *vol);
+static int pulse_set_profile (VolumeALSAPlugin *vol, char *card, char *profile);
+static int pulse_get_profile (VolumeALSAPlugin *vol, char *card);
 
 /* Plugin */
 static GtkWidget *volumealsa_configure (LXPanel *panel, GtkWidget *plugin);
@@ -531,7 +535,7 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
     GError *error = NULL;
-    char *paname;
+    char *paname, *pacard;
 
     GVariant *var = g_dbus_proxy_call_finish (G_DBUS_PROXY (source), res, &error);
     if (var) g_variant_unref (var);
@@ -552,14 +556,19 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
         if (vol->bt_input)
         {
             paname = bluez_to_pa_source_name (vol->bt_conname);
+            pacard = bluez_to_pa_card_name (vol->bt_conname);
+            pulse_set_profile (vol, pacard, "headset_head_unit");
             pulse_change_source (vol, paname);
         }
         else
         {
-            paname = bluez_to_pa_sink_name (vol->bt_conname);
+            pacard = bluez_to_pa_card_name (vol->bt_conname);
+            pulse_get_profile (vol, pacard);
+            paname = bluez_to_pa_sink_name (vol->bt_conname, vol->pa_profile);
             pulse_change_sink (vol, paname);
         }
         g_free (paname);
+        g_free (pacard);
 
         // close the connection dialog
         volumealsa_close_connect_dialog (NULL, vol);
@@ -2259,10 +2268,12 @@ static void volumealsa_set_bluetooth_output (GtkWidget *widget, VolumeALSAPlugin
     if (!g_strcmp0 (widget->name, idevice))
     {
         DEBUG ("Device %s is already connected", widget->name);
-        char *paname = bluez_to_pa_sink_name (vol->bt_conname);
+        char *pacard = bluez_to_pa_card_name (widget->name);
+        pulse_get_profile (vol, pacard);
+        char *paname = bluez_to_pa_sink_name (widget->name, vol->pa_profile);
         pulse_change_sink (vol, paname);
         g_free (paname);
-        //asound_initialize (vol);
+        g_free (pacard);
         volumealsa_update_display (vol);
 
         /* disconnect old Bluetooth output device */
@@ -2317,9 +2328,12 @@ static void volumealsa_set_bluetooth_input (GtkWidget *widget, VolumeALSAPlugin 
     if (!g_strcmp0 (widget->name, odevice))
     {
         DEBUG ("Device %s is already connected\n", widget->name);
-        char *paname = bluez_to_pa_source_name (vol->bt_conname);
+        char *paname = bluez_to_pa_source_name (widget->name);
+        char *pacard = bluez_to_pa_card_name (widget->name);
+        pulse_set_profile (vol, pacard, "headset_head_unit");
         pulse_change_source (vol, paname);
         g_free (paname);
+        g_free (pacard);
 
         /* disconnect old Bluetooth input device */
         if (idevice) bt_disconnect_device (vol, idevice);
@@ -2923,6 +2937,7 @@ static void pulse_init (VolumeALSAPlugin *vol)
 
     vol->pa_default_sink = NULL;
     vol->pa_default_source = NULL;
+    vol->pa_profile = NULL;
 }
 
 static void pulse_disconnect (VolumeALSAPlugin *vol)
@@ -3233,7 +3248,7 @@ static int pulse_set_mute (VolumeALSAPlugin *vol, int mute)
  * Bluez device names.
  */
 
-static char *bluez_to_pa_sink_name (char *bluez_name)
+static char *bluez_to_pa_sink_name (char *bluez_name, char *profile)
 {
     unsigned int b1, b2, b3, b4, b5, b6;
 
@@ -3243,7 +3258,7 @@ static char *bluez_to_pa_sink_name (char *bluez_name)
         DEBUG ("Bluez name invalid : %s", bluez_name);
         return NULL;
     }
-    return g_strdup_printf ("bluez_sink.%02X_%02X_%02X_%02X_%02X_%02X.a2dp_sink", b1, b2, b3, b4, b5, b6);
+    return g_strdup_printf ("bluez_sink.%02X_%02X_%02X_%02X_%02X_%02X.%s", b1, b2, b3, b4, b5, b6, profile);
 }
 
 static char *bluez_to_pa_source_name (char *bluez_name)
@@ -3257,6 +3272,19 @@ static char *bluez_to_pa_source_name (char *bluez_name)
         return NULL;
     }
     return g_strdup_printf ("bluez_source.%02X_%02X_%02X_%02X_%02X_%02X.headset_head_unit", b1, b2, b3, b4, b5, b6);
+}
+
+static char *bluez_to_pa_card_name (char *bluez_name)
+{
+    unsigned int b1, b2, b3, b4, b5, b6;
+
+    if (bluez_name == NULL) return NULL;
+    if (sscanf (bluez_name, "/org/bluez/hci0/dev_%x_%x_%x_%x_%x_%x", &b1, &b2, &b3, &b4, &b5, &b6) != 6)
+    {
+        DEBUG ("Bluez name invalid : %s", bluez_name);
+        return NULL;
+    }
+    return g_strdup_printf ("bluez_card.%02X_%02X_%02X_%02X_%02X_%02X", b1, b2, b3, b4, b5, b6);
 }
 
 static char *pa_sink_to_bluez_name (char *pa_name)
@@ -3307,7 +3335,7 @@ static int pa_bluez_device_same (const char *padev, const char *btdev)
  * But sometimes it doesn't...
  */
 
-static void pa_cb_get_card_info_by_name (pa_context *c, const pa_card_info *i, int eol, void *userdata)
+static void pa_cb_set_best_profile (pa_context *c, const pa_card_info *i, int eol, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
 
@@ -3332,15 +3360,42 @@ static void pa_cb_get_card_info_by_name (pa_context *c, const pa_card_info *i, i
 static int pulse_set_best_profile (VolumeALSAPlugin *vol, const char *card)
 {
     START_PA_OPERATION
-    op = pa_context_get_card_info_by_name (vol->pa_context, card, &pa_cb_get_card_info_by_name, vol);
+    op = pa_context_get_card_info_by_name (vol->pa_context, card, &pa_cb_set_best_profile, vol);
     END_PA_OPERATION ("get_card_info_by_name")
 }
 
 static int pulse_set_all_profiles (VolumeALSAPlugin *vol)
 {
     START_PA_OPERATION
-    op = pa_context_get_card_info_list	(vol->pa_context, &pa_cb_get_card_info_by_name, vol);
+    op = pa_context_get_card_info_list	(vol->pa_context, &pa_cb_set_best_profile, vol);
     END_PA_OPERATION ("get_card_info_list")
+}
+
+static int pulse_set_profile (VolumeALSAPlugin *vol, char *card, char *profile)
+{
+    START_PA_OPERATION
+    op = pa_context_set_card_profile_by_name (vol->pa_context, card, profile, &pa_cb_generic_success, vol);
+    END_PA_OPERATION ("set_card_profile_by_name")
+}
+
+static void pa_cb_get_profile (pa_context *c, const pa_card_info *i, int eol, void *userdata)
+{
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
+    if (!eol)
+    {
+        if (vol->pa_profile) g_free (vol->pa_profile);
+        vol->pa_profile = g_strdup (i->active_profile2->name);
+    }
+
+    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
+static int pulse_get_profile (VolumeALSAPlugin *vol, char *card)
+{
+    START_PA_OPERATION
+    op = pa_context_get_card_info_by_name (vol->pa_context, card, &pa_cb_get_profile, vol);
+    END_PA_OPERATION ("get_card_info_by_name")
 }
 
 /*----------------------------------------------------------------------------*/
