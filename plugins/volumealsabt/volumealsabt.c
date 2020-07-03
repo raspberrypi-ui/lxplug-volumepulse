@@ -1658,7 +1658,6 @@ static void volumealsa_update_display (VolumeALSAPlugin *vol)
     {
         g_signal_handler_block (vol->mute_check, vol->mute_check_handler);
         gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (vol->mute_check), mute);
-        gtk_widget_set_sensitive (vol->mute_check, asound_has_mute (vol) ? TRUE : FALSE);
         g_signal_handler_unblock (vol->mute_check, vol->mute_check_handler);
     }
 
@@ -1667,7 +1666,6 @@ static void volumealsa_update_display (VolumeALSAPlugin *vol)
         g_signal_handler_block (vol->volume_scale, vol->volume_scale_handler);
         gtk_range_set_value (GTK_RANGE (vol->volume_scale), level);
         g_signal_handler_unblock (vol->volume_scale, vol->volume_scale_handler);
-        gtk_widget_set_sensitive (vol->volume_scale, (vol->master_element && snd_mixer_elem_get_type (vol->master_element) == SND_MIXER_ELEM_SIMPLE));
     }
 
     /* update tooltip */
