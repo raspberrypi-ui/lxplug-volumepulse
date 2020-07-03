@@ -551,18 +551,20 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
     {
         DEBUG ("Connected OK");
 
+        // some devices take a very long time to be valid PulseAudio cards after connection
+        pacard = bluez_to_pa_card_name (vol->bt_conname);
+        do pulse_get_profile (vol, pacard);
+        while (vol->pa_profile == NULL);
+
         // set connected device as PulseAudio default
         if (vol->bt_input)
         {
             paname = bluez_to_pa_source_name (vol->bt_conname);
-            pacard = bluez_to_pa_card_name (vol->bt_conname);
             pulse_set_profile (vol, pacard, "headset_head_unit");
             pulse_change_source (vol, paname);
         }
         else
         {
-            pacard = bluez_to_pa_card_name (vol->bt_conname);
-            pulse_get_profile (vol, pacard);
             paname = bluez_to_pa_sink_name (vol->bt_conname, vol->pa_profile);
             pulse_change_sink (vol, paname);
         }
@@ -3346,10 +3348,9 @@ static int pulse_set_profile (VolumeALSAPlugin *vol, char *card, char *profile)
 static void pa_cb_get_profile (pa_context *c, const pa_card_info *i, int eol, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
     if (!eol)
     {
-        if (vol->pa_profile) g_free (vol->pa_profile);
+        DEBUG ("pulse get profile : %s", i->active_profile2->name);
         vol->pa_profile = g_strdup (i->active_profile2->name);
     }
 
@@ -3358,6 +3359,9 @@ static void pa_cb_get_profile (pa_context *c, const pa_card_info *i, int eol, vo
 
 static int pulse_get_profile (VolumeALSAPlugin *vol, char *card)
 {
+    if (vol->pa_profile) g_free (vol->pa_profile);
+    vol->pa_profile = NULL;
+
     START_PA_OPERATION
     op = pa_context_get_card_info_by_name (vol->pa_context, card, &pa_cb_get_profile, vol);
     END_PA_OPERATION ("get_card_info_by_name")
