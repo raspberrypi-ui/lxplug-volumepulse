@@ -229,7 +229,6 @@ static void volumealsa_menu_show_default_source (GtkWidget *widget, gpointer dat
 static void volumealsa_build_device_menu (VolumeALSAPlugin *vol);
 static void volumealsa_set_external_output (GtkWidget *widget, VolumeALSAPlugin *vol);
 static void volumealsa_set_external_input (GtkWidget *widget, VolumeALSAPlugin *vol);
-static void volumealsa_set_internal_output (GtkWidget *widget, VolumeALSAPlugin *vol);
 static void volumealsa_set_bluetooth_output (GtkWidget *widget, VolumeALSAPlugin *vol);
 static void volumealsa_set_bluetooth_input (GtkWidget *widget, VolumeALSAPlugin *vol);
 
@@ -400,7 +399,6 @@ static void bt_cb_object_added (GDBusObjectManager *manager, GDBusObject *object
     if (asound_is_current_bt_dev (obj, FALSE) || asound_is_current_bt_dev (obj, TRUE))
     {
         DEBUG ("Selected Bluetooth audio device has connected");
-        asound_initialize (vol);
         volumealsa_update_display (vol);
     }
 }
@@ -412,7 +410,6 @@ static void bt_cb_object_removed (GDBusObjectManager *manager, GDBusObject *obje
     if (asound_is_current_bt_dev (obj, FALSE) || asound_is_current_bt_dev (obj, TRUE))
     {
         DEBUG ("Selected Bluetooth audio device has disconnected");
-        asound_initialize (vol);
         volumealsa_update_display (vol);
     }
 }
@@ -491,8 +488,11 @@ static void bt_cb_ba_name_unowned (GDBusConnection *connection, const gchar *nam
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
     DEBUG ("Name %s unowned on DBus", name);
-    g_signal_handler_disconnect (vol->baproxy, vol->basignal);
-    g_object_unref (vol->baproxy);
+    if (vol->baproxy)
+    {
+        if (vol->basignal) g_signal_handler_disconnect (vol->baproxy, vol->basignal);
+        g_object_unref (vol->baproxy);
+    }
 }
 
 static void bt_cb_ba_signal (GDBusProxy *prox, gchar *sender, gchar *signal, GVariant *params, gpointer user_data)
@@ -503,7 +503,6 @@ static void bt_cb_ba_signal (GDBusProxy *prox, gchar *sender, gchar *signal, GVa
         DEBUG ("PCMs changed - %s", signal);
         if (asound_get_default_card () == BLUEALSA_DEV)
         {
-            asound_initialize (vol);
             volumealsa_update_display (vol);
         }
     }
@@ -651,7 +650,6 @@ static void bt_cb_reconnected (GObject *source, GAsyncResult *res, gpointer user
     else
     {
         // reinit alsa to configure mixer
-        asound_initialize (vol);
         volumealsa_update_display (vol);
     }
 }
@@ -2190,31 +2188,6 @@ static void volumealsa_set_external_input (GtkWidget *widget, VolumeALSAPlugin *
     volumealsa_update_display (vol);
 }
 
-static void volumealsa_set_internal_output (GtkWidget *widget, VolumeALSAPlugin *vol)
-{
-    /* if there is a Bluetooth device in use, get its name so we can disconnect it */
-    char *device = asound_get_bt_device ();
-
-    /* check that the BCM device is default... */
-    int dev = asound_get_bcm_device_num ();
-    if (dev != asound_get_default_card ()) asound_set_default_card (dev);
-
-    /* set the output channel on the BCM device */
-    vsystem ("amixer -q cset numid=3 %s 2>/dev/null", widget->name);
-
-    asound_initialize (vol);
-    volumealsa_update_display (vol);
-
-    /* disconnect old Bluetooth device if it is not also input */
-    if (device)
-    {
-        char *dev2 = asound_get_bt_input ();
-        if (g_strcmp0 (device, dev2)) bt_disconnect_device (vol, device);
-        if (dev2) g_free (dev2);
-        g_free (device);
-    }
-}
-
 static void volumealsa_set_bluetooth_output (GtkWidget *widget, VolumeALSAPlugin *vol)
 {
     volumealsa_update_display (vol);
@@ -3583,10 +3556,9 @@ static GtkWidget *volumealsa_constructor (LXPanel *panel, config_setting_t *sett
     vol->tray_icon = gtk_image_new ();
     gtk_container_add (GTK_CONTAINER (p), vol->tray_icon);
 
-    /* Initialize ALSA if default device isn't Bluetooth */
-    if (asound_get_default_card () != BLUEALSA_DEV) asound_initialize (vol);
-
     /* Set up callbacks to see if BlueZ is on DBus */
+    vol->baproxy = NULL;
+    vol->basignal = 0;
     g_bus_watch_name (G_BUS_TYPE_SYSTEM, "org.bluez", 0, bt_cb_name_owned, bt_cb_name_unowned, vol, NULL);
     g_bus_watch_name (G_BUS_TYPE_SYSTEM, "org.bluealsa", 0, bt_cb_ba_name_owned, bt_cb_ba_name_unowned, vol, NULL);
     
