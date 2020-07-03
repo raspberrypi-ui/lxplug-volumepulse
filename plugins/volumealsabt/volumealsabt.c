@@ -279,6 +279,7 @@ static char *bluez_to_pa_source_name (char *bluez_name);
 static char *pa_sink_to_bluez_name (char *pa_name);
 static char *pa_source_to_bluez_name (char *pa_name);
 static int pa_bt_sink_source_compare (char *sink, char *source);
+static int pa_bluez_device_same (const char *padev, const char *btdev);
 static int pulse_set_best_profile (VolumeALSAPlugin *vol, const char *card);
 static int pulse_set_all_profiles (VolumeALSAPlugin *vol);
 
@@ -1881,9 +1882,8 @@ static GtkWidget *volumealsa_menu_item_add (VolumeALSAPlugin *vol, GtkWidget *me
 static void volumealsa_menu_show_default_sink (GtkWidget *widget, gpointer data)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) data;
-    char *bt_sink = pa_sink_to_bluez_name (vol->pa_default_sink);
 
-    if (!g_strcmp0 (gtk_widget_get_name (widget), vol->pa_default_sink) || !g_strcmp0 (gtk_widget_get_name (widget), bt_sink))
+    if (!g_strcmp0 (gtk_widget_get_name (widget), vol->pa_default_sink) || pa_bluez_device_same (vol->pa_default_sink, gtk_widget_get_name (widget)))
     {
         GtkWidget *image = gtk_image_new ();
         lxpanel_plugin_set_menu_icon (vol->panel, image, "dialog-ok-apply");
@@ -1891,15 +1891,13 @@ static void volumealsa_menu_show_default_sink (GtkWidget *widget, gpointer data)
         if (vol->odev_name) g_free (vol->odev_name);
         vol->odev_name = g_strdup (gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
     }
-    g_free (bt_sink);
 }
 
 static void volumealsa_menu_show_default_source (GtkWidget *widget, gpointer data)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) data;
-    char *bt_sink = pa_sink_to_bluez_name (vol->pa_default_source);
 
-    if (!g_strcmp0 (gtk_widget_get_name (widget), vol->pa_default_source) || !g_strcmp0 (gtk_widget_get_name (widget), bt_sink))
+    if (!g_strcmp0 (gtk_widget_get_name (widget), vol->pa_default_source) || pa_bluez_device_same (vol->pa_default_source, gtk_widget_get_name (widget)))
     {
         GtkWidget *image = gtk_image_new ();
         lxpanel_plugin_set_menu_icon (vol->panel, image, "dialog-ok-apply");
@@ -1907,7 +1905,6 @@ static void volumealsa_menu_show_default_source (GtkWidget *widget, gpointer dat
         if (vol->idev_name) g_free (vol->idev_name);
         vol->idev_name = g_strdup (gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
     }
-    g_free (bt_sink);
 }
 
 static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
@@ -3294,6 +3291,12 @@ static int pa_bt_sink_source_compare (char *sink, char *source)
     if (strstr (sink, "bluez") == NULL) return 1;
     if (strstr (source, "bluez") == NULL) return 1;
     return strncmp (sink + 11, source + 12, 17);
+}
+
+static int pa_bluez_device_same (const char *padev, const char *btdev)
+{
+    if (strstr (btdev, "bluez") && strstr (padev, btdev + 20)) return 1;
+    return 0;
 }
 
 /* Profiles
