@@ -109,6 +109,7 @@ typedef struct {
     guint mixer_evt_idle;               /* Timer to handle mixer reset */
     guint restart_idle;                 /* Timer to handle restarting */
     gboolean stopped;                   /* Flag to indicate that ALSA is restarting */
+    snd_mixer_t *mixer;
 
     /* Bluetooth interface */
     GDBusObjectManager *objmanager;     /* BlueZ object manager */
@@ -135,8 +136,7 @@ typedef struct {
     int pa_volume;                      /* volume setting on default sink */
     int pa_mute;                        /* mute setting on default sink */
     char *pa_profile;                   /* current profile for card */
-    char *pa_sink_alsadev;
-    char *pa_source_alsadev;
+    char *pa_alsadev;                   /* name of ALSA device matching current default source or sink */
 } VolumeALSAPlugin;
 
 typedef enum {
@@ -244,8 +244,7 @@ static gboolean volumealsa_mouse_out (GtkWidget *widget, GdkEventButton *event, 
 
 /* Options dialog */
 static void show_options (VolumeALSAPlugin *vol, snd_mixer_t *mixer, gboolean input, char *devname);
-static void show_input_options (VolumeALSAPlugin *vol);
-static void show_output_options (VolumeALSAPlugin *vol);
+static void show_alsa_options (VolumeALSAPlugin *vol, gboolean input);
 static void update_options (VolumeALSAPlugin *vol);
 static void close_options (VolumeALSAPlugin *vol);
 static void options_ok_handler (GtkButton *button, gpointer *user_data);
@@ -1685,13 +1684,13 @@ static void volumealsa_theme_change (GtkWidget *widget, VolumeALSAPlugin *vol)
 static void volumealsa_open_config_dialog (GtkWidget *widget, VolumeALSAPlugin *vol)
 {
     gtk_menu_popdown (GTK_MENU (vol->menu_popup));
-    show_output_options (vol);
+    show_alsa_options (vol, FALSE);
 }
 
 static void volumealsa_open_input_config_dialog (GtkWidget *widget, VolumeALSAPlugin *vol)
 {
     gtk_menu_popdown (GTK_MENU (vol->menu_popup));
-    show_input_options (vol);
+    show_alsa_options (vol, TRUE);
 }
 
 static void volumealsa_show_connect_dialog (VolumeALSAPlugin *vol, gboolean failed, const gchar *param)
@@ -2634,18 +2633,21 @@ static void show_options (VolumeALSAPlugin *vol, snd_mixer_t *mixer, gboolean in
     gtk_widget_show_all (vol->options_dlg);
 }
 
-static void show_output_options (VolumeALSAPlugin *vol)
+static void show_alsa_options (VolumeALSAPlugin *vol, gboolean input)
 {
     snd_mixer_t *mixer;
 
-    pulse_get_default_sink_info (vol);
+    if (input)
+        pulse_get_default_source_info (vol);
+    else
+        pulse_get_default_sink_info (vol);
 
-    vol->mixers[OUTPUT_MIXER].mixer = NULL;
+    vol->mixer = NULL;
 
     // create and attach the mixer
     if (snd_mixer_open (&mixer, 0)) return;
 
-    if (snd_mixer_attach (mixer, vol->pa_sink_alsadev))
+    if (snd_mixer_attach (mixer, vol->pa_alsadev))
     {
         snd_mixer_close (mixer);
         return;
@@ -2653,45 +2655,15 @@ static void show_output_options (VolumeALSAPlugin *vol)
 
     if (snd_mixer_selem_register (mixer, NULL, NULL) || snd_mixer_load (mixer))
     {
-        snd_mixer_detach (mixer, vol->pa_sink_alsadev);
+        snd_mixer_detach (mixer, vol->pa_alsadev);
         snd_mixer_close (mixer);
         return;
     }
 
-    vol->mixers[OUTPUT_MIXER].mixer = mixer;
+    vol->mixer = mixer;
 
-    if (vol->mixers[OUTPUT_MIXER].mixer)
-        show_options (vol, vol->mixers[OUTPUT_MIXER].mixer, FALSE, vol->odev_name);
-}
-
-static void show_input_options (VolumeALSAPlugin *vol)
-{
-    snd_mixer_t *mixer;
-
-    pulse_get_default_source_info (vol);
-
-    vol->mixers[INPUT_MIXER].mixer = NULL;
-
-    // create and attach the mixer
-    if (snd_mixer_open (&mixer, 0)) return;
-
-    if (snd_mixer_attach (mixer, vol->pa_source_alsadev))
-    {
-        snd_mixer_close (mixer);
-        return;
-    }
-
-    if (snd_mixer_selem_register (mixer, NULL, NULL) || snd_mixer_load (mixer))
-    {
-        snd_mixer_detach (mixer, vol->pa_source_alsadev);
-        snd_mixer_close (mixer);
-        return;
-    }
-
-    vol->mixers[INPUT_MIXER].mixer = mixer;
-
-    if (vol->mixers[INPUT_MIXER].mixer)
-        show_options (vol, vol->mixers[INPUT_MIXER].mixer, TRUE, vol->idev_name);
+    if (vol->mixer)
+        show_options (vol, vol->mixer, input, vol->idev_name);
 }
 
 static void update_options (VolumeALSAPlugin *vol)
@@ -2699,10 +2671,9 @@ static void update_options (VolumeALSAPlugin *vol)
     snd_mixer_elem_t *elem;
     guint pcol = 0, ccol = 0;
     GtkWidget *wid;
-    int swval, i;
+    int swval;
 
-    i = vol->mixers[INPUT_MIXER].mixer ? 1 : 0;
-    for (elem = snd_mixer_first_elem (vol->mixers[i].mixer); elem != NULL; elem = snd_mixer_elem_next (elem))
+    for (elem = snd_mixer_first_elem (vol->mixer); elem != NULL; elem = snd_mixer_elem_next (elem))
     {
         if (snd_mixer_selem_has_playback_volume (elem))
         {
@@ -2763,12 +2734,8 @@ static void update_options (VolumeALSAPlugin *vol)
 
 static void close_options (VolumeALSAPlugin *vol)
 {
-    if (vol->mixers[INPUT_MIXER].mixer)
-    {
-        DEBUG ("Deinitializing input mixer");
-        asound_mixer_deinitialize (vol, INPUT_MIXER);
-    }
-
+    snd_mixer_detach (vol->mixer, vol->pa_alsadev);
+    snd_mixer_close (vol->mixer);
     gtk_widget_destroy (vol->options_dlg);
     vol->options_dlg = NULL;
 }
@@ -3204,7 +3171,7 @@ static void pa_cb_get_sink_info_by_name (pa_context *context, const pa_sink_info
         vol->pa_channels = i->volume.channels;
         vol->pa_volume = i->volume.values[0];
         vol->pa_mute = i->mute;
-        vol->pa_sink_alsadev = g_strdup_printf ("hw:%s", pa_proplist_gets (i->proplist, "alsa.card"));
+        vol->pa_alsadev = g_strdup_printf ("hw:%s", pa_proplist_gets (i->proplist, "alsa.card"));
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
@@ -3254,7 +3221,7 @@ static void pa_cb_get_source_info_by_name (pa_context *context, const pa_source_
 
     if (!eol)
     {
-        vol->pa_source_alsadev = g_strdup_printf ("hw:%s", pa_proplist_gets (i->proplist, "alsa.card"));
+        vol->pa_alsadev = g_strdup_printf ("hw:%s", pa_proplist_gets (i->proplist, "alsa.card"));
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
