@@ -219,6 +219,7 @@ static char *asound_default_input_name (void);
 static void volumealsa_update_display (VolumeALSAPlugin *vol);
 static void volumealsa_theme_change (GtkWidget *widget, VolumeALSAPlugin *vol);
 static void volumealsa_open_config_dialog (GtkWidget *widget, VolumeALSAPlugin *vol);
+static void volumealsa_open_input_config_dialog (GtkWidget *widget, VolumeALSAPlugin *vol);
 static void volumealsa_show_connect_dialog (VolumeALSAPlugin *vol, gboolean failed, const gchar *param);
 static void volumealsa_close_connect_dialog (GtkButton *button, gpointer user_data);
 static gint volumealsa_delete_connect_dialog (GtkWidget *widget, GdkEvent *event, gpointer user_data);
@@ -3171,7 +3172,10 @@ static void pa_cb_get_sink_info_by_name (pa_context *context, const pa_sink_info
         vol->pa_channels = i->volume.channels;
         vol->pa_volume = i->volume.values[0];
         vol->pa_mute = i->mute;
-        vol->pa_alsadev = g_strdup_printf ("hw:%s", pa_proplist_gets (i->proplist, "alsa.card"));
+        if (!g_strcmp0 (pa_proplist_gets (i->proplist, "device.api"), "bluez"))
+            vol->pa_alsadev = g_strdup ("bluealsa");
+        else
+            vol->pa_alsadev = g_strdup_printf ("hw:%s", pa_proplist_gets (i->proplist, "alsa.card"));
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
@@ -3221,7 +3225,10 @@ static void pa_cb_get_source_info_by_name (pa_context *context, const pa_source_
 
     if (!eol)
     {
-        vol->pa_alsadev = g_strdup_printf ("hw:%s", pa_proplist_gets (i->proplist, "alsa.card"));
+        if (!g_strcmp0 (pa_proplist_gets (i->proplist, "device.api"), "bluez"))
+            vol->pa_alsadev = g_strdup ("bluealsa");
+        else
+            vol->pa_alsadev = g_strdup_printf ("hw:%s", pa_proplist_gets (i->proplist, "alsa.card"));
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
