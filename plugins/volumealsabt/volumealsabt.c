@@ -97,6 +97,7 @@ typedef struct {
     GtkWidget *options_set;             /* General settings box */
     GtkWidget *outputs;                 /* Output select menu */
     GtkWidget *inputs;                  /* Input select menu */
+    GtkWidget *profiles;                /* Vbox for profile combos */
     gboolean show_popup;                /* Toggle to show and hide the popup on left click */
     guint volume_scale_handler;         /* Handler for vscale widget */
     guint mute_check_handler;           /* Handler for mute_check widget */
@@ -220,6 +221,7 @@ static void volumealsa_update_display (VolumeALSAPlugin *vol);
 static void volumealsa_theme_change (GtkWidget *widget, VolumeALSAPlugin *vol);
 static void volumealsa_open_config_dialog (GtkWidget *widget, VolumeALSAPlugin *vol);
 static void volumealsa_open_input_config_dialog (GtkWidget *widget, VolumeALSAPlugin *vol);
+static void volumealsa_open_profile_dialog (GtkWidget *widget, VolumeALSAPlugin *vol);
 static void volumealsa_show_connect_dialog (VolumeALSAPlugin *vol, gboolean failed, const gchar *param);
 static void volumealsa_close_connect_dialog (GtkButton *button, gpointer user_data);
 static gint volumealsa_delete_connect_dialog (GtkWidget *widget, GdkEvent *event, gpointer user_data);
@@ -246,6 +248,7 @@ static gboolean volumealsa_mouse_out (GtkWidget *widget, GdkEventButton *event, 
 /* Options dialog */
 static void show_options (VolumeALSAPlugin *vol, snd_mixer_t *mixer, gboolean input, char *devname);
 static void show_alsa_options (VolumeALSAPlugin *vol, gboolean input);
+static void show_profiles (VolumeALSAPlugin *vol);
 static void update_options (VolumeALSAPlugin *vol);
 static void close_options (VolumeALSAPlugin *vol);
 static void options_ok_handler (GtkButton *button, gpointer *user_data);
@@ -288,6 +291,7 @@ static int pulse_set_best_profile (VolumeALSAPlugin *vol, const char *card);
 static int pulse_set_all_profiles (VolumeALSAPlugin *vol);
 static int pulse_set_profile (VolumeALSAPlugin *vol, char *card, char *profile);
 static int pulse_get_profile (VolumeALSAPlugin *vol, char *card);
+static int pulse_get_card_list (VolumeALSAPlugin *vol);
 
 /* Plugin */
 static GtkWidget *volumealsa_configure (LXPanel *panel, GtkWidget *plugin);
@@ -1694,6 +1698,12 @@ static void volumealsa_open_input_config_dialog (GtkWidget *widget, VolumeALSAPl
     show_alsa_options (vol, TRUE);
 }
 
+static void volumealsa_open_profile_dialog (GtkWidget *widget, VolumeALSAPlugin *vol)
+{
+    gtk_menu_popdown (GTK_MENU (vol->menu_popup));
+    show_profiles (vol);
+}
+
 static void volumealsa_show_connect_dialog (VolumeALSAPlugin *vol, gboolean failed, const gchar *param)
 {
     char buffer[256];
@@ -1993,6 +2003,10 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
         mi = gtk_image_menu_item_new_with_label (_("Input Device Settings..."));
         g_signal_connect (mi, "activate", G_CALLBACK (volumealsa_open_input_config_dialog), (gpointer) vol);
         gtk_menu_shell_append (GTK_MENU_SHELL (vol->inputs), mi);
+
+        mi = gtk_image_menu_item_new_with_label (_("Device Profiles..."));
+        g_signal_connect (mi, "activate", G_CALLBACK (volumealsa_open_profile_dialog), (gpointer) vol);
+        gtk_menu_shell_append (GTK_MENU_SHELL (vol->inputs), mi);
     }
 
     // create a submenu for the outputs if there is an input submenu
@@ -2127,6 +2141,10 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
         g_signal_connect (mi, "activate", G_CALLBACK (volumealsa_open_config_dialog), (gpointer) vol);
         gtk_menu_shell_append (GTK_MENU_SHELL (vol->outputs), mi);
     }
+
+    mi = gtk_image_menu_item_new_with_label (_("Device Profiles..."));
+    g_signal_connect (mi, "activate", G_CALLBACK (volumealsa_open_profile_dialog), (gpointer) vol);
+    gtk_menu_shell_append (GTK_MENU_SHELL (vol->outputs), mi);
 
     if (inputs)
     {
@@ -2626,6 +2644,86 @@ static void show_options (VolumeALSAPlugin *vol, snd_mixer_t *mixer, gboolean in
     wid = gtk_hbutton_box_new ();
     gtk_button_box_set_layout (GTK_BUTTON_BOX (wid), GTK_BUTTONBOX_END);
     gtk_box_pack_start (GTK_BOX (box), wid, FALSE, FALSE, 5);
+
+    btn = gtk_button_new_from_stock (GTK_STOCK_OK);
+    g_signal_connect (btn, "clicked", G_CALLBACK (options_ok_handler), vol);
+    gtk_box_pack_end (GTK_BOX (wid), btn, FALSE, FALSE, 5);
+
+    gtk_widget_show_all (vol->options_dlg);
+}
+
+static void show_profiles (VolumeALSAPlugin *vol)
+{
+    GtkWidget *btn, *wid;
+    guint cols;
+    int swval;
+    char *lbl;
+
+    // create the window itself
+    vol->options_dlg = gtk_window_new (GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title (GTK_WINDOW (vol->options_dlg), _("Device Profiles"));
+    gtk_window_set_position (GTK_WINDOW (vol->options_dlg), GTK_WIN_POS_CENTER);
+    gtk_window_set_default_size (GTK_WINDOW (vol->options_dlg), 400, 300);
+    gtk_container_set_border_width (GTK_CONTAINER (vol->options_dlg), 10);
+    gtk_window_set_icon_name (GTK_WINDOW (vol->options_dlg), "multimedia-volume-control");
+    g_signal_connect (vol->options_dlg, "delete-event", G_CALLBACK (options_wd_close_handler), vol);
+
+    vol->profiles = gtk_vbox_new (FALSE, 5);
+    gtk_container_add (GTK_CONTAINER (vol->options_dlg), vol->profiles);
+
+    // first loop through cards
+    pulse_get_card_list (vol);
+
+    // then loop through Bluetooth devices
+    if (vol->objmanager)
+    {
+        // iterate all the objects the manager knows about
+        GList *objects = g_dbus_object_manager_get_objects (vol->objmanager);
+        while (objects != NULL)
+        {
+            GDBusObject *object = (GDBusObject *) objects->data;
+            const char *objpath = g_dbus_object_get_object_path (object);
+            GList *interfaces = g_dbus_object_get_interfaces (object);
+            while (interfaces != NULL)
+            {
+                // if an object has a Device1 interface, it is a Bluetooth device - add it to the list
+                GDBusInterface *interface = G_DBUS_INTERFACE (interfaces->data);
+                if (g_strcmp0 (g_dbus_proxy_get_interface_name (G_DBUS_PROXY (interface)), "org.bluez.Device1") == 0)
+                {
+                    if (bt_has_service (vol, g_dbus_proxy_get_object_path (G_DBUS_PROXY (interface)), BT_SERV_HSP)
+                        || bt_has_service (vol, g_dbus_proxy_get_object_path (G_DBUS_PROXY (interface)), BT_SERV_AUDIO_SINK))
+                    {
+                        GVariant *name = g_dbus_proxy_get_cached_property (G_DBUS_PROXY (interface), "Alias");
+                        GVariant *icon = g_dbus_proxy_get_cached_property (G_DBUS_PROXY (interface), "Icon");
+                        GVariant *paired = g_dbus_proxy_get_cached_property (G_DBUS_PROXY (interface), "Paired");
+                        GVariant *trusted = g_dbus_proxy_get_cached_property (G_DBUS_PROXY (interface), "Trusted");
+                        if (name && icon && paired && trusted && g_variant_get_boolean (paired) && g_variant_get_boolean (trusted))
+                        {
+                            gtk_box_pack_start (GTK_BOX (vol->profiles), gtk_label_new (g_variant_get_string (name, NULL)), FALSE, FALSE, 5);
+
+                            btn = gtk_combo_box_text_new ();
+                            gtk_box_pack_start (GTK_BOX (vol->profiles), btn, FALSE, FALSE, 5);
+                            if (bt_has_service (vol, g_dbus_proxy_get_object_path (G_DBUS_PROXY (interface)), BT_SERV_AUDIO_SINK))
+                                gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (btn), "High Fidelity Playback (A2DP Sink)");
+                            if (bt_has_service (vol, g_dbus_proxy_get_object_path (G_DBUS_PROXY (interface)), BT_SERV_HSP))
+                                gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (btn), "Headset Head Unit (HSP/HFP)");
+                        }
+                        g_variant_unref (name);
+                        g_variant_unref (icon);
+                        g_variant_unref (paired);
+                        g_variant_unref (trusted);
+                    }
+                    break;
+                }
+                interfaces = interfaces->next;
+            }
+            objects = objects->next;
+        }
+    }
+
+    wid = gtk_hbutton_box_new ();
+    gtk_button_box_set_layout (GTK_BUTTON_BOX (wid), GTK_BUTTONBOX_END);
+    gtk_box_pack_start (GTK_BOX (vol->profiles), wid, FALSE, FALSE, 5);
 
     btn = gtk_button_new_from_stock (GTK_STOCK_OK);
     g_signal_connect (btn, "clicked", G_CALLBACK (options_ok_handler), vol);
@@ -3399,6 +3497,39 @@ static int pulse_get_profile (VolumeALSAPlugin *vol, char *card)
     START_PA_OPERATION
     op = pa_context_get_card_info_by_name (vol->pa_context, card, &pa_cb_get_profile, vol);
     END_PA_OPERATION ("get_card_info_by_name")
+}
+
+static void pa_cb_get_profiles (pa_context *c, const pa_card_info *i, int eol, void *userdata)
+{
+    GtkWidget *btn;
+    int index;
+
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+    if (!eol)
+    {
+        gtk_box_pack_start (GTK_BOX (vol->profiles), gtk_label_new (pa_proplist_gets (i->proplist, "alsa.card_name")), FALSE, FALSE, 5);
+
+        btn = gtk_combo_box_text_new ();
+        gtk_box_pack_start (GTK_BOX (vol->profiles), btn, FALSE, FALSE, 5);
+        pa_card_profile_info2 **profile = i->profiles2;
+        index = 0;
+        while (*profile)
+        {
+            gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (btn), (*profile)->description);
+            if (*profile == i->active_profile2) gtk_combo_box_set_active (GTK_COMBO_BOX (btn), index);
+            profile++;
+            index++;
+        }
+    }
+
+    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
+static int pulse_get_card_list (VolumeALSAPlugin *vol)
+{
+    START_PA_OPERATION
+    op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_get_profiles, vol);
+    END_PA_OPERATION ("get_card_info_list")
 }
 
 /*----------------------------------------------------------------------------*/
