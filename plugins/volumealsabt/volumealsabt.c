@@ -98,6 +98,8 @@ typedef struct {
     GtkWidget *outputs;                 /* Output select menu */
     GtkWidget *inputs;                  /* Input select menu */
     GtkWidget *profiles;                /* Vbox for profile combos */
+    GtkWidget *alsaprofiles;                /* Vbox for profile combos */
+    GtkWidget *btprofiles;                /* Vbox for profile combos */
     gboolean show_popup;                /* Toggle to show and hide the popup on left click */
     guint volume_scale_handler;         /* Handler for vscale widget */
     guint mute_check_handler;           /* Handler for mute_check widget */
@@ -2876,7 +2878,11 @@ static void show_profiles (VolumeALSAPlugin *vol)
     g_signal_connect (vol->options_dlg, "delete-event", G_CALLBACK (profiles_wd_close_handler), vol);
 
     vol->profiles = gtk_vbox_new (FALSE, 5);
+    vol->alsaprofiles = gtk_vbox_new (FALSE, 5);
+    vol->btprofiles = gtk_vbox_new (FALSE, 5);
     gtk_container_add (GTK_CONTAINER (vol->options_dlg), vol->profiles);
+    gtk_box_pack_start (GTK_BOX (vol->profiles), vol->alsaprofiles, FALSE, FALSE, 0);
+    gtk_box_pack_start (GTK_BOX (vol->profiles), vol->btprofiles, FALSE, FALSE, 0);
 
     // first loop through cards
     pulse_get_card_list (vol);
@@ -2906,14 +2912,18 @@ static void show_profiles (VolumeALSAPlugin *vol)
                         GVariant *trusted = g_dbus_proxy_get_cached_property (G_DBUS_PROXY (interface), "Trusted");
                         if (name && icon && paired && trusted && g_variant_get_boolean (paired) && g_variant_get_boolean (trusted))
                         {
-                            gtk_box_pack_start (GTK_BOX (vol->profiles), gtk_label_new (g_variant_get_string (name, NULL)), FALSE, FALSE, 5);
-
-                            btn = gtk_combo_box_text_new ();
-                            gtk_box_pack_start (GTK_BOX (vol->profiles), btn, FALSE, FALSE, 5);
-                            if (bt_has_service (vol, g_dbus_proxy_get_object_path (G_DBUS_PROXY (interface)), BT_SERV_AUDIO_SINK))
-                                gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (btn), "High Fidelity Playback (A2DP Sink)");
-                            if (bt_has_service (vol, g_dbus_proxy_get_object_path (G_DBUS_PROXY (interface)), BT_SERV_HSP))
-                                gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (btn), "Headset Head Unit (HSP/HFP)");
+                            // only disconnected devices here...
+                            char *pacard = bluez_to_pa_card_name (objpath);
+                            pulse_get_profile (vol, pacard);
+                            if (vol->pa_profile == NULL)
+                            {
+                                gtk_box_pack_start (GTK_BOX (vol->btprofiles), gtk_label_new (g_variant_get_string (name, NULL)), FALSE, FALSE, 5);
+                                btn = gtk_combo_box_text_new ();
+                                gtk_box_pack_start (GTK_BOX (vol->btprofiles), btn, FALSE, FALSE, 5);
+                                gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (btn), _("Device not connected"));
+                                gtk_combo_box_set_active (GTK_COMBO_BOX (btn), 0);
+                                gtk_widget_set_sensitive (GTK_COMBO_BOX_TEXT (btn), FALSE);
+                            }
                         }
                         g_variant_unref (name);
                         g_variant_unref (icon);
@@ -3562,13 +3572,10 @@ static void pa_cb_get_profiles (pa_context *c, const pa_card_info *i, int eol, v
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
     if (!eol)
     {
-        gtk_box_pack_start (GTK_BOX (vol->profiles), gtk_label_new (pa_proplist_gets (i->proplist, "alsa.card_name")), FALSE, FALSE, 5);
-
         btn = gtk_combo_box_new_with_model (GTK_TREE_MODEL (ls));
         gtk_widget_set_name (GTK_WIDGET (btn), i->name);
         gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (btn), rend, FALSE);
         gtk_cell_layout_add_attribute (GTK_CELL_LAYOUT (btn), rend, "text", 1);
-        gtk_box_pack_start (GTK_BOX (vol->profiles), btn, FALSE, FALSE, 5);
         pa_card_profile_info2 **profile = i->profiles2;
         index = 0;
         while (*profile)
@@ -3579,6 +3586,17 @@ static void pa_cb_get_profiles (pa_context *c, const pa_card_info *i, int eol, v
             index++;
         }
         g_signal_connect (btn, "changed", G_CALLBACK (profile_changed_handler), vol);
+
+        if (!g_strcmp0 (pa_proplist_gets (i->proplist, "device.api"), "bluez"))
+        {
+            gtk_box_pack_start (GTK_BOX (vol->btprofiles), gtk_label_new (pa_proplist_gets (i->proplist, "device.description")), FALSE, FALSE, 5);
+            gtk_box_pack_start (GTK_BOX (vol->btprofiles), btn, FALSE, FALSE, 5);
+        }
+        else
+        {
+            gtk_box_pack_start (GTK_BOX (vol->alsaprofiles), gtk_label_new (pa_proplist_gets (i->proplist, "alsa.card_name")), FALSE, FALSE, 5);
+            gtk_box_pack_start (GTK_BOX (vol->alsaprofiles), btn, FALSE, FALSE, 5);
+        }
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
