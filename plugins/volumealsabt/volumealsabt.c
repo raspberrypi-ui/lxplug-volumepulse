@@ -268,6 +268,7 @@ static void close_profiles (VolumeALSAPlugin *vol);
 static void profiles_ok_handler (GtkButton *button, gpointer *user_data);
 static gboolean profiles_wd_close_handler (GtkWidget *wid, GdkEvent *event, gpointer user_data);
 static void profile_changed_handler (GtkComboBox *combo, gpointer *userdata);
+static void relocate_item (GtkWidget *box);
 
 /* PulseAudio */
 static void pulse_init (VolumeALSAPlugin *vol);
@@ -2921,7 +2922,7 @@ static void show_profiles (VolumeALSAPlugin *vol)
                         if (name && icon && paired && trusted && g_variant_get_boolean (paired) && g_variant_get_boolean (trusted))
                         {
                             // only disconnected devices here...
-                            char *pacard = bluez_to_pa_card_name (objpath);
+                            char *pacard = bluez_to_pa_card_name ((char *) objpath);
                             pulse_get_profile (vol, pacard);
                             if (vol->pa_profile == NULL)
                             {
@@ -2930,7 +2931,8 @@ static void show_profiles (VolumeALSAPlugin *vol)
                                 gtk_box_pack_start (GTK_BOX (vol->btprofiles), btn, FALSE, FALSE, 5);
                                 gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (btn), _("Device not connected"));
                                 gtk_combo_box_set_active (GTK_COMBO_BOX (btn), 0);
-                                gtk_widget_set_sensitive (GTK_COMBO_BOX_TEXT (btn), FALSE);
+                                gtk_widget_set_sensitive (btn, FALSE);
+                                relocate_item (vol->btprofiles);
                             }
                         }
                         g_variant_unref (name);
@@ -2976,6 +2978,25 @@ static gboolean profiles_wd_close_handler (GtkWidget *wid, GdkEvent *event, gpoi
 
     close_profiles (vol);
     return TRUE;
+}
+
+static void relocate_item (GtkWidget *box)
+{
+    GtkWidget *elem;
+    GList *children = gtk_container_get_children (GTK_CONTAINER (box));
+    int n = g_list_length (children);
+    GtkWidget *newcomb = g_list_nth_data (children, n - 1);
+    GtkWidget *newlab = g_list_nth_data (children, n - 2);
+    const char *new_item = gtk_label_get_text (GTK_LABEL (newlab));
+    n -= 2;
+    while (n > 0)
+    {
+        elem = g_list_nth_data (children, n - 2);
+        if (g_strcmp0 (new_item, gtk_label_get_text (GTK_LABEL (elem))) >= 0) break;
+        n -= 2;
+    }
+    gtk_box_reorder_child (GTK_BOX (box), newlab, n);
+    gtk_box_reorder_child (GTK_BOX (box), newcomb, n + 1);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -3599,6 +3620,7 @@ static void pa_cb_get_profiles (pa_context *c, const pa_card_info *i, int eol, v
         {
             gtk_box_pack_start (GTK_BOX (vol->btprofiles), gtk_label_new (pa_proplist_gets (i->proplist, "device.description")), FALSE, FALSE, 5);
             gtk_box_pack_start (GTK_BOX (vol->btprofiles), btn, FALSE, FALSE, 5);
+            relocate_item (vol->btprofiles);
         }
         else
         {
@@ -3608,21 +3630,25 @@ static void pa_cb_get_profiles (pa_context *c, const pa_card_info *i, int eol, v
             {
                 gtk_box_pack_start (GTK_BOX (vol->intprofiles), gtk_label_new (vol->hdmis == 1 ? _("HDMI") : vol->mon_names[0]), FALSE, FALSE, 5);
                 gtk_box_pack_start (GTK_BOX (vol->intprofiles), btn, FALSE, FALSE, 5);
+                relocate_item (vol->intprofiles);
             }
             else if (!g_strcmp0 (name, "bcm2835 HDMI 2"))
             {
                 gtk_box_pack_start (GTK_BOX (vol->intprofiles), gtk_label_new (vol->hdmis == 1 ? _("HDMI") : vol->mon_names[1]), FALSE, FALSE, 5);
                 gtk_box_pack_start (GTK_BOX (vol->intprofiles), btn, FALSE, FALSE, 5);
+                relocate_item (vol->intprofiles);
             }
             else if (!g_strcmp0 (name, "bcm2835 Headphones"))
             {
                 gtk_box_pack_start (GTK_BOX (vol->intprofiles), gtk_label_new (vol->hdmis == 1 ? _("Analog") : vol->mon_names[0]), FALSE, FALSE, 5);
                 gtk_box_pack_start (GTK_BOX (vol->intprofiles), btn, FALSE, FALSE, 5);
+                relocate_item (vol->intprofiles);
             }
             else
             {
                 gtk_box_pack_start (GTK_BOX (vol->alsaprofiles), gtk_label_new (name), FALSE, FALSE, 5);
                 gtk_box_pack_start (GTK_BOX (vol->alsaprofiles), btn, FALSE, FALSE, 5);
+                relocate_item (vol->alsaprofiles);
             }
         }
     }
