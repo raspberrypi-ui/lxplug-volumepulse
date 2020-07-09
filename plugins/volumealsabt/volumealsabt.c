@@ -98,6 +98,7 @@ typedef struct {
     GtkWidget *outputs;                 /* Output select menu */
     GtkWidget *inputs;                  /* Input select menu */
     GtkWidget *profiles;                /* Vbox for profile combos */
+    GtkWidget *intprofiles;                /* Vbox for profile combos */
     GtkWidget *alsaprofiles;                /* Vbox for profile combos */
     GtkWidget *btprofiles;                /* Vbox for profile combos */
     gboolean show_popup;                /* Toggle to show and hide the popup on left click */
@@ -1941,6 +1942,30 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
     vol->menu_popup = gtk_menu_new ();
 
     // create input selector...
+    card_num = -1;
+    while (1)
+    {
+        if (snd_card_next (&card_num) < 0)
+        {
+            g_warning ("volumealsa: Cannot enumerate devices");
+            break;
+        }
+        if (card_num == -1) break;
+
+        if (asound_has_input (card_num))
+        {
+            char *nam;
+            snd_card_get_name (card_num, &nam);
+
+            // either create a menu, or add a separator if there already is one
+            if (!inputs) vol->inputs = gtk_menu_new ();
+            volumealsa_menu_item_add (vol, vol->inputs, nam, nam, FALSE, TRUE, G_CALLBACK (volumealsa_set_external_input));
+            ext_inp = TRUE;
+            inputs++;
+        }
+    }
+
+    bt_dev = FALSE;
     if (vol->objmanager)
     {
         // iterate all the objects the manager knows about
@@ -1966,7 +1991,15 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
                         {
                             // create a menu if there isn't one already
                             if (!inputs) vol->inputs = gtk_menu_new ();
+
+                            if (!bt_dev && inputs)
+                            {
+                                mi = gtk_separator_menu_item_new ();
+                                gtk_menu_shell_append (GTK_MENU_SHELL (vol->inputs), mi);
+                            }
+
                             volumealsa_menu_item_add (vol, vol->inputs, g_variant_get_string (name, NULL), objpath, TRUE, TRUE, G_CALLBACK (volumealsa_set_bluetooth_input));
+                            bt_dev = TRUE;
                             inputs++;
                         }
                         g_variant_unref (name);
@@ -1979,34 +2012,6 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
                 interfaces = interfaces->next;
             }
             objects = objects->next;
-        }
-    }
-
-    card_num = -1;
-    while (1)
-    {
-        if (snd_card_next (&card_num) < 0)
-        {
-            g_warning ("volumealsa: Cannot enumerate devices");
-            break;
-        }
-        if (card_num == -1) break;
-
-        if (asound_has_input (card_num))
-        {
-            char *nam;
-            snd_card_get_name (card_num, &nam);
-
-            // either create a menu, or add a separator if there already is one
-            if (!inputs) vol->inputs = gtk_menu_new ();
-            else if (!ext_inp)
-            {
-                mi = gtk_separator_menu_item_new ();
-                gtk_menu_shell_append (GTK_MENU_SHELL (vol->inputs), mi);
-            }
-            volumealsa_menu_item_add (vol, vol->inputs, nam, nam, FALSE, TRUE, G_CALLBACK (volumealsa_set_external_input));
-            ext_inp = TRUE;
-            inputs++;
         }
     }
 
@@ -2059,7 +2064,38 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
         }
     }
 
+    // add external devices...
+    card_num = -1;
+    while (1)
+    {
+        if (snd_card_next (&card_num) < 0)
+        {
+            g_warning ("volumealsa: Cannot enumerate devices");
+            break;
+        }
+        if (card_num == -1) break;
+
+        if (!asound_is_bcm_device (card_num))
+        {
+            char *nam;
+            snd_card_get_name (card_num, &nam);
+
+            if (!ext_dev && devices)
+            {
+                mi = gtk_separator_menu_item_new ();
+                gtk_menu_shell_append (GTK_MENU_SHELL (vol->outputs), mi);
+            }
+
+            mi = volumealsa_menu_item_add (vol, vol->outputs, nam, nam, FALSE, FALSE, G_CALLBACK (volumealsa_set_external_output));
+
+            g_free (nam);
+            ext_dev = TRUE;
+            devices++;
+        }
+    }
+
     // add Bluetooth devices...
+    bt_dev = FALSE;
     if (vol->objmanager)
     {
         // iterate all the objects the manager knows about
@@ -2103,36 +2139,6 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
                 interfaces = interfaces->next;
             }
             objects = objects->next;
-        }
-    }
-
-    // add external devices...
-    card_num = -1;
-    while (1)
-    {
-        if (snd_card_next (&card_num) < 0)
-        {
-            g_warning ("volumealsa: Cannot enumerate devices");
-            break;
-        }
-        if (card_num == -1) break;
-
-        if (!asound_is_bcm_device (card_num))
-        {
-            char *nam;
-            snd_card_get_name (card_num, &nam);
-
-            if (!ext_dev && devices)
-            {
-                mi = gtk_separator_menu_item_new ();
-                gtk_menu_shell_append (GTK_MENU_SHELL (vol->outputs), mi);
-            }
-
-            mi = volumealsa_menu_item_add (vol, vol->outputs, nam, nam, FALSE, FALSE, G_CALLBACK (volumealsa_set_external_output));
-
-            g_free (nam);
-            ext_dev = TRUE;
-            devices++;
         }
     }
 
@@ -2878,9 +2884,11 @@ static void show_profiles (VolumeALSAPlugin *vol)
     g_signal_connect (vol->options_dlg, "delete-event", G_CALLBACK (profiles_wd_close_handler), vol);
 
     vol->profiles = gtk_vbox_new (FALSE, 5);
+    vol->intprofiles = gtk_vbox_new (FALSE, 5);
     vol->alsaprofiles = gtk_vbox_new (FALSE, 5);
     vol->btprofiles = gtk_vbox_new (FALSE, 5);
     gtk_container_add (GTK_CONTAINER (vol->options_dlg), vol->profiles);
+    gtk_box_pack_start (GTK_BOX (vol->profiles), vol->intprofiles, FALSE, FALSE, 0);
     gtk_box_pack_start (GTK_BOX (vol->profiles), vol->alsaprofiles, FALSE, FALSE, 0);
     gtk_box_pack_start (GTK_BOX (vol->profiles), vol->btprofiles, FALSE, FALSE, 0);
 
@@ -3594,8 +3602,28 @@ static void pa_cb_get_profiles (pa_context *c, const pa_card_info *i, int eol, v
         }
         else
         {
-            gtk_box_pack_start (GTK_BOX (vol->alsaprofiles), gtk_label_new (pa_proplist_gets (i->proplist, "alsa.card_name")), FALSE, FALSE, 5);
-            gtk_box_pack_start (GTK_BOX (vol->alsaprofiles), btn, FALSE, FALSE, 5);
+            const char *name = pa_proplist_gets (i->proplist, "alsa.card_name");
+
+            if (!g_strcmp0 (name, "bcm2835 HDMI 1"))
+            {
+                gtk_box_pack_start (GTK_BOX (vol->intprofiles), gtk_label_new (vol->hdmis == 1 ? _("HDMI") : vol->mon_names[0]), FALSE, FALSE, 5);
+                gtk_box_pack_start (GTK_BOX (vol->intprofiles), btn, FALSE, FALSE, 5);
+            }
+            else if (!g_strcmp0 (name, "bcm2835 HDMI 2"))
+            {
+                gtk_box_pack_start (GTK_BOX (vol->intprofiles), gtk_label_new (vol->hdmis == 1 ? _("HDMI") : vol->mon_names[1]), FALSE, FALSE, 5);
+                gtk_box_pack_start (GTK_BOX (vol->intprofiles), btn, FALSE, FALSE, 5);
+            }
+            else if (!g_strcmp0 (name, "bcm2835 Headphones"))
+            {
+                gtk_box_pack_start (GTK_BOX (vol->intprofiles), gtk_label_new (vol->hdmis == 1 ? _("Analog") : vol->mon_names[0]), FALSE, FALSE, 5);
+                gtk_box_pack_start (GTK_BOX (vol->intprofiles), btn, FALSE, FALSE, 5);
+            }
+            else
+            {
+                gtk_box_pack_start (GTK_BOX (vol->alsaprofiles), gtk_label_new (name), FALSE, FALSE, 5);
+                gtk_box_pack_start (GTK_BOX (vol->alsaprofiles), btn, FALSE, FALSE, 5);
+            }
         }
     }
 
