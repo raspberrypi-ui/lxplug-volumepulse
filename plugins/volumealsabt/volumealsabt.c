@@ -99,8 +99,6 @@ typedef struct {
     GtkWidget *options_play;            /* Playback options table */
     GtkWidget *options_capt;            /* Capture options table */
     GtkWidget *options_set;             /* General settings box */
-    char *odev_name;
-    char *idev_name;
 #endif
 
     /* ALSA interface. */
@@ -130,7 +128,8 @@ typedef struct {
     int pa_mute;                        /* mute setting on default sink */
     char *pa_profile;                   /* current profile for card */
 #ifdef OPTIONS
-    char *pa_alsadev;                   /* name of ALSA device matching current default source or sink */
+    char *pa_alsadev;                   /* device name of ALSA device matching current default source or sink */
+    char *pa_alsaname;                  /* display name of ALSA device matching current default source or sink */
 #endif
 } VolumeALSAPlugin;
 
@@ -1028,10 +1027,6 @@ static void volumealsa_menu_show_default_sink (GtkWidget *widget, gpointer data)
         GtkWidget *image = gtk_image_new ();
         lxpanel_plugin_set_menu_icon (vol->panel, image, "dialog-ok-apply");
         gtk_image_menu_item_set_image (GTK_IMAGE_MENU_ITEM (widget), image);
-#ifdef OPTIONS
-        if (vol->odev_name) g_free (vol->odev_name);
-        vol->odev_name = g_strdup (gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
-#endif
     }
 }
 
@@ -1044,10 +1039,6 @@ static void volumealsa_menu_show_default_source (GtkWidget *widget, gpointer dat
         GtkWidget *image = gtk_image_new ();
         lxpanel_plugin_set_menu_icon (vol->panel, image, "dialog-ok-apply");
         gtk_image_menu_item_set_image (GTK_IMAGE_MENU_ITEM (widget), image);
-#ifdef OPTIONS
-        if (vol->idev_name) g_free (vol->idev_name);
-        vol->idev_name = g_strdup (gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
-#endif
     }
 }
 
@@ -1732,7 +1723,7 @@ static void show_alsa_options (VolumeALSAPlugin *vol, gboolean input)
     vol->mixer = mixer;
 
     if (vol->mixer)
-        show_options (vol, vol->mixer, input, input ? vol->idev_name : vol->odev_name);
+        show_options (vol, vol->mixer, input, vol->pa_alsaname);
 }
 
 static void update_options (VolumeALSAPlugin *vol)
@@ -2384,6 +2375,7 @@ static void pa_cb_get_sink_info_by_name (pa_context *context, const pa_sink_info
             vol->pa_alsadev = g_strdup ("bluealsa");
         else
             vol->pa_alsadev = g_strdup_printf ("hw:%s", pa_proplist_gets (i->proplist, "alsa.card"));
+        vol->pa_alsaname = g_strdup (pa_proplist_gets (i->proplist, "alsa.card_name"));
 #endif
     }
 
@@ -2439,6 +2431,7 @@ static void pa_cb_get_source_info_by_name (pa_context *context, const pa_source_
             vol->pa_alsadev = g_strdup ("bluealsa");
         else
             vol->pa_alsadev = g_strdup_printf ("hw:%s", pa_proplist_gets (i->proplist, "alsa.card"));
+        vol->pa_alsaname = g_strdup (pa_proplist_gets (i->proplist, "alsa.card_name"));
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
@@ -2926,10 +2919,6 @@ static GtkWidget *volumealsa_constructor (LXPanel *panel, config_setting_t *sett
     vol->bt_conname = NULL;
     vol->bt_reconname = NULL;
     vol->options_dlg = NULL;
-#ifdef OPTIONS
-    vol->odev_name = NULL;
-    vol->idev_name = NULL;
-#endif
 
     /* Allocate top level widget and set into Plugin widget pointer. */
     vol->panel = panel;
