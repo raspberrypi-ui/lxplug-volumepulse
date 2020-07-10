@@ -85,9 +85,6 @@ typedef struct {
     GtkWidget *mute_check;              /* Checkbox for mute state */
     GtkWidget *menu_popup;              /* Right-click menu */
     GtkWidget *options_dlg;             /* Device options dialog */
-    GtkWidget *options_play;            /* Playback options table */
-    GtkWidget *options_capt;            /* Capture options table */
-    GtkWidget *options_set;             /* General settings box */
     GtkWidget *outputs;                 /* Output select menu */
     GtkWidget *inputs;                  /* Input select menu */
     GtkWidget *intprofiles;             /* Vbox for profile combos */
@@ -96,8 +93,13 @@ typedef struct {
     gboolean show_popup;                /* Toggle to show and hide the popup on left click */
     guint volume_scale_handler;         /* Handler for vscale widget */
     guint mute_check_handler;           /* Handler for mute_check widget */
+#ifdef OPTIONS
+    GtkWidget *options_play;            /* Playback options table */
+    GtkWidget *options_capt;            /* Capture options table */
+    GtkWidget *options_set;             /* General settings box */
     char *odev_name;
     char *idev_name;
+#endif
 
     /* ALSA interface. */
     snd_mixer_t *mixer;
@@ -203,6 +205,7 @@ static void volumealsa_popup_set_position (GtkWidget *menu, gint *px, gint *py, 
 static gboolean volumealsa_mouse_out (GtkWidget *widget, GdkEventButton *event, VolumeALSAPlugin *vol);
 
 /* Options dialog */
+#ifdef OPTIONS
 static void show_options (VolumeALSAPlugin *vol, snd_mixer_t *mixer, gboolean input, char *devname);
 static void show_alsa_options (VolumeALSAPlugin *vol, gboolean input);
 static void update_options (VolumeALSAPlugin *vol);
@@ -215,6 +218,7 @@ static void playback_switch_toggled_event (GtkToggleButton *togglebutton, gpoint
 static void capture_switch_toggled_event (GtkToggleButton *togglebutton, gpointer user_data);
 static void enum_changed_event (GtkComboBox *combo, gpointer *user_data);
 static GtkWidget *find_box_child (GtkWidget *container, gint type, const char *name);
+#endif
 
 /* Profiles dialog */
 static void show_profiles (VolumeALSAPlugin *vol);
@@ -808,7 +812,9 @@ static void volumealsa_update_display (VolumeALSAPlugin *vol)
     textdomain (GETTEXT_PACKAGE);
 #endif
 
+#ifdef OPTIONS
     if (vol->options_dlg) update_options (vol);
+#endif
 
     /* read current mute and volume status */
     mute = pulse_get_mute (vol);
@@ -851,6 +857,7 @@ static void volumealsa_theme_change (GtkWidget *widget, VolumeALSAPlugin *vol)
     volumealsa_update_display (vol);
 }
 
+#ifdef OPTIONS
 static void volumealsa_open_config_dialog (GtkWidget *widget, VolumeALSAPlugin *vol)
 {
     gtk_menu_popdown (GTK_MENU (vol->menu_popup));
@@ -862,6 +869,7 @@ static void volumealsa_open_input_config_dialog (GtkWidget *widget, VolumeALSAPl
     gtk_menu_popdown (GTK_MENU (vol->menu_popup));
     show_alsa_options (vol, TRUE);
 }
+#endif
 
 static void volumealsa_open_profile_dialog (GtkWidget *widget, VolumeALSAPlugin *vol)
 {
@@ -1033,8 +1041,10 @@ static void volumealsa_menu_show_default_sink (GtkWidget *widget, gpointer data)
         GtkWidget *image = gtk_image_new ();
         lxpanel_plugin_set_menu_icon (vol->panel, image, "dialog-ok-apply");
         gtk_image_menu_item_set_image (GTK_IMAGE_MENU_ITEM (widget), image);
+#ifdef OPTIONS
         if (vol->odev_name) g_free (vol->odev_name);
         vol->odev_name = g_strdup (gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
+#endif
     }
 }
 
@@ -1047,8 +1057,10 @@ static void volumealsa_menu_show_default_source (GtkWidget *widget, gpointer dat
         GtkWidget *image = gtk_image_new ();
         lxpanel_plugin_set_menu_icon (vol->panel, image, "dialog-ok-apply");
         gtk_image_menu_item_set_image (GTK_IMAGE_MENU_ITEM (widget), image);
+#ifdef OPTIONS
         if (vol->idev_name) g_free (vol->idev_name);
         vol->idev_name = g_strdup (gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
+#endif
     }
 }
 
@@ -1060,7 +1072,7 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
 
     vol->menu_popup = gtk_menu_new ();
 
-    // create input selector...
+    // create input selector - loop ALSA inputs first
     card_num = -1;
     while (1)
     {
@@ -1076,7 +1088,7 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
             char *nam;
             snd_card_get_name (card_num, &nam);
 
-            // either create a menu, or add a separator if there already is one
+            // create a menu
             if (!inputs) vol->inputs = gtk_menu_new ();
             volumealsa_menu_item_add (vol, vol->inputs, nam, nam, FALSE, TRUE, G_CALLBACK (volumealsa_set_external_input));
             ext_inp = TRUE;
@@ -1110,8 +1122,7 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
                         {
                             // create a menu if there isn't one already
                             if (!inputs) vol->inputs = gtk_menu_new ();
-
-                            if (!bt_dev && inputs)
+                            else if (!bt_dev)
                             {
                                 mi = gtk_separator_menu_item_new ();
                                 gtk_menu_shell_append (GTK_MENU_SHELL (vol->inputs), mi);
@@ -1140,9 +1151,11 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
         mi = gtk_separator_menu_item_new ();
         gtk_menu_shell_append (GTK_MENU_SHELL (vol->inputs), mi);
 
+#ifdef OPTIONS
         mi = gtk_image_menu_item_new_with_label (_("Input Device Settings..."));
         g_signal_connect (mi, "activate", G_CALLBACK (volumealsa_open_input_config_dialog), (gpointer) vol);
         gtk_menu_shell_append (GTK_MENU_SHELL (vol->inputs), mi);
+#endif
 
         mi = gtk_image_menu_item_new_with_label (_("Device Profiles..."));
         g_signal_connect (mi, "activate", G_CALLBACK (volumealsa_open_profile_dialog), (gpointer) vol);
@@ -1153,7 +1166,7 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
     if (inputs) vol->outputs = gtk_menu_new ();
     else vol->outputs = vol->menu_popup;
 
-    /* add internal device... */
+    // add internal device at start
     card_num = -1;
     while (1)
     {
@@ -1167,7 +1180,7 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
         int res = asound_is_bcm_device (card_num);
         if (res == 2)
         {
-            /* separate devices for each internal input */
+            // separate devices for each internal input
             char *nam;
             snd_card_get_name (card_num, &nam);
 
@@ -1183,7 +1196,7 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
         }
     }
 
-    // add external devices...
+    // add external devices next
     card_num = -1;
     while (1)
     {
@@ -1213,7 +1226,7 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
         }
     }
 
-    // add Bluetooth devices...
+    // add Bluetooth devices next
     bt_dev = FALSE;
     if (vol->objmanager)
     {
@@ -1261,27 +1274,24 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
         }
     }
 
-    /* update the menu item names, which are currently ALSA device names, to PulseAudio device names */
+    // update the menu item names, which are currently ALSA device names, to PulseAudio device names
     pulse_update_alsa_sink_names (vol);
     pulse_update_alsa_source_names (vol);
 
-    /* update the fallback sink and source */
+    // select the fallbacks in the menu
     pulse_get_defaults (vol);
-
-    /* select the fallbacks in the menu */
     gtk_container_foreach (GTK_CONTAINER (vol->outputs), volumealsa_menu_show_default_sink, vol);
     gtk_container_foreach (GTK_CONTAINER (vol->inputs), volumealsa_menu_show_default_source, vol);
 
-    if (bt_dev || ext_dev)
-    {
-        // add the output options menu item to the output menu
-        mi = gtk_separator_menu_item_new ();
-        gtk_menu_shell_append (GTK_MENU_SHELL (vol->outputs), mi);
+    // add the output options menu item to the output menu
+    mi = gtk_separator_menu_item_new ();
+    gtk_menu_shell_append (GTK_MENU_SHELL (vol->outputs), mi);
 
-        mi = gtk_image_menu_item_new_with_label (_("Output Device Settings..."));
-        g_signal_connect (mi, "activate", G_CALLBACK (volumealsa_open_config_dialog), (gpointer) vol);
-        gtk_menu_shell_append (GTK_MENU_SHELL (vol->outputs), mi);
-    }
+#ifdef OPTIONS
+    mi = gtk_image_menu_item_new_with_label (_("Output Device Settings..."));
+    g_signal_connect (mi, "activate", G_CALLBACK (volumealsa_open_config_dialog), (gpointer) vol);
+    gtk_menu_shell_append (GTK_MENU_SHELL (vol->outputs), mi);
+#endif
 
     mi = gtk_image_menu_item_new_with_label (_("Device Profiles..."));
     g_signal_connect (mi, "activate", G_CALLBACK (volumealsa_open_profile_dialog), (gpointer) vol);
@@ -1593,6 +1603,8 @@ static gboolean volumealsa_mouse_out (GtkWidget *widget, GdkEventButton *event, 
 /*----------------------------------------------------------------------------*/
 /* Options dialog                                                             */
 /*----------------------------------------------------------------------------*/
+
+#ifdef OPTIONS
 
 static void show_options (VolumeALSAPlugin *vol, snd_mixer_t *mixer, gboolean input, char *devname)
 {
@@ -1983,6 +1995,8 @@ static GtkWidget *find_box_child (GtkWidget *container, gint type, const char *n
     }
     return NULL;
 }
+
+#endif
 
 /*----------------------------------------------------------------------------*/
 /* Profiles dialog                                                            */
@@ -2913,8 +2927,10 @@ static GtkWidget *volumealsa_constructor (LXPanel *panel, config_setting_t *sett
     vol->bt_conname = NULL;
     vol->bt_reconname = NULL;
     vol->options_dlg = NULL;
+#ifdef OPTIONS
     vol->odev_name = NULL;
     vol->idev_name = NULL;
+#endif
 
     /* Allocate top level widget and set into Plugin widget pointer. */
     vol->panel = panel;
