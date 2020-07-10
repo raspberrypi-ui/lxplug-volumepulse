@@ -72,6 +72,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define DEBUG
 #endif
 
+//#define OPTIONS
+
 typedef struct {
     /* plugin */
     GtkWidget *plugin;                  /* Back pointer to widget */
@@ -127,7 +129,9 @@ typedef struct {
     int pa_volume;                      /* volume setting on default sink */
     int pa_mute;                        /* mute setting on default sink */
     char *pa_profile;                   /* current profile for card */
+#ifdef OPTIONS
     char *pa_alsadev;                   /* name of ALSA device matching current default source or sink */
+#endif
 } VolumeALSAPlugin;
 
 typedef enum {
@@ -241,7 +245,9 @@ static int pulse_set_volume (VolumeALSAPlugin *vol, int volume);
 static int pulse_get_volume (VolumeALSAPlugin *vol);
 static int pulse_set_mute (VolumeALSAPlugin *vol, int mute);
 static int pulse_get_mute (VolumeALSAPlugin *vol);
+#ifdef OPTIONS
 static int pulse_get_default_source_info (VolumeALSAPlugin *vol);
+#endif
 static char *bluez_to_pa_sink_name (char *bluez_name, char *profile);
 static char *bluez_to_pa_source_name (char *bluez_name);
 static char *bluez_to_pa_card_name (char *bluez_name);
@@ -2373,10 +2379,12 @@ static void pa_cb_get_sink_info_by_name (pa_context *context, const pa_sink_info
         vol->pa_channels = i->volume.channels;
         vol->pa_volume = i->volume.values[0];
         vol->pa_mute = i->mute;
+#ifdef OPTIONS
         if (!g_strcmp0 (pa_proplist_gets (i->proplist, "device.api"), "bluez"))
             vol->pa_alsadev = g_strdup ("bluealsa");
         else
             vol->pa_alsadev = g_strdup_printf ("hw:%s", pa_proplist_gets (i->proplist, "alsa.card"));
+#endif
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
@@ -2420,6 +2428,7 @@ static int pulse_set_mute (VolumeALSAPlugin *vol, int mute)
     END_PA_OPERATION ("set_sink_mute_by_name");
 }
 
+#ifdef OPTIONS
 static void pa_cb_get_source_info_by_name (pa_context *context, const pa_source_info *i, int eol, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
@@ -2441,6 +2450,7 @@ static int pulse_get_default_source_info (VolumeALSAPlugin *vol)
     op = pa_context_get_source_info_by_name (vol->pa_context, vol->pa_default_source, &pa_cb_get_source_info_by_name, vol);
     END_PA_OPERATION ("get_sink_info_by_name")
 }
+#endif
 
 /* Bluetooth name remapping
  * ------------------------
