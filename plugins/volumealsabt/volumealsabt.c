@@ -184,40 +184,17 @@ static gboolean bt_is_connected (VolumeALSAPlugin *vol, const gchar *path);
 static long lrint_dir (double x, int dir);
 static int get_normalized_volume (snd_mixer_elem_t *elem, gboolean capture);
 static int set_normalized_volume (snd_mixer_elem_t *elem, int volume, int dir, gboolean capture);
-static gboolean asound_has_mute (VolumeALSAPlugin *vol);
-static gboolean asound_is_muted (VolumeALSAPlugin *vol);
-static void asound_set_mute (VolumeALSAPlugin *vol, gboolean mute);
-static int asound_get_volume (VolumeALSAPlugin *vol);
-static void asound_set_volume (VolumeALSAPlugin *vol, int volume);
 
 /* ALSA */
-static gboolean asound_initialize (VolumeALSAPlugin *vol);
-static void asound_deinitialize (VolumeALSAPlugin *vol);
-static gboolean asound_find_master_elem (VolumeALSAPlugin *vol);
-static gboolean asound_mixer_initialize (VolumeALSAPlugin *vol, MixerIO io);
-static void asound_mixer_deinitialize (VolumeALSAPlugin *vol, MixerIO io);
-static int asound_find_valid_device (void);
-static gboolean asound_current_dev_check (VolumeALSAPlugin *vol);
-static gboolean asound_has_volume_control (int dev);
 static gboolean asound_has_input (int dev);
-static gboolean asound_restart (gpointer user_data);
-static gboolean asound_reset_mixer_evt_idle (gpointer user_data);
-static gboolean asound_mixer_event (GIOChannel *channel, GIOCondition cond, gpointer user_data);
 
 /* .asoundrc */
 static int asound_get_default_card (void);
 static int asound_get_default_input (void);
-static void asound_set_default_card (int num);
-static void asound_set_default_input (int num);
 static char *asound_get_bt_device (void);
 static char *asound_get_bt_input (void);
-static void asound_set_bt_device (char *devname);
-static void asound_set_bt_input (char *devname);
 static gboolean asound_is_current_bt_dev (const char *obj, gboolean is_input);
-static int asound_get_bcm_device_num (void);
 static int asound_is_bcm_device (int num);
-static char *asound_default_device_name (void);
-static char *asound_default_input_name (void);
 
 /* Handlers and graphics */
 static void volumealsa_update_display (VolumeALSAPlugin *vol);
@@ -852,409 +829,14 @@ static int set_normalized_volume (snd_mixer_elem_t *elem, int volume, int dir, g
     return capture ? snd_mixer_selem_set_capture_dB_all (elem, value, dir) : snd_mixer_selem_set_playback_dB_all (elem, value, dir);
 }
 
-/* Get the presence of the mute control from the sound system. */
-static gboolean asound_has_mute (VolumeALSAPlugin *vol)
-{
-    if (vol->master_element == NULL || snd_mixer_elem_get_type (vol->master_element) != SND_MIXER_ELEM_SIMPLE) return FALSE;
-
-    return snd_mixer_selem_has_playback_switch (vol->master_element);
-}
-
-/* Get the condition of the mute control from the sound system. */
-static gboolean asound_is_muted (VolumeALSAPlugin *vol)
-{
-    if (vol->master_element == NULL || snd_mixer_elem_get_type (vol->master_element) != SND_MIXER_ELEM_SIMPLE) return FALSE;
-    if (!snd_mixer_selem_has_playback_channel (vol->master_element, SND_MIXER_SCHN_FRONT_LEFT)) return FALSE;
-    if (!snd_mixer_selem_has_playback_switch (vol->master_element)) return FALSE;
-
-    /* The switch is on if sound is not muted, and off if the sound is muted.
-     * Initialize so that the sound appears unmuted if the control does not exist. */
-    int value = 1;
-    snd_mixer_selem_get_playback_switch (vol->master_element, SND_MIXER_SCHN_FRONT_LEFT, &value);
-    return (value == 0);
-}
-
-static void asound_set_mute (VolumeALSAPlugin *vol, gboolean mute)
-{
-    if (vol->master_element == NULL || snd_mixer_elem_get_type (vol->master_element) != SND_MIXER_ELEM_SIMPLE) return;
-    if (!snd_mixer_selem_has_playback_switch (vol->master_element)) return;
-
-    snd_mixer_selem_set_playback_switch_all (vol->master_element, mute ? 0 : 1);
-}
-
-/* Get the volume from the sound system.
- * This implementation returns the average of the Front Left and Front Right channels. */
-static int asound_get_volume (VolumeALSAPlugin *vol)
-{
-    if (vol->master_element == NULL || snd_mixer_elem_get_type (vol->master_element) != SND_MIXER_ELEM_SIMPLE) return 0;
-    if (!snd_mixer_selem_has_playback_channel (vol->master_element, SND_MIXER_SCHN_FRONT_LEFT)) return 0;
-    if (!snd_mixer_selem_has_playback_volume (vol->master_element)) return 0;
-
-    return get_normalized_volume (vol->master_element, FALSE);
-}
-
-/* Set the volume to the sound system.
- * This implementation sets the Front Left and Front Right channels to the specified value. */
-static void asound_set_volume (VolumeALSAPlugin *vol, int volume)
-{
-    if (vol->master_element == NULL || snd_mixer_elem_get_type (vol->master_element) != SND_MIXER_ELEM_SIMPLE) return;
-    if (!snd_mixer_selem_has_playback_channel (vol->master_element, SND_MIXER_SCHN_FRONT_LEFT)) return;
-    if (!snd_mixer_selem_has_playback_volume (vol->master_element)) return;
-
-    set_normalized_volume (vol->master_element, volume, volume - asound_get_volume (vol), FALSE);
-}
-
 
 /*----------------------------------------------------------------------------*/
 /* ALSA interface                                                             */
 /*----------------------------------------------------------------------------*/
 
-/* Initialize the ALSA interface */
-
-static gboolean asound_initialize (VolumeALSAPlugin *vol)
-{
-    /* make sure existing watches are removed by calling deinitialize */
-    asound_deinitialize (vol);
-
-    DEBUG ("Initializing...");
-
-    /* if the default device is a Bluetooth device, check it is actually connected... */
-    if (asound_get_default_card () == BLUEALSA_DEV)
-    {
-        char *btdev = asound_get_bt_device ();
-        gboolean res = bt_is_connected (vol, btdev);
-        g_free (btdev);
-        if (!res)
-        {
-            g_warning ("volumealsa: Default Bluetooth output device not connected - cannot attach mixer");
-            return TRUE;
-        }
-    }
-
-    if (!asound_mixer_initialize (vol, OUTPUT_MIXER))
-    {
-        g_warning ("volumealsa: Device invalid - cannot attach mixer");
-        return TRUE;
-    }
-
-    if (!asound_find_master_elem (vol))
-    {
-        g_warning ("volumealsa: Cannot find suitable master element");
-        return TRUE;
-    }
-
-    if (!asound_current_dev_check (vol)) return FALSE;
-
-    return TRUE;
-}
-
-static void asound_deinitialize (VolumeALSAPlugin *vol)
-{
-    guint i;
-
-    DEBUG ("Deinitializing...");
-    if (vol->mixer_evt_idle != 0)
-    {
-        g_source_remove (vol->mixer_evt_idle);
-        vol->mixer_evt_idle = 0;
-    }
-    vol->master_element = NULL;
-    asound_mixer_deinitialize (vol, OUTPUT_MIXER);
-}
-
-/* An ALSA mixer exposes a variety of simple controls, which are identified only
- * by name. There is no standard for the name of the "master" control, and there
- * are dozens of names used for it on the devices I have seen.
- * A lot of devices seem to put the master as the first control in the list, but
- * the IQaudio devices sort their controls alphabetically, with 'Analogue' first,
- * when the master is actually 'Digital'. On devices like the IQaudio, there is
- * only one control which has both a volume control and a switch, and that is the
- * master.
- * So the way we try to find the master is to search the list of controls from the
- * start for the first control with both volume and switch; if we find one, we
- * assume it is the master. If there are no controls with both volume and switch,
- * we search again for the first volume control.
- * This isn't perfect, but it is as close as I have been able to get so far...
- */
-
-static gboolean asound_find_master_elem (VolumeALSAPlugin *vol)
-{
-    snd_mixer_elem_t *elem;
-
-    if (!vol->mixers[OUTPUT_MIXER].mixer) return FALSE;
-
-    for (elem = snd_mixer_first_elem (vol->mixers[OUTPUT_MIXER].mixer); elem != NULL; elem = snd_mixer_elem_next (elem))
-    {
-        if (snd_mixer_selem_is_active (elem) && snd_mixer_selem_has_playback_volume (elem) && snd_mixer_selem_has_playback_switch (elem))
-        {
-            DEBUG ("Device (vol and switch) attached successfully");
-            vol->master_element = elem;
-            return TRUE;
-        }
-    }
-
-    for (elem = snd_mixer_first_elem (vol->mixers[OUTPUT_MIXER].mixer); elem != NULL; elem = snd_mixer_elem_next (elem))
-    {
-        if (snd_mixer_selem_is_active (elem) && snd_mixer_selem_has_playback_volume (elem))
-        {
-            DEBUG ("Device (vol only) attached successfully");
-            vol->master_element = elem;
-            return TRUE;
-        }
-    }
-
-    return FALSE;
-}
-
-static gboolean asound_mixer_initialize (VolumeALSAPlugin *vol, MixerIO io)
-{
-    char *device = io ? asound_default_input_name () : asound_default_device_name ();
-    snd_mixer_t *mixer;
-    struct pollfd *fds;
-    int nchans, i;
-    gboolean res = FALSE;
-
-    DEBUG ("Attaching mixer to %s device %s...", io ? "input" : "output", device);
-
-    vol->mixers[io].mixer = NULL;
-
-    // create and attach the mixer
-    if (snd_mixer_open (&mixer, 0)) goto end;
-
-    if (snd_mixer_attach (mixer, device))
-    {
-        snd_mixer_close (mixer);
-        goto end;
-    }
-
-    if (snd_mixer_selem_register (mixer, NULL, NULL) || snd_mixer_load (mixer))
-    {
-        snd_mixer_detach (mixer, device);
-        snd_mixer_close (mixer);
-        goto end;
-    }
-
-    vol->mixers[io].mixer = mixer;
-
-    /* listen for ALSA events on the mixer */
-    nchans = snd_mixer_poll_descriptors_count (mixer);
-    vol->mixers[io].num_channels = nchans;
-    vol->mixers[io].channels = g_new0 (GIOChannel *, nchans);
-    vol->mixers[io].watches = g_new0 (guint, nchans);
-
-    fds = g_new0 (struct pollfd, nchans);
-    snd_mixer_poll_descriptors (mixer, fds, nchans);
-    for (i = 0; i < nchans; ++i)
-    {
-        vol->mixers[io].channels[i] = g_io_channel_unix_new (fds[i].fd);
-        vol->mixers[io].watches[i] = g_io_add_watch (vol->mixers[io].channels[i], G_IO_IN | G_IO_HUP, asound_mixer_event, vol);
-    }
-    g_free (fds);
-    res = TRUE;
-
-end:
-    g_free (device);
-    return res;
-}
-
-static void asound_mixer_deinitialize (VolumeALSAPlugin *vol, MixerIO io)
-{
-    char *device = io ? asound_default_input_name () : asound_default_device_name ();
-    int i;
-
-    DEBUG ("Detaching mixer from %s device %s...", io ? "input" : "output", device);
-
-    for (i = 0; i < vol->mixers[io].num_channels; i++)
-    {
-        g_source_remove (vol->mixers[io].watches[i]);
-        g_io_channel_shutdown (vol->mixers[io].channels[i], FALSE, NULL);
-        g_io_channel_unref (vol->mixers[io].channels[i]);
-    }
-
-    g_free (vol->mixers[io].channels);
-    g_free (vol->mixers[io].watches);
-    vol->mixers[io].channels = NULL;
-    vol->mixers[io].watches = NULL;
-    vol->mixers[io].num_channels = 0;
-
-    if (vol->mixers[io].mixer)
-    {
-        snd_mixer_detach (vol->mixers[io].mixer, device);
-        snd_mixer_close (vol->mixers[io].mixer);
-    }
-    vol->mixers[io].mixer = NULL;
-
-    g_free (device);
-}
-
-static int asound_find_valid_device (void)
-{
-    // call this if the current ALSA device is invalid - it tries to find an alternative
-    g_warning ("volumealsa: Default ALSA device not valid - resetting to internal");
-
-    int num = asound_get_bcm_device_num ();
-    if (num != -1)
-    {
-        g_warning ("volumealsa: Setting to internal device hw:%d", num);
-        asound_set_default_card (num);
-        return num;
-    }
-    else
-    {
-        g_warning ("volumealsa: Internal device not available - looking for first valid ALSA device...");
-        while (1)
-        {
-            if (snd_card_next (&num) < 0)
-            {
-                g_warning ("volumealsa: Cannot enumerate devices");
-                break;
-            }
-            if (num == -1) break;
-
-            g_warning ("volumealsa: Valid ALSA device hw:%d found", num);
-            asound_set_default_card (num);
-            return num;
-        }
-        g_warning ("volumealsa: No ALSA devices found");
-        asound_set_default_card (-1);
-    }
-    return -1;
-}
-
-static gboolean asound_current_dev_check (VolumeALSAPlugin *vol)
-{
-    if (!vsystem ("amixer info 2>/dev/null | grep -q .")) return TRUE;
-    else
-    {
-        asound_deinitialize (vol);
-        asound_set_default_card (-1);
-        return FALSE;
-    }
-}
-
-static gboolean asound_has_volume_control (int dev)
-{
-    if (dev == -1)
-        return vsystem ("amixer scontents 2>/dev/null | grep -q pvolume") ? FALSE : TRUE;
-    else
-        return vsystem ("amixer -c %d scontents 2>/dev/null | grep -q pvolume", dev) ? FALSE : TRUE;
-}
-
 static gboolean asound_has_input (int dev)
 {
     return vsystem ("amixer -c %d scontents 2>/dev/null | grep -q cvolume", dev) ? FALSE : TRUE;
-}
-
-/* NOTE by PCMan:
- * This is magic! Since ALSA uses its own machanism to handle this part.
- * After polling of mixer fds, it requires that we should call
- * snd_mixer_handle_events to clear all pending mixer events.
- * However, when using the glib IO channels approach, we don't have
- * poll() and snd_mixer_poll_descriptors_revents(). Due to the design of
- * glib, on_mixer_event() will be called for every fd whose status was
- * changed. So, after each poll(), it's called for several times,
- * not just once. Therefore, we cannot call snd_mixer_handle_events()
- * directly in the event handler. Otherwise, it will get called for
- * several times, which might clear unprocessed pending events in the queue.
- * So, here we call it once in the event callback for the first fd.
- * Then, we don't call it for the following fds. After all fds with changed
- * status are handled, we remove this restriction in an idle handler.
- * The next time the event callback is involked for the first fs, we can
- * call snd_mixer_handle_events() again. Racing shouldn't happen here
- * because the idle handler has the same priority as the io channel callback.
- * So, io callbacks for future pending events should be in the next gmain
- * iteration, and won't be affected.
- */
-
-static gboolean asound_restart (gpointer user_data)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
-
-    if (!g_main_current_source ()) return TRUE;
-    if (g_source_is_destroyed (g_main_current_source ())) return FALSE;
-
-    if (!asound_initialize (vol))
-    {
-        g_warning ("volumealsa: Re-initialization failed.");
-        return TRUE; // try again in a second
-    }
-
-    g_warning ("volumealsa: Restarted ALSA interface...");
-    volumealsa_update_display (vol);
-
-    vol->restart_idle = 0;
-    return FALSE;
-}
-
-static gboolean asound_reset_mixer_evt_idle (gpointer user_data)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
-
-    if (!g_source_is_destroyed (g_main_current_source ()))
-        vol->mixer_evt_idle = 0;
-    return FALSE;
-}
-
-/* Handler for I/O event on ALSA channel. */
-static gboolean asound_mixer_event (GIOChannel *channel, GIOCondition cond, gpointer user_data)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
-    int i, res = 0;
-    snd_mixer_t *mixer = NULL;
-
-    if (g_source_is_destroyed (g_main_current_source ())) return FALSE;
-
-    if (vol->mixer_evt_idle == 0)
-    {
-        if (vol->mixers[OUTPUT_MIXER].mixer)
-        {
-            for (i = 0; i < vol->mixers[OUTPUT_MIXER].num_channels; i++)
-            {
-                if (channel == vol->mixers[OUTPUT_MIXER].channels[i])
-                {
-                    mixer = vol->mixers[OUTPUT_MIXER].mixer;
-                    DEBUG ("Output mixer event");
-                }
-            }
-        }
-        if (mixer == NULL && vol->mixers[INPUT_MIXER].mixer)
-        {
-            for (i = 0; i < vol->mixers[INPUT_MIXER].num_channels; i++)
-            {
-                if (channel == vol->mixers[INPUT_MIXER].channels[i])
-                {
-                    mixer = vol->mixers[INPUT_MIXER].mixer;
-                    DEBUG ("Input mixer event");
-                }
-            }
-        }
-        if (mixer)
-        {
-            vol->mixer_evt_idle = g_idle_add_full (G_PRIORITY_DEFAULT, (GSourceFunc) asound_reset_mixer_evt_idle, vol, NULL);
-            res = snd_mixer_handle_events (mixer);
-        }
-        else return TRUE;
-    }
-
-    /* the status of mixer is changed. update of display is needed. */
-    if (cond & G_IO_IN && res >= 0) volumealsa_update_display (vol);
-
-    if ((cond & G_IO_HUP) || (res < 0))
-    {
-        /* This means there're some problems with alsa. */
-        g_warning ("volumealsa: ALSA (or pulseaudio) had a problem: "
-                "volumealsa: snd_mixer_handle_events() = %d,"
-                " cond 0x%x (IN: 0x%x, HUP: 0x%x).", res, cond,
-                G_IO_IN, G_IO_HUP);
-        gtk_widget_set_tooltip_text (vol->plugin, "ALSA (or pulseaudio) had a problem."
-                " Please check the lxpanel logs.");
-
-        if (vol->restart_idle == 0) vol->restart_idle = g_timeout_add_seconds (1, asound_restart, vol);
-
-        return FALSE;
-    }
-
-    return TRUE;
 }
 
 
@@ -1373,78 +955,6 @@ static int asound_get_default_input (void)
 #define INPUT_B     "\npcm.input {\n\ttype bluealsa\n\tdevice \"%02X:%02X:%02X:%02X:%02X:%02X\"\n\tprofile \"sco\"\n}"
 #define CTL_B       "\nctl.!default {\n\ttype bluealsa\n}"
 
-static void asound_set_default_card (int num)
-{
-    char *user_config_file = g_build_filename (g_get_home_dir (), "/.asoundrc", NULL);
-
-    /* does .asoundrc exist? if not, write default contents and exit */
-    if (!g_file_test (user_config_file, G_FILE_TEST_IS_REGULAR))
-    {
-        vsystem ("echo '" PREFIX "\n" OUTPUT_A "\n" CTL_A "' >> %s", num, num, user_config_file);
-        goto DONE;
-    }
-
-    /* does .asoundrc use type asym? if not, replace file with default contents and exit */
-    if (!find_in_section (user_config_file, "pcm.!default", "asym"))
-    {
-        vsystem ("echo '" PREFIX "\n" OUTPUT_A "\n" CTL_A "' > %s", num, num, user_config_file);
-        goto DONE;
-    }
-
-    /* is there a pcm.output section? update it if so; if not, append one */
-    if (!find_in_section (user_config_file, "pcm.output", "type"))
-        vsystem ("echo '" OUTPUT_A "' >> %s", num, user_config_file);
-    else
-        vsystem ("sed -i '/pcm.output/,/}/c pcm.output {\\n\\ttype hw\\n\\tcard %d\\n}' %s", num, user_config_file);
-
-    /* is there a ctl.!default section? update it if so; if not, append one */
-    if (!find_in_section (user_config_file, "ctl.!default", "type"))
-        vsystem ("echo '" CTL_A "' >> %s", num, user_config_file);
-    else
-        vsystem ("sed -i '/ctl.!default/,/}/c ctl.!default {\\n\\ttype hw\\n\\tcard %d\\n}' %s", num, user_config_file);
-
-    DONE: g_free (user_config_file);
-}
-
-static void asound_set_default_input (int num)
-{
-    char *user_config_file = g_build_filename (g_get_home_dir (), "/.asoundrc", NULL);
-
-    /* does .asoundrc exist? if not, write default contents and exit */
-    if (!g_file_test (user_config_file, G_FILE_TEST_IS_REGULAR))
-    {
-        vsystem ("echo '" PREFIX "\n" OUTPUT_A "\n" INPUT_A "\n" CTL_A "' >> %s", 0, num, 0, user_config_file);
-        goto DONE;
-    }
-
-    /* does .asoundrc use type asym? if not, replace file with default contents and current output, and exit */
-    if (!find_in_section (user_config_file, "pcm.!default", "asym"))
-    {
-        int dev = asound_get_default_card ();
-        if (dev != BLUEALSA_DEV)
-            vsystem ("echo '" PREFIX "\n" OUTPUT_A "\n" INPUT_A "\n" CTL_A "' > %s", dev, num, dev, user_config_file);
-        else
-        {
-            unsigned int b1, b2, b3, b4, b5, b6;
-            char *btdev = asound_get_bt_device ();
-            if (btdev && sscanf (btdev, "/org/bluez/hci0/dev_%x_%x_%x_%x_%x_%x", &b1, &b2, &b3, &b4, &b5, &b6) == 6)
-                vsystem ("echo '" PREFIX "\n" OUTPUT_B "\n" INPUT_A "\n" CTL_B "' > %s", b1, b2, b3, b4, b5, b6, num, user_config_file);
-            else
-                vsystem ("echo '" PREFIX "\n" OUTPUT_A "\n" INPUT_A "\n" CTL_A "' > %s", 0, num, 0, user_config_file);
-            if (btdev) g_free (btdev);
-        }
-        goto DONE;
-    }
-
-    /* is there a pcm.input section? update it if so; if not, append one */
-    if (!find_in_section (user_config_file, "pcm.input", "type"))
-        vsystem ("echo '" INPUT_A "' >> %s", num, user_config_file);
-    else
-        vsystem ("sed -i '/pcm.input/,/}/c pcm.input {\\n\\ttype hw\\n\\tcard %d\\n}' %s", num, user_config_file);
-
-    DONE: g_free (user_config_file);
-}
-
 static char *asound_get_bt_device (void)
 {
     char *user_config_file = g_build_filename (g_get_home_dir (), "/.asoundrc", NULL);
@@ -1490,94 +1000,6 @@ static char *asound_get_bt_input (void)
     return ret;
 }
 
-static void asound_set_bt_device (char *devname)
-{
-    char *user_config_file = g_build_filename (g_get_home_dir (), "/.asoundrc", NULL);
-    unsigned int b1, b2, b3, b4, b5, b6;
-
-    /* parse the device name to make sure it is valid */
-    if (sscanf (devname, "/org/bluez/hci0/dev_%x_%x_%x_%x_%x_%x", &b1, &b2, &b3, &b4, &b5, &b6) != 6)
-    {
-        DEBUG ("Failed to set device - name %s invalid", devname);
-        goto DONE;
-    }
-
-    /* does .asoundrc exist? if not, write default contents and exit */
-    if (!g_file_test (user_config_file, G_FILE_TEST_IS_REGULAR))
-    {
-        vsystem ("echo '" PREFIX "\n" OUTPUT_B "\n" CTL_B "' >> %s", b1, b2, b3, b4, b5, b6, user_config_file);
-        goto DONE;
-    }
-
-    /* does .asoundrc use type asym? if not, replace file with default contents and exit */
-    if (!find_in_section (user_config_file, "pcm.!default", "asym"))
-    {
-        vsystem ("echo '" PREFIX "\n" OUTPUT_B "\n" CTL_B "' > %s", b1, b2, b3, b4, b5, b6, user_config_file);
-        goto DONE;
-    }
-
-    /* is there a pcm.output section? update it if so; if not, append one */
-    if (!find_in_section (user_config_file, "pcm.output", "type"))
-        vsystem ("echo '" OUTPUT_B "' >> %s", b1, b2, b3, b4, b5, b6, user_config_file);
-    else
-        vsystem ("sed -i '/pcm.output/,/}/c pcm.output {\\n\\ttype bluealsa\\n\\tdevice \"%02X:%02X:%02X:%02X:%02X:%02X\"\\n\\tprofile \"a2dp\"\\n}' %s", b1, b2, b3, b4, b5, b6, user_config_file);
-
-    /* is there a ctl.!default section? update it if so; if not, append one */
-    if (!find_in_section (user_config_file, "ctl.!default", "type"))
-        vsystem ("echo '" CTL_B "' >> %s", user_config_file);
-    else
-        vsystem ("sed -i '/ctl.!default/,/}/c ctl.!default {\\n\\ttype bluealsa\\n}' %s", user_config_file);
-
-    DONE: g_free (user_config_file);
-}
-
-static void asound_set_bt_input (char *devname)
-{
-    char *user_config_file = g_build_filename (g_get_home_dir (), "/.asoundrc", NULL);
-    unsigned int b1, b2, b3, b4, b5, b6;
-
-    /* parse the device name to make sure it is valid */
-    if (sscanf (devname, "/org/bluez/hci0/dev_%x_%x_%x_%x_%x_%x", &b1, &b2, &b3, &b4, &b5, &b6) != 6)
-    {
-        DEBUG ("Failed to set device - name %s invalid", devname);
-        goto DONE;
-    }
-
-    /* does .asoundrc exist? if not, write default contents and exit */
-    if (!g_file_test (user_config_file, G_FILE_TEST_IS_REGULAR))
-    {
-        vsystem ("echo '" PREFIX "\n" OUTPUT_A "\n" INPUT_B "\n" CTL_A "' >> %s", 0, b1, b2, b3, b4, b5, b6, 0, user_config_file);
-        goto DONE;
-    }
-
-    /* does .asoundrc use type asym? if not, replace file with default contents and current output, and exit */
-    if (!find_in_section (user_config_file, "pcm.!default", "asym"))
-    {
-        int dev = asound_get_default_card ();
-        if (dev != BLUEALSA_DEV)
-            vsystem ("echo '" PREFIX "\n" OUTPUT_A "\n" INPUT_B "\n" CTL_A "' > %s", dev, b1, b2, b3, b4, b5, b6, dev, user_config_file);
-        else
-        {
-            unsigned int c1, c2, c3, c4, c5, c6;
-            char *btdev = asound_get_bt_device ();
-            if (btdev && sscanf (btdev, "/org/bluez/hci0/dev_%x_%x_%x_%x_%x_%x", &c1, &c2, &c3, &c4, &c5, &c6) == 6)
-                vsystem ("echo '" PREFIX "\n" OUTPUT_B "\n" INPUT_B "\n" CTL_B "' > %s", c1, c2, c3, c4, c5, c6, b1, b2, b3, b4, b5, b6, user_config_file);
-            else
-                vsystem ("echo '" PREFIX "\n" OUTPUT_A "\n" INPUT_B "\n" CTL_A "' > %s", 0, b1, b2, b3, b4, b5, b6, 0, user_config_file);
-            if (btdev) g_free (btdev);
-        }
-        goto DONE;
-    }
-
-    /* is there a pcm.input section? update it if so; if not, append one */
-    if (!find_in_section (user_config_file, "pcm.input", "type"))
-        vsystem ("echo '" INPUT_B "' >> %s", b1, b2, b3, b4, b5, b6, user_config_file);
-    else
-        vsystem ("sed -i '/pcm.input/,/}/c pcm.input {\\n\\ttype bluealsa\\n\\tdevice \"%02X:%02X:%02X:%02X:%02X:%02X\"\\n\\tprofile \"sco\"\\n}' %s", b1, b2, b3, b4, b5, b6, user_config_file);
-
-    DONE: g_free (user_config_file);
-}
-
 static gboolean asound_is_current_bt_dev (const char *obj, gboolean is_input)
 {
     gboolean res = FALSE;
@@ -1588,24 +1010,6 @@ static gboolean asound_is_current_bt_dev (const char *obj, gboolean is_input)
         g_free (device);
     }
     return res;
-}
-
-static int asound_get_bcm_device_num (void)
-{
-    int num = -1;
-
-    while (1)
-    {
-        if (snd_card_next (&num) < 0)
-        {
-            g_warning ("volumealsa: Cannot enumerate devices");
-            break;
-        }
-        if (num == -1) break;
-
-        if (asound_is_bcm_device (num)) return num;
-    }
-    return -1;
 }
 
 static int asound_is_bcm_device (int num)
@@ -1622,20 +1026,6 @@ static int asound_is_bcm_device (int num)
     g_free (name);
 
     return res;
-}
-
-static char *asound_default_device_name (void)
-{
-    int num = asound_get_default_card ();
-    if (num == BLUEALSA_DEV) return g_strdup_printf ("bluealsa");
-    else return g_strdup_printf ("hw:%d", num);
-}
-
-static char *asound_default_input_name (void)
-{
-    int num = asound_get_default_input ();
-    if (num == BLUEALSA_DEV) return g_strdup_printf ("bluealsa");
-    else return g_strdup_printf ("hw:%d", num);
 }
 
 
@@ -1775,8 +1165,6 @@ static gboolean volumealsa_button_press_event (GtkWidget *widget, GdkEventButton
 #endif
     if (vol->stopped) return TRUE;
 
-    if (!asound_current_dev_check (vol)) volumealsa_update_display (vol);
-
 #if 0
     if (vol->master_element == NULL && asound_get_default_card () == BLUEALSA_DEV && vol->objmanager)
     {
@@ -1798,19 +1186,6 @@ static gboolean volumealsa_button_press_event (GtkWidget *widget, GdkEventButton
     if (event->button == 1)
     {
         /* left-click - show or hide volume popup */
-        if (!asound_has_volume_control (-1))
-        {
-            GtkWidget *mi;
-            vol->menu_popup = gtk_menu_new ();
-            mi = gtk_menu_item_new_with_label (_("No volume control on this device"));
-            gtk_widget_set_sensitive (mi, FALSE);
-            gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_popup), mi);
-            gtk_widget_show_all (vol->menu_popup);
-            gtk_menu_popup (GTK_MENU (vol->menu_popup), NULL, NULL, (GtkMenuPositionFunc) volumealsa_popup_set_position, (gpointer) vol,
-                event->button, event->time);
-            return TRUE;
-        }
-
         if (vol->show_popup)
         {
             gtk_widget_hide (vol->popup_window);
@@ -1934,11 +1309,8 @@ static void volumealsa_menu_show_default_source (GtkWidget *widget, gpointer dat
 static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
 {
     GtkWidget *mi;
-    gint devices = 0, inputs = 0, card_num, def_card, def_inp;
+    gint devices = 0, inputs = 0, card_num;
     gboolean ext_dev = FALSE, bt_dev = FALSE, ext_inp = FALSE;
-
-    def_card = asound_get_default_card ();
-    def_inp = asound_get_default_input ();
 
     vol->menu_popup = gtk_menu_new ();
 
@@ -3731,24 +3103,6 @@ static gboolean volumealsa_control_msg (GtkWidget *plugin, const char *cmd)
 {
     VolumeALSAPlugin *vol = lxpanel_plugin_get_data (plugin);
 
-    if (!strncmp (cmd, "star", 4))
-    {
-        asound_initialize (vol);
-        volumealsa_update_display (vol);
-        g_warning ("volumealsa: Restarted ALSA interface...");
-        vol->stopped = FALSE;
-        return TRUE;
-    }
-
-    if (!strncmp (cmd, "stop", 4))
-    {
-        asound_deinitialize (vol);
-        volumealsa_update_display (vol);
-        g_warning ("volumealsa: Stopped ALSA interface...");
-        vol->stopped = TRUE;
-        return TRUE;
-    }
-
     if (!strncmp (cmd, "mute", 4))
     {
         pulse_set_mute (vol, pulse_get_mute (vol) ? 0 : 1);
@@ -3789,29 +3143,6 @@ static gboolean volumealsa_control_msg (GtkWidget *plugin, const char *cmd)
             pulse_set_volume (vol, volume);
         }
         volumealsa_update_display (vol);
-        return TRUE;
-    }
-
-    if (!strncmp (cmd, "hw:", 3))
-    {
-        int dev;
-        if (sscanf (cmd, "hw:%d", &dev) == 1)
-        {
-            /* if there is a Bluetooth device in use, get its name so we can disconnect it */
-            char *device = asound_get_bt_device ();
-            char *idevice = asound_get_bt_input ();
-
-            asound_set_default_card (dev);
-            asound_set_default_input (dev);
-            asound_initialize (vol);
-            volumealsa_update_display (vol);
-
-            /* disconnect Bluetooth devices */
-            if (device) bt_disconnect_device (vol, device);
-            if (idevice && g_strcmp0 (device, idevice)) bt_disconnect_device (vol, idevice);
-            if (device) g_free (device);
-            if (idevice) g_free (idevice);
-        }
         return TRUE;
     }
 
@@ -3890,8 +3221,6 @@ static GtkWidget *volumealsa_constructor (LXPanel *panel, config_setting_t *sett
 static void volumealsa_destructor (gpointer user_data)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
-
-    asound_deinitialize (vol);
 
     pulse_disconnect (vol);
     pulse_close (vol);
