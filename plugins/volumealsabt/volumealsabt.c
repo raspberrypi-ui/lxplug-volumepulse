@@ -189,11 +189,6 @@ static int set_normalized_volume (snd_mixer_elem_t *elem, int volume, int dir, g
 static gboolean asound_has_input (int dev);
 
 /* .asoundrc */
-static int asound_get_default_card (void);
-static int asound_get_default_input (void);
-static char *asound_get_bt_device (void);
-static char *asound_get_bt_input (void);
-static gboolean asound_is_current_bt_dev (const char *obj, gboolean is_input);
 static int asound_is_bcm_device (int num);
 
 /* Handlers and graphics */
@@ -390,22 +385,32 @@ static void bt_cb_object_added (GDBusObjectManager *manager, GDBusObject *object
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
     const char *obj = g_dbus_object_get_object_path (object);
-    if (asound_is_current_bt_dev (obj, FALSE) || asound_is_current_bt_dev (obj, TRUE))
+    pulse_get_defaults (vol);
+    char *device = pa_sink_to_bluez_name (vol->pa_default_sink);
+    char *idevice = pa_source_to_bluez_name (vol->pa_default_source);
+    if (g_strcmp0 (obj, device) || g_strcmp0 (obj, idevice))
     {
         DEBUG ("Selected Bluetooth audio device has connected");
         volumealsa_update_display (vol);
     }
+    if (device) g_free (device);
+    if (idevice) g_free (idevice);
 }
 
 static void bt_cb_object_removed (GDBusObjectManager *manager, GDBusObject *object, gpointer user_data)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
     const char *obj = g_dbus_object_get_object_path (object);
-    if (asound_is_current_bt_dev (obj, FALSE) || asound_is_current_bt_dev (obj, TRUE))
+    pulse_get_defaults (vol);
+    char *device = pa_sink_to_bluez_name (vol->pa_default_sink);
+    char *idevice = pa_source_to_bluez_name (vol->pa_default_source);
+    if (g_strcmp0 (obj, device) || g_strcmp0 (obj, idevice))
     {
         DEBUG ("Selected Bluetooth audio device has disconnected");
         volumealsa_update_display (vol);
     }
+    if (device) g_free (device);
+    if (idevice) g_free (idevice);
 }
 
 static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, const gchar *owner, gpointer user_data)
@@ -424,14 +429,10 @@ static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, co
     }
     else
     {
-        /* register callbacks for devices being added or removed */
-        // now taken care of by monitoring PCMAdded / PCMRemoved signals on org.bluealsa
-        // g_signal_connect (vol->objmanager, "object-added", G_CALLBACK (bt_cb_object_added), vol);
-        // g_signal_connect (vol->objmanager, "object-removed", G_CALLBACK (bt_cb_object_removed), vol);
-
         /* Check whether a Bluetooth audio device is the current default output or input - connect to one or both if so */
-        char *device = asound_get_bt_device ();
-        char *idevice = asound_get_bt_input ();
+        pulse_get_defaults (vol);
+        char *device = pa_sink_to_bluez_name (vol->pa_default_sink);
+        char *idevice = pa_source_to_bluez_name (vol->pa_default_source);
         if (device || idevice)
         {
             /* Reconnect the current Bluetooth audio device */
@@ -446,6 +447,8 @@ static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, co
             DEBUG ("Reconnecting devices");
             bt_reconnect_devices (vol);
         }
+        if (device) g_free (device);
+        if (idevice) g_free (idevice);
     }
 }
 
@@ -495,7 +498,8 @@ static void bt_cb_ba_signal (GDBusProxy *prox, gchar *sender, gchar *signal, GVa
     if (!g_strcmp0 (signal, "PCMAdded") || !g_strcmp0 (signal, "PCMRemoved"))
     {
         DEBUG ("PCMs changed - %s", signal);
-        if (asound_get_default_card () == BLUEALSA_DEV)
+        pulse_get_defaults (vol);
+        if (strstr (vol->pa_default_sink, "bluez"))
         {
             volumealsa_update_display (vol);
         }
@@ -839,179 +843,6 @@ static gboolean asound_has_input (int dev)
     return vsystem ("amixer -c %d scontents 2>/dev/null | grep -q cvolume", dev) ? FALSE : TRUE;
 }
 
-
-/*----------------------------------------------------------------------------*/
-/* .asoundrc manipulation                                                     */
-/*----------------------------------------------------------------------------*/
-
-static int asound_get_default_card (void)
-{
-    char *user_config_file = g_build_filename (g_get_home_dir (), "/.asoundrc", NULL);
-    char *res;
-    int val;
-
-    /* does .asoundrc exist? if not, default device is 0 */
-    if (!g_file_test (user_config_file, G_FILE_TEST_IS_REGULAR))
-    {
-        g_free (user_config_file);
-        return 0;
-    }
-
-    /* does .asoundrc use type asym? */
-    if (find_in_section (user_config_file, "pcm.!default", "asym"))
-    {
-        /* look in pcm.output section for bluealsa */
-        if (find_in_section (user_config_file, "pcm.output", "bluealsa"))
-        {
-            g_free (user_config_file);
-            return BLUEALSA_DEV;
-        }
-
-        /* otherwise parse pcm.output section for card number */
-        res = get_string ("sed -n '/pcm.output/,/}/{/card/p}' %s 2>/dev/null | grep -o 'card\\s[0-9]' | cut -d ' ' -f 2", user_config_file);
-        if (sscanf (res, "%d", &val) != 1) val = -1;
-    }
-    else
-    {
-        /* first check to see if Bluetooth is in use */
-        if (find_in_section (user_config_file, "pcm.!default", "bluealsa"))
-        {
-            g_free (user_config_file);
-            return BLUEALSA_DEV;
-        }
-
-        /* if not, check for new format file */
-        res = get_string ("sed -n '/pcm.!default/,/}/{/slave.pcm/p}' %s 2>/dev/null | cut -d '\"' -f 2 | cut -d : -f 2", user_config_file);
-        if (sscanf (res, "%d", &val) == 1) goto DONE;
-        g_free (res);
-
-        /* if not, check for old format file */
-        res = get_string ("sed -n '/pcm.!default/,/}/{/card/p}' %s 2>/dev/null | grep -o 'card\\s[0-9]' | cut -d ' ' -f 2", user_config_file);
-        if (sscanf (res, "%d", &val) == 1) goto DONE;
-
-        /* nothing valid found, default device is 0 */
-        val = 0;
-    }
-
-    DONE: g_free (res);
-    g_free (user_config_file);
-    return val;
-}
-
-static int asound_get_default_input (void)
-{
-    char *user_config_file = g_build_filename (g_get_home_dir (), "/.asoundrc", NULL);
-    char *res;
-    int val;
-
-    /* does .asoundrc exist? if not, default device is 0 */
-    if (!g_file_test (user_config_file, G_FILE_TEST_IS_REGULAR))
-    {
-        g_free (user_config_file);
-        return 0;
-    }
-
-    /* does .asoundrc use type asym? */
-    if (find_in_section (user_config_file, "pcm.!default", "asym"))
-    {
-        /* look in pcm.input section for bluealsa */
-        if (find_in_section (user_config_file, "pcm.input", "bluealsa"))
-        {
-            g_free (user_config_file);
-            return BLUEALSA_DEV;
-        }
-
-        /* parse pcm.input section for card number */
-        res = get_string ("sed -n '/pcm.input/,/}/{/card/p}' %s 2>/dev/null | grep -o 'card\\s[0-9]' | cut -d ' ' -f 2", user_config_file);
-        if (sscanf (res, "%d", &val) != 1) val = -1;
-    }
-    else
-    {
-        /* default input device is same as output pcm device */
-        /* check for new format file */
-        res = get_string ("sed -n '/pcm.!default/,/}/{/slave.pcm/p}' %s 2>/dev/null | cut -d '\"' -f 2 | cut -d : -f 2", user_config_file);
-        if (sscanf (res, "%d", &val) == 1) goto DONE;
-        g_free (res);
-
-        /* if not, check for old format file */
-        res = get_string ("sed -n '/pcm.!default/,/}/{/card/p}' %s 2>/dev/null | grep -o 'card\\s[0-9]' | cut -d ' ' -f 2", user_config_file);
-        if (sscanf (res, "%d", &val) == 1) goto DONE;
-
-        /* nothing valid found, default device is 0 */
-        val = 0;
-    }
-
-    DONE: g_free (res);
-    g_free (user_config_file);
-    return val;
-}
-
-/* Standard text blocks used in .asoundrc for ALSA (_A) and Bluetooth (_B) devices */
-#define PREFIX      "pcm.!default {\n\ttype asym\n\tplayback.pcm {\n\t\ttype plug\n\t\tslave.pcm \"output\"\n\t}\n\tcapture.pcm {\n\t\ttype plug\n\t\tslave.pcm \"input\"\n\t}\n}"
-#define OUTPUT_A    "\npcm.output {\n\ttype hw\n\tcard %d\n}"
-#define INPUT_A     "\npcm.input {\n\ttype hw\n\tcard %d\n}"
-#define CTL_A       "\nctl.!default {\n\ttype hw\n\tcard %d\n}"
-#define OUTPUT_B    "\npcm.output {\n\ttype bluealsa\n\tdevice \"%02X:%02X:%02X:%02X:%02X:%02X\"\n\tprofile \"a2dp\"\n}"
-#define INPUT_B     "\npcm.input {\n\ttype bluealsa\n\tdevice \"%02X:%02X:%02X:%02X:%02X:%02X\"\n\tprofile \"sco\"\n}"
-#define CTL_B       "\nctl.!default {\n\ttype bluealsa\n}"
-
-static char *asound_get_bt_device (void)
-{
-    char *user_config_file = g_build_filename (g_get_home_dir (), "/.asoundrc", NULL);
-    char *res, *ret = NULL;
-
-    /* first check the pcm.output section */
-    res = get_string ("sed -n '/pcm.output/,/}/{/device/p}' %s 2>/dev/null | cut -d '\"' -f 2 | tr : _", user_config_file);
-    if (strlen (res) == 17) goto DONE;
-    else g_free (res);
-
-    /* if nothing there, check the default block */
-    res = get_string ("sed -n '/pcm.!default/,/}/{/device/p}' %s 2>/dev/null | cut -d '\"' -f 2 | tr : _", user_config_file);
-    if (strlen (res) == 17) goto DONE;
-    else g_free (res);
-
-    res = NULL;
-    DONE: g_free (user_config_file);
-    if (res)
-    {
-        ret = g_strdup_printf ("/org/bluez/hci0/dev_%s", res);
-        g_free (res);
-    }
-    return ret;
-}
-
-static char *asound_get_bt_input (void)
-{
-    char *user_config_file = g_build_filename (g_get_home_dir (), "/.asoundrc", NULL);
-    char *res, *ret = NULL;
-
-    /* check the pcm.input section */
-    res = get_string ("sed -n '/pcm.input/,/}/{/device/p}' %s 2>/dev/null | cut -d '\"' -f 2 | tr : _", user_config_file);
-    if (strlen (res) == 17) goto DONE;
-    else g_free (res);
-
-    res = NULL;
-    DONE: g_free (user_config_file);
-    if (res)
-    {
-        ret = g_strdup_printf ("/org/bluez/hci0/dev_%s", res);
-        g_free (res);
-    }
-    return ret;
-}
-
-static gboolean asound_is_current_bt_dev (const char *obj, gboolean is_input)
-{
-    gboolean res = FALSE;
-    char *device = is_input ? asound_get_bt_input () : asound_get_bt_device ();
-    if (device)
-    {
-        if (strstr (obj, device)) res = TRUE;
-        g_free (device);
-    }
-    return res;
-}
-
 static int asound_is_bcm_device (int num)
 {
     char *name;
@@ -1164,24 +995,6 @@ static gboolean volumealsa_button_press_event (GtkWidget *widget, GdkEventButton
     textdomain (GETTEXT_PACKAGE);
 #endif
     if (vol->stopped) return TRUE;
-
-#if 0
-    if (vol->master_element == NULL && asound_get_default_card () == BLUEALSA_DEV && vol->objmanager)
-    {
-        /* the mixer is unattached, and there is a default Bluetooth output device - try connecting it... */
-        DEBUG ("No mixer with Bluetooth device - try to reconnect");
-        char *dev = asound_get_bt_device ();
-        if (dev)
-        {
-            if (!bt_is_connected (vol, dev))
-            {
-                vol->bt_conname = dev;
-                bt_connect_device (vol);
-            }
-            else g_free (dev);
-        }
-    }
-#endif
 
     if (event->button == 1)
     {
