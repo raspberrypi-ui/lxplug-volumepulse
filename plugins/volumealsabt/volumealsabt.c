@@ -73,13 +73,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endif
 
 typedef struct {
-    snd_mixer_t *mixer;                 /* The mixer */
-    guint num_channels;                 /* Number of channels */
-    GIOChannel **channels;              /* Channels that we listen to */
-    guint *watches;                     /* Watcher IDs for channels */
-} mixer_info_t;
-
-typedef struct {
     /* plugin */
     GtkWidget *plugin;                  /* Back pointer to widget */
     LXPanel *panel;                     /* Back pointer to panel */
@@ -97,10 +90,9 @@ typedef struct {
     GtkWidget *options_set;             /* General settings box */
     GtkWidget *outputs;                 /* Output select menu */
     GtkWidget *inputs;                  /* Input select menu */
-    GtkWidget *profiles;                /* Vbox for profile combos */
-    GtkWidget *intprofiles;                /* Vbox for profile combos */
-    GtkWidget *alsaprofiles;                /* Vbox for profile combos */
-    GtkWidget *btprofiles;                /* Vbox for profile combos */
+    GtkWidget *intprofiles;             /* Vbox for profile combos */
+    GtkWidget *alsaprofiles;            /* Vbox for profile combos */
+    GtkWidget *btprofiles;              /* Vbox for profile combos */
     gboolean show_popup;                /* Toggle to show and hide the popup on left click */
     guint volume_scale_handler;         /* Handler for vscale widget */
     guint mute_check_handler;           /* Handler for mute_check widget */
@@ -108,11 +100,6 @@ typedef struct {
     char *idev_name;
 
     /* ALSA interface. */
-    mixer_info_t mixers[2];             /* mixers[0] = output; mixers[1] = input */
-    snd_mixer_elem_t *master_element;   /* Master element on output mixer - main volume control */
-    guint mixer_evt_idle;               /* Timer to handle mixer reset */
-    guint restart_idle;                 /* Timer to handle restarting */
-    gboolean stopped;                   /* Flag to indicate that ALSA is restarting */
     snd_mixer_t *mixer;
 
     /* Bluetooth interface */
@@ -123,8 +110,6 @@ typedef struct {
     GtkWidget *conn_dialog;             /* Connection dialog box */
     GtkWidget *conn_label;              /* Dialog box text field */
     GtkWidget *conn_ok;                 /* Dialog box button */
-    GDBusProxy *baproxy;                /* Proxy for BlueALSA */
-    gulong basignal;                    /* ID of g-signal handler on BlueALSA */
 
     /* HDMI devices */
     guint hdmis;                        /* Number of HDMI devices */
@@ -167,9 +152,6 @@ static void bt_cb_object_added (GDBusObjectManager *manager, GDBusObject *object
 static void bt_cb_object_removed (GDBusObjectManager *manager, GDBusObject *object, gpointer user_data);
 static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, const gchar *owner, gpointer user_data);
 static void bt_cb_name_unowned (GDBusConnection *connection, const gchar *name, gpointer user_data);
-static void bt_cb_ba_name_owned (GDBusConnection *connection, const gchar *name, const gchar *owner, gpointer user_data);
-static void bt_cb_ba_name_unowned (GDBusConnection *connection, const gchar *name, gpointer user_data);
-static void bt_cb_ba_signal (GDBusProxy *prox, gchar *sender, gchar *signal, GVariant *params, gpointer user_data);
 static void bt_connect_device (VolumeALSAPlugin *vol);
 static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_data);
 static void bt_cb_trusted (GObject *source, GAsyncResult *res, gpointer user_data);
@@ -465,47 +447,6 @@ static void bt_cb_name_unowned (GDBusConnection *connection, const gchar *name, 
     vol->bt_reconname = NULL;
 }
 
-static void bt_cb_ba_name_owned (GDBusConnection *connection, const gchar *name, const gchar *owner, gpointer user_data)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
-    DEBUG ("Name %s owned on DBus", name);
-
-    GError *error = NULL;
-    vol->baproxy = g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM, 0, NULL, "org.bluealsa", "/org/bluealsa", "org.bluealsa.Manager1", NULL, &error);
-
-    if (error)
-    {
-        DEBUG ("Error getting proxy - %s", error->message);
-        g_error_free (error);
-    }
-    else vol->basignal = g_signal_connect (vol->baproxy, "g-signal",  G_CALLBACK (bt_cb_ba_signal), vol);
-}
-
-static void bt_cb_ba_name_unowned (GDBusConnection *connection, const gchar *name, gpointer user_data)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
-    DEBUG ("Name %s unowned on DBus", name);
-    if (vol->baproxy)
-    {
-        if (vol->basignal) g_signal_handler_disconnect (vol->baproxy, vol->basignal);
-        g_object_unref (vol->baproxy);
-    }
-}
-
-static void bt_cb_ba_signal (GDBusProxy *prox, gchar *sender, gchar *signal, GVariant *params, gpointer user_data)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
-    if (!g_strcmp0 (signal, "PCMAdded") || !g_strcmp0 (signal, "PCMRemoved"))
-    {
-        DEBUG ("PCMs changed - %s", signal);
-        pulse_get_defaults (vol);
-        if (strstr (vol->pa_default_sink, "bluez"))
-        {
-            volumealsa_update_display (vol);
-        }
-    }
-}
-
 static void bt_connect_device (VolumeALSAPlugin *vol)
 {
     GDBusInterface *interface = g_dbus_object_manager_get_interface (vol->objmanager, vol->bt_conname, "org.bluez.Device1");
@@ -692,13 +633,6 @@ static void bt_cb_disconnected (GObject *source, GAsyncResult *res, gpointer use
     // call BlueZ over DBus to connect to the device
     if (vol->bt_conname)
     {
-        if (vol->bt_input == FALSE)
-        {
-            // mixer and element handles will now be invalid
-            vol->mixers[OUTPUT_MIXER].mixer = NULL;
-            vol->master_element = NULL;
-        }
-
         DEBUG ("Connecting to %s...", vol->bt_conname);
         bt_connect_device (vol);
     }
@@ -994,7 +928,6 @@ static gboolean volumealsa_button_press_event (GtkWidget *widget, GdkEventButton
 #ifdef ENABLE_NLS
     textdomain (GETTEXT_PACKAGE);
 #endif
-    if (vol->stopped) return TRUE;
 
     if (event->button == 1)
     {
@@ -1890,7 +1823,7 @@ static void show_alsa_options (VolumeALSAPlugin *vol, gboolean input)
     vol->mixer = mixer;
 
     if (vol->mixer)
-        show_options (vol, vol->mixer, input, vol->idev_name);
+        show_options (vol, vol->mixer, input, input ? vol->idev_name : vol->odev_name);
 }
 
 static void update_options (VolumeALSAPlugin *vol)
@@ -2057,7 +1990,7 @@ static GtkWidget *find_box_child (GtkWidget *container, gint type, const char *n
 
 static void show_profiles (VolumeALSAPlugin *vol)
 {
-    GtkWidget *btn, *wid;
+    GtkWidget *btn, *wid, *box;
     char *lbl;
 
     // create the window itself
@@ -2069,14 +2002,14 @@ static void show_profiles (VolumeALSAPlugin *vol)
     gtk_window_set_icon_name (GTK_WINDOW (vol->options_dlg), "multimedia-volume-control");
     g_signal_connect (vol->options_dlg, "delete-event", G_CALLBACK (profiles_wd_close_handler), vol);
 
-    vol->profiles = gtk_vbox_new (FALSE, 5);
+    box = gtk_vbox_new (FALSE, 5);
     vol->intprofiles = gtk_vbox_new (FALSE, 5);
     vol->alsaprofiles = gtk_vbox_new (FALSE, 5);
     vol->btprofiles = gtk_vbox_new (FALSE, 5);
-    gtk_container_add (GTK_CONTAINER (vol->options_dlg), vol->profiles);
-    gtk_box_pack_start (GTK_BOX (vol->profiles), vol->intprofiles, FALSE, FALSE, 0);
-    gtk_box_pack_start (GTK_BOX (vol->profiles), vol->alsaprofiles, FALSE, FALSE, 0);
-    gtk_box_pack_start (GTK_BOX (vol->profiles), vol->btprofiles, FALSE, FALSE, 0);
+    gtk_container_add (GTK_CONTAINER (vol->options_dlg), box);
+    gtk_box_pack_start (GTK_BOX (box), vol->intprofiles, FALSE, FALSE, 0);
+    gtk_box_pack_start (GTK_BOX (box), vol->alsaprofiles, FALSE, FALSE, 0);
+    gtk_box_pack_start (GTK_BOX (box), vol->btprofiles, FALSE, FALSE, 0);
 
     // first loop through cards
     pulse_get_card_list (vol);
@@ -2135,7 +2068,7 @@ static void show_profiles (VolumeALSAPlugin *vol)
 
     wid = gtk_hbutton_box_new ();
     gtk_button_box_set_layout (GTK_BUTTON_BOX (wid), GTK_BUTTONBOX_END);
-    gtk_box_pack_start (GTK_BOX (vol->profiles), wid, FALSE, FALSE, 5);
+    gtk_box_pack_start (GTK_BOX (box), wid, FALSE, FALSE, 5);
 
     btn = gtk_button_new_from_stock (GTK_STOCK_OK);
     g_signal_connect (btn, "clicked", G_CALLBACK (profiles_ok_handler), vol);
@@ -2979,12 +2912,9 @@ static GtkWidget *volumealsa_constructor (LXPanel *panel, config_setting_t *sett
 
     vol->bt_conname = NULL;
     vol->bt_reconname = NULL;
-    vol->master_element = NULL;
     vol->options_dlg = NULL;
     vol->odev_name = NULL;
     vol->idev_name = NULL;
-    vol->mixers[OUTPUT_MIXER].mixer = NULL;
-    vol->mixers[INPUT_MIXER].mixer = NULL;
 
     /* Allocate top level widget and set into Plugin widget pointer. */
     vol->panel = panel;
@@ -3001,10 +2931,7 @@ static GtkWidget *volumealsa_constructor (LXPanel *panel, config_setting_t *sett
     gtk_container_add (GTK_CONTAINER (p), vol->tray_icon);
 
     /* Set up callbacks to see if BlueZ is on DBus */
-    vol->baproxy = NULL;
-    vol->basignal = 0;
     g_bus_watch_name (G_BUS_TYPE_SYSTEM, "org.bluez", 0, bt_cb_name_owned, bt_cb_name_unowned, vol, NULL);
-    g_bus_watch_name (G_BUS_TYPE_SYSTEM, "org.bluealsa", 0, bt_cb_ba_name_owned, bt_cb_ba_name_unowned, vol, NULL);
     
     /* Initialize volume scale */
     volumealsa_build_popup_window (p);
@@ -3025,7 +2952,6 @@ static GtkWidget *volumealsa_constructor (LXPanel *panel, config_setting_t *sett
     volumealsa_update_display (vol);
     gtk_widget_show_all (p);
 
-    vol->stopped = FALSE;
     return p;
 }
 
@@ -3041,8 +2967,6 @@ static void volumealsa_destructor (gpointer user_data)
     /* If the dialog box is open, dismiss it. */
     if (vol->popup_window != NULL) gtk_widget_destroy (vol->popup_window);
     if (vol->menu_popup != NULL) gtk_widget_destroy (vol->menu_popup);
-
-    if (vol->restart_idle) g_source_remove (vol->restart_idle);
 
     if (vol->panel) g_signal_handlers_disconnect_by_func (panel_get_icon_theme (vol->panel), volumealsa_theme_change, vol);
 
