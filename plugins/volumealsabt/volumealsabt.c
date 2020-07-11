@@ -46,8 +46,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+//#define OPTIONS
+
+#ifdef OPTIONS
 #define _ISOC99_SOURCE /* lrint() */
 #define _GNU_SOURCE /* exp10() */
+#endif
 
 #include <gtk/gtk.h>
 #include <stdlib.h>
@@ -58,7 +62,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <glib.h>
 #include <glib/gi18n.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
+#ifdef OPTIONS
 #include <alsa/asoundlib.h>
+#endif
 #include <poll.h>
 #include <libfm/fm-gtk.h>
 #include <pulse/pulseaudio.h>
@@ -71,8 +77,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #else
 #define DEBUG
 #endif
-
-//#define OPTIONS
 
 typedef struct {
     /* plugin */
@@ -101,8 +105,10 @@ typedef struct {
     GtkWidget *options_set;             /* General settings box */
 #endif
 
+#ifdef OPTIONS
     /* ALSA interface. */
     snd_mixer_t *mixer;
+#endif
 
     /* Bluetooth interface */
     GDBusObjectManager *objmanager;     /* BlueZ object manager */
@@ -167,11 +173,6 @@ static void bt_cb_disconnected (GObject *source, GAsyncResult *res, gpointer use
 static gboolean bt_has_service (VolumeALSAPlugin *vol, const gchar *path, const gchar *service);
 static gboolean bt_is_connected (VolumeALSAPlugin *vol, const gchar *path);
 
-/* Volume and mute */
-static long lrint_dir (double x, int dir);
-static int get_normalized_volume (snd_mixer_elem_t *elem, gboolean capture);
-static int set_normalized_volume (snd_mixer_elem_t *elem, int volume, int dir, gboolean capture);
-
 /* Handlers and graphics */
 static void volumealsa_update_display (VolumeALSAPlugin *vol);
 static void volumealsa_theme_change (GtkWidget *widget, VolumeALSAPlugin *vol);
@@ -203,6 +204,9 @@ static gboolean volumealsa_mouse_out (GtkWidget *widget, GdkEventButton *event, 
 
 /* Options dialog */
 #ifdef OPTIONS
+static long lrint_dir (double x, int dir);
+static int get_normalized_volume (snd_mixer_elem_t *elem, gboolean capture);
+static int set_normalized_volume (snd_mixer_elem_t *elem, int volume, int dir, gboolean capture);
 static void show_options (VolumeALSAPlugin *vol, snd_mixer_t *mixer, gboolean input, char *devname);
 static void show_alsa_options (VolumeALSAPlugin *vol, gboolean input);
 static void update_options (VolumeALSAPlugin *vol);
@@ -677,7 +681,7 @@ static gboolean bt_is_connected (VolumeALSAPlugin *vol, const gchar *path)
 /*----------------------------------------------------------------------------*/
 /* Volume and mute control                                                    */
 /*----------------------------------------------------------------------------*/
-
+#ifdef OPTIONS
 #ifdef __UCLIBC__
 #define exp10(x) (exp((x) * log(10)))
 #endif
@@ -774,7 +778,7 @@ static int set_normalized_volume (snd_mixer_elem_t *elem, int volume, int dir, g
     value = lrint_dir (6000.0 * log10 (vol_perc), dir) + max;
     return capture ? snd_mixer_selem_set_capture_dB_all (elem, value, dir) : snd_mixer_selem_set_playback_dB_all (elem, value, dir);
 }
-
+#endif
 
 /*----------------------------------------------------------------------------*/
 /* Plugin handlers and graphics                                               */
