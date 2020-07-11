@@ -415,6 +415,10 @@ static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, co
     }
     else
     {
+        /* register callbacks for devices being added or removed */
+        g_signal_connect (vol->objmanager, "object-added", G_CALLBACK (bt_cb_object_added), vol);
+        g_signal_connect (vol->objmanager, "object-removed", G_CALLBACK (bt_cb_object_removed), vol);
+
         /* Check whether a Bluetooth audio device is the current default output or input - connect to one or both if so */
         pulse_get_defaults (vol);
         char *device = pa_sink_to_bluez_name (vol->pa_default_sink);
