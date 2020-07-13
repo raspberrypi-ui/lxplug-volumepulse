@@ -209,6 +209,7 @@ static void pulse_init (VolumeALSAPlugin *vol);
 static void pulse_disconnect (VolumeALSAPlugin *vol);
 static void pulse_close (VolumeALSAPlugin *vol);
 static void pa_error_handler (VolumeALSAPlugin *vol, char *name);
+static int pulse_set_subscription (VolumeALSAPlugin *vol);
 static int pulse_get_defaults (VolumeALSAPlugin *vol);
 static int pulse_update_alsa_sink_names (VolumeALSAPlugin *vol);
 static int pulse_update_alsa_source_names (VolumeALSAPlugin *vol);
@@ -1567,6 +1568,8 @@ static void pulse_init (VolumeALSAPlugin *vol)
     vol->pa_default_sink = NULL;
     vol->pa_default_source = NULL;
     vol->pa_profile = NULL;
+
+    pulse_set_subscription (vol);
 }
 
 static void pulse_disconnect (VolumeALSAPlugin *vol)
@@ -1640,6 +1643,36 @@ static void pa_cb_generic_success (pa_context *context, int success, void *userd
     pa_operation_unref (op); \
     pa_threaded_mainloop_unlock (vol->pa_mainloop); \
     return 1;
+
+/* Event notification
+ * ------------------
+ *
+ * Subscribe to and handle notifications from the Pulse server
+ */
+
+static gboolean update_disp (gpointer userdata)
+{
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+    volumealsa_update_display (vol);
+    return FALSE;
+}
+
+static void pa_cb_subscription (pa_context *pacontext, pa_subscription_event_type_t event, uint32_t idx, void *userdata)
+{
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
+    g_idle_add (update_disp, vol);
+
+    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
+static int pulse_set_subscription (VolumeALSAPlugin *vol)
+{
+    pa_context_set_subscribe_callback (vol->pa_context, &pa_cb_subscription, vol);
+    START_PA_OPERATION
+    op = pa_context_subscribe (vol->pa_context, PA_SUBSCRIPTION_MASK_ALL, &pa_cb_generic_success, vol);
+    END_PA_OPERATION ("subscribe")
+}
 
 /* Get defaults
  * ------------
