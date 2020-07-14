@@ -2168,11 +2168,17 @@ static int pulse_add_devices_to_profile_dialog (VolumeALSAPlugin *vol)
     END_PA_OPERATION ("get_card_info_list")
 }
 
-/* Device menu */
+/* Device menu
+ * -----------
+ *
+ * Populate the device menu with input, external output and internal
+ * output devices.
+ */
 
 static void pa_cb_get_info_inputs (pa_context *c, const pa_card_info *i, int eol, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
     if (!eol)
     {
         gboolean input = FALSE;
@@ -2187,6 +2193,7 @@ static void pa_cb_get_info_inputs (pa_context *c, const pa_card_info *i, int eol
         {
             if (!vol->inputs) vol->inputs = gtk_menu_new ();
             const char *nam = pa_proplist_gets (i->proplist, "alsa.card_name");
+            DEBUG ("pa_cb_get_info_inputs %s", nam);
             volumealsa_menu_item_add (vol, vol->inputs, nam, nam, FALSE, TRUE, G_CALLBACK (volumealsa_set_external_input));
         }
     }
@@ -2197,6 +2204,7 @@ static void pa_cb_get_info_inputs (pa_context *c, const pa_card_info *i, int eol
 static void pa_cb_get_info_internal (pa_context *c, const pa_card_info *i, int eol, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
     if (!eol)
     {
         if (!g_strcmp0 (pa_proplist_gets (i->proplist, "device.description"), "Built-in Audio"))
@@ -2212,6 +2220,7 @@ static void pa_cb_get_info_internal (pa_context *c, const pa_card_info *i, int e
             if (output)
             {
                 const char *nam = pa_proplist_gets (i->proplist, "alsa.card_name");
+                DEBUG ("pa_cb_get_info_internal %s", nam);
                 volumealsa_menu_item_add (vol, vol->outputs, volumealsa_device_display_name (vol, nam), nam, FALSE, FALSE, G_CALLBACK (volumealsa_set_external_output));
             }
         }
@@ -2223,6 +2232,7 @@ static void pa_cb_get_info_internal (pa_context *c, const pa_card_info *i, int e
 static void pa_cb_get_info_external (pa_context *c, const pa_card_info *i, int eol, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
     if (!eol)
     {
         if (g_strcmp0 (pa_proplist_gets (i->proplist, "device.description"), "Built-in Audio"))
@@ -2238,6 +2248,7 @@ static void pa_cb_get_info_external (pa_context *c, const pa_card_info *i, int e
             if (output)
             {
                 const char *nam = pa_proplist_gets (i->proplist, "alsa.card_name");
+                DEBUG ("pa_cb_get_info_external %s", nam);
                 volumealsa_menu_item_add (vol, vol->outputs, nam, nam, FALSE, FALSE, G_CALLBACK (volumealsa_set_external_output));
             }
         }
@@ -2248,9 +2259,7 @@ static void pa_cb_get_info_external (pa_context *c, const pa_card_info *i, int e
 
 static int pulse_add_devices_to_menu (VolumeALSAPlugin *vol, gboolean input, gboolean internal)
 {
-    if (vol->pa_profile) g_free (vol->pa_profile);
-    vol->pa_profile = NULL;
-
+    DEBUG ("pulse_add_devices_to_menu %d %d", input, internal);
     START_PA_OPERATION
     if (input)
         op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_get_info_inputs, vol);
