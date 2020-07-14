@@ -121,7 +121,7 @@ typedef struct {
     int pa_volume;                      /* volume setting on default sink */
     int pa_mute;                        /* mute setting on default sink */
     char *pa_profile;                   /* current profile for card */
-    GList *pa_indices;
+    GList *pa_indices;                  /* indices for current streams */
 
 #ifdef OPTIONS
     /* graphics */
@@ -211,16 +211,16 @@ static void pulse_disconnect (VolumeALSAPlugin *vol);
 static void pulse_close (VolumeALSAPlugin *vol);
 static void pa_error_handler (VolumeALSAPlugin *vol, char *name);
 static int pulse_set_subscription (VolumeALSAPlugin *vol);
-static int pulse_get_defaults (VolumeALSAPlugin *vol);
-static int pulse_update_alsa_sink_names (VolumeALSAPlugin *vol);
-static int pulse_update_alsa_source_names (VolumeALSAPlugin *vol);
+static int pulse_get_default_sink_source (VolumeALSAPlugin *vol);
+static int pulse_replace_cards_with_sinks (VolumeALSAPlugin *vol);
+static int pulse_replace_cards_with_sources (VolumeALSAPlugin *vol);
 static int pulse_set_default_sink (VolumeALSAPlugin *vol, const char *sinkname);
 static int pulse_move_streams_to_default_sink (VolumeALSAPlugin *vol);
 static int pulse_move_streams_to_default_source (VolumeALSAPlugin *vol);
 static void pulse_change_sink (VolumeALSAPlugin *vol, const char *sinkname);
 static int pulse_set_default_source (VolumeALSAPlugin *vol, const char *sourcename);
 static void pulse_change_source (VolumeALSAPlugin *vol, const char *sourcename);
-static int pulse_get_default_sink_info (VolumeALSAPlugin *vol);
+static int pulse_get_current_vol_mute (VolumeALSAPlugin *vol);
 static int pulse_set_volume (VolumeALSAPlugin *vol, int volume);
 static int pulse_get_volume (VolumeALSAPlugin *vol);
 static int pulse_set_mute (VolumeALSAPlugin *vol, int mute);
@@ -232,12 +232,10 @@ static char *pa_sink_to_bluez_name (char *pa_name);
 static char *pa_source_to_bluez_name (char *pa_name);
 static int pa_bt_sink_source_compare (char *sink, char *source);
 static int pa_bluez_device_same (const char *padev, const char *btdev);
-static int pulse_set_best_profile (VolumeALSAPlugin *vol, const char *card);
-static int pulse_set_all_profiles (VolumeALSAPlugin *vol);
 static int pulse_set_profile (VolumeALSAPlugin *vol, char *card, char *profile);
 static int pulse_get_profile (VolumeALSAPlugin *vol, char *card);
-static int pulse_get_card_list (VolumeALSAPlugin *vol);
-static int pulse_menu_add (VolumeALSAPlugin *vol, gboolean input, gboolean internal);
+static int pulse_add_devices_to_profile_dialog (VolumeALSAPlugin *vol);
+static int pulse_add_devices_to_menu (VolumeALSAPlugin *vol, gboolean input, gboolean internal);
 
 /* Plugin */
 static GtkWidget *volumealsa_configure (LXPanel *panel, GtkWidget *plugin);
@@ -370,7 +368,7 @@ static void bt_cb_object_added (GDBusObjectManager *manager, GDBusObject *object
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
     const char *obj = g_dbus_object_get_object_path (object);
-    pulse_get_defaults (vol);
+    pulse_get_default_sink_source (vol);
     char *device = pa_sink_to_bluez_name (vol->pa_default_sink);
     char *idevice = pa_source_to_bluez_name (vol->pa_default_source);
     if (g_strcmp0 (obj, device) || g_strcmp0 (obj, idevice))
@@ -386,7 +384,7 @@ static void bt_cb_object_removed (GDBusObjectManager *manager, GDBusObject *obje
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
     const char *obj = g_dbus_object_get_object_path (object);
-    pulse_get_defaults (vol);
+    pulse_get_default_sink_source (vol);
     char *device = pa_sink_to_bluez_name (vol->pa_default_sink);
     char *idevice = pa_source_to_bluez_name (vol->pa_default_source);
     if (g_strcmp0 (obj, device) || g_strcmp0 (obj, idevice))
@@ -419,7 +417,7 @@ static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, co
         g_signal_connect (vol->objmanager, "object-removed", G_CALLBACK (bt_cb_object_removed), vol);
 
         /* Check whether a Bluetooth audio device is the current default output or input - connect to one or both if so */
-        pulse_get_defaults (vol);
+        pulse_get_default_sink_source (vol);
         char *device = pa_sink_to_bluez_name (vol->pa_default_sink);
         char *idevice = pa_source_to_bluez_name (vol->pa_default_source);
         if (device || idevice)
@@ -998,7 +996,7 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
     vol->inputs = NULL;
 
     // add ALSA inputs
-    pulse_menu_add (vol, TRUE, FALSE);
+    pulse_add_devices_to_menu (vol, TRUE, FALSE);
     menu_add_separator (vol->inputs);
 
     // add Bluetooth inputs
@@ -1024,11 +1022,11 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
     else vol->outputs = vol->menu_popup;
 
     // add internal outputs
-    pulse_menu_add (vol, FALSE, TRUE);
+    pulse_add_devices_to_menu (vol, FALSE, TRUE);
     menu_add_separator (vol->outputs);
 
     // add external outputs
-    pulse_menu_add (vol, FALSE, FALSE);
+    pulse_add_devices_to_menu (vol, FALSE, FALSE);
     menu_add_separator (vol->outputs);
 
     // add Bluetooth devices
@@ -1073,11 +1071,11 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
     }
 
     // update the menu item names, which are currently ALSA device names, to PulseAudio sink/source names
-    pulse_update_alsa_sink_names (vol);
-    pulse_update_alsa_source_names (vol);
+    pulse_replace_cards_with_sinks (vol);
+    pulse_replace_cards_with_sources (vol);
 
     // show the fallback sink and source in the menu
-    pulse_get_defaults (vol);
+    pulse_get_default_sink_source (vol);
     gtk_container_foreach (GTK_CONTAINER (vol->outputs), volumealsa_menu_show_default_sink, vol);
     gtk_container_foreach (GTK_CONTAINER (vol->inputs), volumealsa_menu_show_default_source, vol);
 
@@ -1390,7 +1388,7 @@ static void show_profiles (VolumeALSAPlugin *vol)
     gtk_box_pack_start (GTK_BOX (box), vol->btprofiles, FALSE, FALSE, 0);
 
     // first loop through cards
-    pulse_get_card_list (vol);
+    pulse_add_devices_to_profile_dialog (vol);
 
     // then loop through Bluetooth devices
     if (vol->objmanager)
@@ -1569,6 +1567,7 @@ static void pulse_init (VolumeALSAPlugin *vol)
     vol->pa_default_sink = NULL;
     vol->pa_default_source = NULL;
     vol->pa_profile = NULL;
+    vol->pa_indices = NULL;
 
     pulse_set_subscription (vol);
 }
@@ -1682,11 +1681,11 @@ static int pulse_set_subscription (VolumeALSAPlugin *vol)
  * global data structure.
  */
 
-static void pa_cb_get_server_info (pa_context *context, const pa_server_info *i, void *userdata)
+static void pa_cb_get_default_sink_source (pa_context *context, const pa_server_info *i, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
 
-    DEBUG ("pulse get defaults callback");
+    DEBUG ("pa_cb_get_default_sink_source %s %s", i->default_sink_name, i->default_source_name);
     if (vol->pa_default_sink) g_free (vol->pa_default_sink);
     vol->pa_default_sink = g_strdup (i->default_sink_name);
 
@@ -1696,23 +1695,21 @@ static void pa_cb_get_server_info (pa_context *context, const pa_server_info *i,
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
-static int pulse_get_defaults (VolumeALSAPlugin *vol)
+static int pulse_get_default_sink_source (VolumeALSAPlugin *vol)
 {
-    DEBUG ("pulse get defaults");
+    DEBUG ("pulse_get_default_sink_source");
     START_PA_OPERATION
-    op = pa_context_get_server_info (vol->pa_context, &pa_cb_get_server_info, vol);
+    op = pa_context_get_server_info (vol->pa_context, &pa_cb_get_default_sink_source, vol);
     END_PA_OPERATION ("get_server_info")
 }
 
-/* Updating ALSA names in menu
+/* Updating card names in menu
  * ---------------------------
  *
- * The device select menu looks at ALSA and Bluez to find audio devices,
- * which are stored with their ALSA or Bluez names. After discovery, the
- * update_names function is called which invokes the get_sink_info_list
- * operation, which causes a callback for each PulseAudio sink. In this
- * callback, the ALSA name of that sink is looked for in the menu, and is
- * replaced with the PulseAudio name.
+ * The device select menu reads the list of audio cards from Pulse,
+ * which are stored with their card names. After discovery, the sink
+ * and source info is queried and used to replace the card name with
+ * the relevant sink or source name.
  */
 
 static void replace_alsa_on_match (GtkWidget *widget, gpointer data)
@@ -1728,73 +1725,75 @@ static void replace_alsa_on_match (GtkWidget *widget, gpointer data)
     }
 }
 
-static void pa_cb_get_sink_info_list (pa_context *context, const pa_sink_info *i, int eol, void *userdata)
+static void pa_cb_replace_cards_with_sinks (pa_context *context, const pa_sink_info *i, int eol, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
 
     if (!eol)
     {
+        DEBUG ("pa_cb_replace_cards_with_sinks");
         const char *api = pa_proplist_gets (i->proplist, "device.api");
         if (!g_strcmp0 (api, "alsa"))
             gtk_container_foreach (GTK_CONTAINER (vol->outputs), replace_alsa_on_match, (void *) i);
     }
+
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
-static int pulse_update_alsa_sink_names (VolumeALSAPlugin *vol)
+static int pulse_replace_cards_with_sinks (VolumeALSAPlugin *vol)
 {
-    DEBUG ("pulse update ALSA sink names");
+    DEBUG ("pulse_replace_cards_with_sinks");
     START_PA_OPERATION
-    op = pa_context_get_sink_info_list (vol->pa_context, &pa_cb_get_sink_info_list, vol);
+    op = pa_context_get_sink_info_list (vol->pa_context, &pa_cb_replace_cards_with_sinks, vol);
     END_PA_OPERATION ("get_sink_info_list")
 }
 
-static void pa_cb_get_source_info_list (pa_context *context, const pa_source_info *i, int eol, void *userdata)
+static void pa_cb_replace_cards_with_sources (pa_context *context, const pa_source_info *i, int eol, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
 
     if (!eol)
     {
+        DEBUG ("pa_cb_replace_cards_with_sources");
         const char *api = pa_proplist_gets (i->proplist, "device.api");
         if (!g_strcmp0 (api, "alsa"))
             gtk_container_foreach (GTK_CONTAINER (vol->inputs), replace_alsa_on_match, (void *) i);
     }
+
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
-static int pulse_update_alsa_source_names (VolumeALSAPlugin *vol)
+static int pulse_replace_cards_with_sources (VolumeALSAPlugin *vol)
 {
-    DEBUG ("pulse update ALSA source names");
+    DEBUG ("pulse_replace_cards_with_sources");
     START_PA_OPERATION
-    op = pa_context_get_source_info_list (vol->pa_context, &pa_cb_get_source_info_list, vol);
+    op = pa_context_get_source_info_list (vol->pa_context, &pa_cb_replace_cards_with_sources, vol);
     END_PA_OPERATION ("get_source_info_list")
 }
 
 /* Changing default sink
  * ---------------------
  *
- * The top-level change_sink function first calls the set_default_sink operation.
- * The get_sink_input_info_list operation is then called, which returns a callback
- * for each current sink input stream. The callback then in turn calls the
- * move_sink_input_by_name operation for each input stream to move it to the
- * new default sink.
+ * To change a sink, first the default sink is updated to the new sink.
+ * Then, all currently active output streams are listed in pa_indices.
+ * Finally, all streams listed in pa_indices are moved to the new sink.
  */
 
 static int pulse_set_default_sink (VolumeALSAPlugin *vol, const char *sinkname)
 {
-    DEBUG ("pulse set default sink %s", sinkname);
+    DEBUG ("pulse_set_default_sink %s", sinkname);
     START_PA_OPERATION
     op = pa_context_set_default_sink (vol->pa_context, sinkname, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_default_sink")
 }
 
-static void pa_cb_get_sink_input_info_list (pa_context *context, const pa_sink_input_info *i, int eol, void *userdata)
+static void pa_cb_get_output_streams (pa_context *context, const pa_sink_input_info *i, int eol, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
 
-    DEBUG ("pulse move streams to default sink callback");
     if (!eol)
     {
+        DEBUG ("pa_cb_get_output_streams %d", i->index);
         vol->pa_indices = g_list_append (vol->pa_indices, (void *) i->index);
     }
 
@@ -1803,15 +1802,15 @@ static void pa_cb_get_sink_input_info_list (pa_context *context, const pa_sink_i
 
 static int pulse_get_output_streams (VolumeALSAPlugin *vol)
 {
-    DEBUG ("pulse get output streams");
+    DEBUG ("pulse_get_output_streams");
     START_PA_OPERATION
-    op = pa_context_get_sink_input_info_list (vol->pa_context, &pa_cb_get_sink_input_info_list, vol);
+    op = pa_context_get_sink_input_info_list (vol->pa_context, &pa_cb_get_output_streams, vol);
     END_PA_OPERATION ("get_sink_input_info_list")
 }
 
 static int pulse_move_stream_to_default_sink (VolumeALSAPlugin *vol, int index)
 {
-    DEBUG ("pulse move stream to default sink");
+    DEBUG ("pulse_move_stream_to_default_sink %d", index);
     START_PA_OPERATION
     op = pa_context_move_sink_input_by_name (vol->pa_context, index, vol->pa_default_sink, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("move_sink_input_by_name")
@@ -1820,12 +1819,13 @@ static int pulse_move_stream_to_default_sink (VolumeALSAPlugin *vol, int index)
 static void list_move_to_default_sink (gpointer data, gpointer userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
     pulse_move_stream_to_default_sink (vol, (int) data);
 }
 
 static void pulse_change_sink (VolumeALSAPlugin *vol, const char *sinkname)
 {
-    DEBUG ("pulse change sink %s", sinkname);
+    DEBUG ("pulse_change_sink %s", sinkname);
     if (vol->pa_default_sink) g_free (vol->pa_default_sink);
     vol->pa_default_sink = g_strdup (sinkname);
 
@@ -1834,23 +1834,30 @@ static void pulse_change_sink (VolumeALSAPlugin *vol, const char *sinkname)
     pulse_get_output_streams (vol);
     g_list_foreach (vol->pa_indices, list_move_to_default_sink, vol);
     g_list_free (vol->pa_indices);
+    DEBUG ("pulse_change_sink done");
 }
+
+/* Changing default source
+ * -----------------------
+ *
+ * As for changing sink.
+ */
 
 static int pulse_set_default_source (VolumeALSAPlugin *vol, const char *sourcename)
 {
-    DEBUG ("pulse set default source %s", sourcename);
+    DEBUG ("pulse_set_default_source %s", sourcename);
     START_PA_OPERATION
     op = pa_context_set_default_source (vol->pa_context, sourcename, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_default_source")
 }
 
-static void pa_cb_get_source_output_info_list (pa_context *context, const pa_source_output_info *i, int eol, void *userdata)
+static void pa_cb_get_input_streams (pa_context *context, const pa_source_output_info *i, int eol, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
 
-    DEBUG ("pulse move streams to default source callback");
     if (!eol)
     {
+        DEBUG ("pa_cb_get_input_streams %d", i->index);
         vol->pa_indices = g_list_append (vol->pa_indices, (void *) i->index);
     }
 
@@ -1859,31 +1866,30 @@ static void pa_cb_get_source_output_info_list (pa_context *context, const pa_sou
 
 static int pulse_get_input_streams (VolumeALSAPlugin *vol)
 {
-    DEBUG ("pulse get input streams");
+    DEBUG ("pulse_get_input_streams");
     START_PA_OPERATION
-    op = pa_context_get_source_output_info_list (vol->pa_context, &pa_cb_get_source_output_info_list, vol);
+    op = pa_context_get_source_output_info_list (vol->pa_context, &pa_cb_get_input_streams, vol);
     END_PA_OPERATION ("get_sink_input_info_list")
 }
 
 static int pulse_move_stream_to_default_source (VolumeALSAPlugin *vol, int index)
 {
-    DEBUG ("pulse move stream to default source");
+    DEBUG ("pulse_move_stream_to_default_source %d", index);
     START_PA_OPERATION
     op = pa_context_move_source_output_by_name (vol->pa_context, index, vol->pa_default_source, &pa_cb_generic_success, vol);
-    END_PA_OPERATION ("move_sink_input_by_name")
+    END_PA_OPERATION ("move_source_output_by_name")
 }
 
 static void list_move_to_default_source (gpointer data, gpointer userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
     pulse_move_stream_to_default_source (vol, (int) data);
 }
 
-
-
 static void pulse_change_source (VolumeALSAPlugin *vol, const char *sourcename)
 {
-    DEBUG ("pulse change source %s", sourcename);
+    DEBUG ("pulse_change_source %s", sourcename);
     if (vol->pa_default_source) g_free (vol->pa_default_source);
     vol->pa_default_source = g_strdup (sourcename);
 
@@ -1892,6 +1898,7 @@ static void pulse_change_source (VolumeALSAPlugin *vol, const char *sourcename)
     pulse_get_input_streams (vol);
     g_list_foreach (vol->pa_indices, list_move_to_default_source, vol);
     g_list_free (vol->pa_indices);
+    DEBUG ("pulse_change_source done");
 }
 
 /* Volume and mute control
@@ -1905,12 +1912,13 @@ static void pulse_change_source (VolumeALSAPlugin *vol, const char *sourcename)
 
 #define PA_VOL_SCALE 655    /* GTK volume scale is 0-100; PA scale is 0-65535 */
 
-static void pa_cb_get_sink_info_by_name (pa_context *context, const pa_sink_info *i, int eol, void *userdata)
+static void pa_cb_get_current_vol_mute (pa_context *context, const pa_sink_info *i, int eol, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
 
     if (!eol)
     {
+        DEBUG ("pa_cb_get_current_vol_mute %d %d %d", i->volume.channels, i->volume.values[0], i->mute);
         vol->pa_channels = i->volume.channels;
         vol->pa_volume = i->volume.values[0];
         vol->pa_mute = i->mute;
@@ -1919,22 +1927,23 @@ static void pa_cb_get_sink_info_by_name (pa_context *context, const pa_sink_info
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
-static int pulse_get_default_sink_info (VolumeALSAPlugin *vol)
+static int pulse_get_current_vol_mute (VolumeALSAPlugin *vol)
 {
+    DEBUG ("pulse_get_current_vol_mute");
     START_PA_OPERATION
-    op = pa_context_get_sink_info_by_name (vol->pa_context, vol->pa_default_sink, &pa_cb_get_sink_info_by_name, vol);
+    op = pa_context_get_sink_info_by_name (vol->pa_context, vol->pa_default_sink, &pa_cb_get_current_vol_mute, vol);
     END_PA_OPERATION ("get_sink_info_by_name")
 }
 
 static int pulse_get_volume (VolumeALSAPlugin *vol)
 {
-    pulse_get_default_sink_info (vol);
+    pulse_get_current_vol_mute (vol);
     return vol->pa_volume / PA_VOL_SCALE;
 }
 
 static int pulse_get_mute (VolumeALSAPlugin *vol)
 {
-    pulse_get_default_sink_info (vol);
+    pulse_get_current_vol_mute (vol);
     return vol->pa_mute;
 }
 
@@ -1945,6 +1954,7 @@ static int pulse_set_volume (VolumeALSAPlugin *vol, int volume)
     cvol.values[0] = volume * PA_VOL_SCALE;
     cvol.values[1] = volume * PA_VOL_SCALE;
 
+    DEBUG ("pulse_set_volume %d", volume);
     START_PA_OPERATION
     op = pa_context_set_sink_volume_by_name (vol->pa_context, vol->pa_default_sink, &cvol, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_sink_volume_by_name")
@@ -1952,6 +1962,7 @@ static int pulse_set_volume (VolumeALSAPlugin *vol, int volume)
 
 static int pulse_set_mute (VolumeALSAPlugin *vol, int mute)
 {
+    DEBUG ("pulse_set_mute %d", mute);
     START_PA_OPERATION
     op = pa_context_set_sink_mute_by_name (vol->pa_context, vol->pa_default_sink, mute, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_sink_mute_by_name");
@@ -2048,49 +2059,13 @@ static int pa_bluez_device_same (const char *padev, const char *btdev)
  * --------
  *
  * Under PA, cards have various profiles which control which sources and sinks
- * are available to the system. PA should choose the best profile automatically.
- * But sometimes it doesn't...
+ * are available to the system. These are exposed through the profile setting
+ * dialog.
  */
-
-static void pa_cb_set_best_profile (pa_context *c, const pa_card_info *i, int eol, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    if (!eol)
-    {
-        int priority = 0;
-        pa_card_profile_info2 **profile = i->profiles2;
-        while (*profile)
-        {
-            if ((*profile)->priority > priority)
-            {
-                pa_context_set_card_profile_by_name (vol->pa_context, i->name, (*profile)->name, &pa_cb_generic_success, vol);  //!!!!!
-                priority = (*profile)->priority;
-            }
-            profile++;
-        }
-    }
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static int pulse_set_best_profile (VolumeALSAPlugin *vol, const char *card)
-{
-    START_PA_OPERATION
-    op = pa_context_get_card_info_by_name (vol->pa_context, card, &pa_cb_set_best_profile, vol);
-    END_PA_OPERATION ("get_card_info_by_name")
-}
-
-static int pulse_set_all_profiles (VolumeALSAPlugin *vol)
-{
-    START_PA_OPERATION
-    op = pa_context_get_card_info_list	(vol->pa_context, &pa_cb_set_best_profile, vol);
-    END_PA_OPERATION ("get_card_info_list")
-}
 
 static int pulse_set_profile (VolumeALSAPlugin *vol, char *card, char *profile)
 {
-    DEBUG ("pulse set profile %s %s", card, profile);
+    DEBUG ("pulse_set_profile %s %s", card, profile);
     START_PA_OPERATION
     op = pa_context_set_card_profile_by_name (vol->pa_context, card, profile, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_card_profile_by_name")
@@ -2099,9 +2074,11 @@ static int pulse_set_profile (VolumeALSAPlugin *vol, char *card, char *profile)
 static void pa_cb_get_profile (pa_context *c, const pa_card_info *i, int eol, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
     if (!eol)
     {
         DEBUG ("pulse get profile : %s", i->active_profile2->name);
+        if (vol->pa_profile) g_free (vol->pa_profile);
         vol->pa_profile = g_strdup (i->active_profile2->name);
     }
 
@@ -2110,13 +2087,13 @@ static void pa_cb_get_profile (pa_context *c, const pa_card_info *i, int eol, vo
 
 static int pulse_get_profile (VolumeALSAPlugin *vol, char *card)
 {
-    if (vol->pa_profile) g_free (vol->pa_profile);
-    vol->pa_profile = NULL;
-
+    DEBUG ("pulse_get_profile %s", card);
     START_PA_OPERATION
     op = pa_context_get_card_info_by_name (vol->pa_context, card, &pa_cb_get_profile, vol);
     END_PA_OPERATION ("get_card_info_by_name")
 }
+
+/* Profiles dialog */
 
 static void profile_changed_handler (GtkComboBox *combo, gpointer *userdata)
 {
@@ -2129,7 +2106,7 @@ static void profile_changed_handler (GtkComboBox *combo, gpointer *userdata)
     pulse_set_profile (vol, (char *) gtk_widget_get_name (GTK_WIDGET (combo)), option);
 }
 
-static void pa_cb_get_profiles (pa_context *c, const pa_card_info *i, int eol, void *userdata)
+static void pa_cb_add_devices_to_profile_dialog (pa_context *c, const pa_card_info *i, int eol, void *userdata)
 {
     GtkWidget *btn;
     GtkListStore *ls = gtk_list_store_new (2, G_TYPE_STRING, G_TYPE_STRING);
@@ -2164,21 +2141,34 @@ static void pa_cb_get_profiles (pa_context *c, const pa_card_info *i, int eol, v
         else
         {
             const char *name = pa_proplist_gets (i->proplist, "alsa.card_name");
-            gtk_box_pack_start (GTK_BOX (vol->intprofiles), gtk_label_new (volumealsa_device_display_name (vol, name)), FALSE, FALSE, 5);
-            gtk_box_pack_start (GTK_BOX (vol->intprofiles), btn, FALSE, FALSE, 5);
-            relocate_item (vol->intprofiles);
+
+            if (g_strcmp0 (pa_proplist_gets (i->proplist, "device.description"), "Built-in Audio"))
+            {
+                gtk_box_pack_start (GTK_BOX (vol->alsaprofiles), gtk_label_new (volumealsa_device_display_name (vol, name)), FALSE, FALSE, 5);
+                gtk_box_pack_start (GTK_BOX (vol->alsaprofiles), btn, FALSE, FALSE, 5);
+                relocate_item (vol->alsaprofiles);
+            }
+            else
+            {
+                gtk_box_pack_start (GTK_BOX (vol->intprofiles), gtk_label_new (volumealsa_device_display_name (vol, name)), FALSE, FALSE, 5);
+                gtk_box_pack_start (GTK_BOX (vol->intprofiles), btn, FALSE, FALSE, 5);
+                relocate_item (vol->intprofiles);
+            }
         }
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
-static int pulse_get_card_list (VolumeALSAPlugin *vol)
+static int pulse_add_devices_to_profile_dialog (VolumeALSAPlugin *vol)
 {
+    DEBUG ("pulse_add_devices_to_profile_dialog");
     START_PA_OPERATION
-    op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_get_profiles, vol);
+    op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_add_devices_to_profile_dialog, vol);
     END_PA_OPERATION ("get_card_info_list")
 }
+
+/* Device menu */
 
 static void pa_cb_get_info_inputs (pa_context *c, const pa_card_info *i, int eol, void *userdata)
 {
@@ -2256,7 +2246,7 @@ static void pa_cb_get_info_external (pa_context *c, const pa_card_info *i, int e
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
-static int pulse_menu_add (VolumeALSAPlugin *vol, gboolean input, gboolean internal)
+static int pulse_add_devices_to_menu (VolumeALSAPlugin *vol, gboolean input, gboolean internal)
 {
     if (vol->pa_profile) g_free (vol->pa_profile);
     vol->pa_profile = NULL;
@@ -2268,60 +2258,12 @@ static int pulse_menu_add (VolumeALSAPlugin *vol, gboolean input, gboolean inter
         op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_get_info_internal, vol);
     else
         op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_get_info_external, vol);
-
     END_PA_OPERATION ("get_card_info_list")
 }
 
 /*----------------------------------------------------------------------------*/
 /* Plugin structure                                                           */
 /*----------------------------------------------------------------------------*/
-
-/* Callback when the configuration dialog is to be shown */
-
-static GtkWidget *volumealsa_configure (LXPanel *panel, GtkWidget *plugin)
-{
-    VolumeALSAPlugin *vol = lxpanel_plugin_get_data (plugin);
-    char *path = NULL;
-    const gchar *command_line = NULL;
-    GAppInfoCreateFlags flags = G_APP_INFO_CREATE_NONE;
-
-#ifdef ENABLE_NLS
-    textdomain (GETTEXT_PACKAGE);
-#endif
-
-    /* check if command line was configured */
-    config_setting_lookup_string (vol->settings, "MixerCommand", &command_line);
-
-    /* if command isn't set in settings then let guess it */
-    /* Fallback to alsamixer when PA is not running, or when no PA utility is find */
-    if (command_line == NULL)
-    {
-        if ((path = g_find_program_in_path ("pimixer")))
-            command_line = "pimixer";
-        else if ((path = g_find_program_in_path ("gnome-alsamixer")))
-            command_line = "gnome-alsamixer";
-        else if ((path = g_find_program_in_path ("alsamixergui")))
-            command_line = "alsamixergui";
-        else if ((path = g_find_program_in_path ("xfce4-mixer")))
-            command_line = "xfce4-mixer";
-        else if ((path = g_find_program_in_path ("alsamixer")))
-        {
-            command_line = "alsamixer";
-            flags = G_APP_INFO_CREATE_NEEDS_TERMINAL;
-        }
-    }
-    g_free (path);
-
-    if (command_line) fm_launch_command_simple (NULL, NULL, flags, command_line, NULL);
-    else
-    {
-        fm_show_error (NULL, NULL,
-                      _("Error, you need to install an application to configure"
-                        " the sound (pavucontrol, alsamixer ...)"));
-    }
-
-    return NULL;
-}
 
 /* Callback when panel configuration changes */
 
@@ -2434,8 +2376,7 @@ static GtkWidget *volumealsa_constructor (LXPanel *panel, config_setting_t *sett
 
     /* set up PulseAudio context */
     pulse_init (vol);
-    //pulse_set_all_profiles (vol);
-    pulse_get_defaults (vol);
+    pulse_get_default_sink_source (vol);
 
     /* Update the display, show the widget, and return. */
     volumealsa_update_display (vol);
@@ -2472,7 +2413,6 @@ LXPanelPluginInit fm_module_init_lxpanel_gtk =
     .name = N_("Volume Control (PulseAudio)"),
     .description = N_("Display and control volume for PulseAudio"),
     .new_instance = volumealsa_constructor,
-    .config = volumealsa_configure,
     .reconfigure = volumealsa_panel_configuration_changed,
     .control = volumealsa_control_msg,
     .gettext_package = GETTEXT_PACKAGE
