@@ -121,6 +121,7 @@ typedef struct {
     int pa_volume;                      /* volume setting on default sink */
     int pa_mute;                        /* mute setting on default sink */
     char *pa_profile;                   /* current profile for card */
+    GList *pa_indices;
 
 #ifdef OPTIONS
     /* graphics */
@@ -1794,18 +1795,32 @@ static void pa_cb_get_sink_input_info_list (pa_context *context, const pa_sink_i
     DEBUG ("pulse move streams to default sink callback");
     if (!eol)
     {
-        pa_context_move_sink_input_by_name (context, i->index, vol->pa_default_sink, &pa_cb_generic_success, vol);
+        vol->pa_indices = g_list_append (vol->pa_indices, (void *) i->index);
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
-static int pulse_move_streams_to_default_sink (VolumeALSAPlugin *vol)
+static int pulse_get_output_streams (VolumeALSAPlugin *vol)
 {
-    DEBUG ("pulse move streams to default sink");
+    DEBUG ("pulse get output streams");
     START_PA_OPERATION
     op = pa_context_get_sink_input_info_list (vol->pa_context, &pa_cb_get_sink_input_info_list, vol);
     END_PA_OPERATION ("get_sink_input_info_list")
+}
+
+static int pulse_move_stream_to_default_sink (VolumeALSAPlugin *vol, int index)
+{
+    DEBUG ("pulse move stream to default sink");
+    START_PA_OPERATION
+    op = pa_context_move_sink_input_by_name (vol->pa_context, index, vol->pa_default_sink, &pa_cb_generic_success, vol);
+    END_PA_OPERATION ("move_sink_input_by_name")
+}
+
+static void list_move_to_default_sink (gpointer data, gpointer userdata)
+{
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+    pulse_move_stream_to_default_sink (vol, (int) data);
 }
 
 static void pulse_change_sink (VolumeALSAPlugin *vol, const char *sinkname)
@@ -1814,8 +1829,11 @@ static void pulse_change_sink (VolumeALSAPlugin *vol, const char *sinkname)
     if (vol->pa_default_sink) g_free (vol->pa_default_sink);
     vol->pa_default_sink = g_strdup (sinkname);
 
+    vol->pa_indices = NULL;
     pulse_set_default_sink (vol, sinkname);
-    pulse_move_streams_to_default_sink (vol);
+    pulse_get_output_streams (vol);
+    g_list_foreach (vol->pa_indices, list_move_to_default_sink, vol);
+    g_list_free (vol->pa_indices);
 }
 
 static int pulse_set_default_source (VolumeALSAPlugin *vol, const char *sourcename)
@@ -1833,19 +1851,35 @@ static void pa_cb_get_source_output_info_list (pa_context *context, const pa_sou
     DEBUG ("pulse move streams to default source callback");
     if (!eol)
     {
-        pa_context_move_source_output_by_name (context, i->index, vol->pa_default_source, &pa_cb_generic_success, vol);
+        vol->pa_indices = g_list_append (vol->pa_indices, (void *) i->index);
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
-static int pulse_move_streams_to_default_source (VolumeALSAPlugin *vol)
+static int pulse_get_input_streams (VolumeALSAPlugin *vol)
 {
-    DEBUG ("pulse move streams to default source");
+    DEBUG ("pulse get input streams");
     START_PA_OPERATION
     op = pa_context_get_source_output_info_list (vol->pa_context, &pa_cb_get_source_output_info_list, vol);
-    END_PA_OPERATION ("get_source_output_info_list")
+    END_PA_OPERATION ("get_sink_input_info_list")
 }
+
+static int pulse_move_stream_to_default_source (VolumeALSAPlugin *vol, int index)
+{
+    DEBUG ("pulse move stream to default source");
+    START_PA_OPERATION
+    op = pa_context_move_source_output_by_name (vol->pa_context, index, vol->pa_default_source, &pa_cb_generic_success, vol);
+    END_PA_OPERATION ("move_sink_input_by_name")
+}
+
+static void list_move_to_default_source (gpointer data, gpointer userdata)
+{
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+    pulse_move_stream_to_default_source (vol, (int) data);
+}
+
+
 
 static void pulse_change_source (VolumeALSAPlugin *vol, const char *sourcename)
 {
@@ -1853,8 +1887,11 @@ static void pulse_change_source (VolumeALSAPlugin *vol, const char *sourcename)
     if (vol->pa_default_source) g_free (vol->pa_default_source);
     vol->pa_default_source = g_strdup (sourcename);
 
+    vol->pa_indices = NULL;
     pulse_set_default_source (vol, sourcename);
-    pulse_move_streams_to_default_source (vol);
+    pulse_get_input_streams (vol);
+    g_list_foreach (vol->pa_indices, list_move_to_default_source, vol);
+    g_list_free (vol->pa_indices);
 }
 
 /* Volume and mute control
@@ -2027,7 +2064,7 @@ static void pa_cb_set_best_profile (pa_context *c, const pa_card_info *i, int eo
         {
             if ((*profile)->priority > priority)
             {
-                pa_context_set_card_profile_by_name (vol->pa_context, i->name, (*profile)->name, &pa_cb_generic_success, vol);
+                pa_context_set_card_profile_by_name (vol->pa_context, i->name, (*profile)->name, &pa_cb_generic_success, vol);  //!!!!!
                 priority = (*profile)->priority;
             }
             profile++;
