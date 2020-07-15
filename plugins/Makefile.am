@@ -15,7 +15,7 @@ pkglibdir = $(libdir)/lxpanel/plugins
 
 # volumealsabt
 volumepulse_la_SOURCES = \
-	volumealsabt/volumealsabt.c
+	volumepulse/volumepulse.c
 
 volumepulse_la_CFLAGS = \
 	-I$(top_srcdir) \
