@@ -203,7 +203,7 @@ static void close_profiles (VolumeALSAPlugin *vol);
 static void profiles_ok_handler (GtkButton *button, gpointer *user_data);
 static gboolean profiles_wd_close_handler (GtkWidget *wid, GdkEvent *event, gpointer user_data);
 static void profile_changed (GtkComboBox *combo, gpointer *userdata);
-static void relocate_item (GtkWidget *box);
+static void relocate_last_item (GtkWidget *box);
 static void volumealsa_add_combo_to_profiles (VolumeALSAPlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *name, const char *label);
 
 /* PulseAudio */
@@ -862,7 +862,16 @@ static GtkWidget *volumealsa_menu_item_add (VolumeALSAPlugin *vol, GtkWidget *me
     gtk_widget_set_name (mi, name);
     g_signal_connect (mi, "activate", cb, (gpointer) vol);
 
-    // count the list first - we need indices...
+    if (!enabled)
+    {
+        gtk_widget_set_sensitive (mi, FALSE);
+        if (input)
+            gtk_widget_set_tooltip_text (mi, _("Input from this device not available in the current profile"));
+        else
+            gtk_widget_set_tooltip_text (mi, _("Output to this device not available in the current profile"));
+    }
+
+    // insert alphabetically in current section - count the list first
     int count = 0;
     GList *l = g_list_first (gtk_container_get_children (GTK_CONTAINER (menu)));
     while (l)
@@ -892,14 +901,6 @@ static GtkWidget *volumealsa_menu_item_add (VolumeALSAPlugin *vol, GtkWidget *me
         l = l->next;
     }
 
-    if (!enabled)
-    {
-        gtk_widget_set_sensitive (mi, FALSE);
-        if (input)
-            gtk_widget_set_tooltip_text (mi, _("Input from this device not available in the current profile"));
-        else
-            gtk_widget_set_tooltip_text (mi, _("Output to this device not available in the current profile"));
-    }
     gtk_menu_shell_insert (GTK_MENU_SHELL (menu), mi, count);
     return mi;
 }
@@ -1467,7 +1468,7 @@ static gboolean profiles_wd_close_handler (GtkWidget *wid, GdkEvent *event, gpoi
     return TRUE;
 }
 
-static void relocate_item (GtkWidget *box)
+static void relocate_last_item (GtkWidget *box)
 {
     GtkWidget *elem;
     GList *children = gtk_container_get_children (GTK_CONTAINER (box));
@@ -2099,11 +2100,9 @@ static void profile_changed (GtkComboBox *combo, gpointer *userdata)
 
     const char *option;
     GtkTreeIter iter;
-    GtkTreeModel *model;
 
-    model = gtk_combo_box_get_model (combo);
     gtk_combo_box_get_active_iter (combo, &iter);
-    gtk_tree_model_get (model, &iter, 0, &option, -1);
+    gtk_tree_model_get (gtk_combo_box_get_model (combo), &iter, 0, &option, -1);
     pulse_set_profile (vol, gtk_widget_get_name (GTK_WIDGET (combo)), option);
 }
 
@@ -2132,7 +2131,7 @@ static void volumealsa_add_combo_to_profiles (VolumeALSAPlugin *vol, GtkListStor
     gtk_combo_box_set_active (GTK_COMBO_BOX (comb), sel);
     gtk_box_pack_start (GTK_BOX (dest), comb, FALSE, FALSE, 5);
 
-    relocate_item (dest);
+    relocate_last_item (dest);
 
     if (ls) g_signal_connect (comb, "changed", G_CALLBACK (profile_changed), vol);
 }
