@@ -83,7 +83,7 @@ typedef struct {
     char *pa_profile;                   /* Current profile for card */
     GList *pa_indices;                  /* Indices for current streams */
 
-} VolumeALSAPlugin;
+} VolumePulsePlugin;
 
 /* End of file */
 /*----------------------------------------------------------------------------*/
