@@ -46,97 +46,14 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-//#define OPTIONS
-
-#ifdef OPTIONS
-#define _ISOC99_SOURCE /* lrint() */
-#define _GNU_SOURCE /* exp10() */
-#include <alsa/asoundlib.h>
-#endif
-
-#include <gtk/gtk.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
-#include <fcntl.h>
-#include <unistd.h>
 #include <glib.h>
 #include <glib/gi18n.h>
-#include <gdk-pixbuf/gdk-pixbuf.h>
-#include <poll.h>
-#include <libfm/fm-gtk.h>
-#include <pulse/pulseaudio.h>
 
 #include "plugin.h"
-
-#define DEBUG_ON
-#ifdef DEBUG_ON
-#define DEBUG(fmt,args...) if(getenv("DEBUG_VA"))g_message("va: " fmt,##args)
-#else
-#define DEBUG
-#endif
-
-typedef struct {
-    /* plugin */
-    GtkWidget *plugin;                  /* Back pointer to widget */
-    LXPanel *panel;                     /* Back pointer to panel */
-    config_setting_t *settings;         /* Plugin settings */
-
-    /* graphics */
-    GtkWidget *tray_icon;               /* Displayed icon */
-    GtkWidget *popup_window;            /* Top level window for popup */
-    GtkWidget *volume_scale;            /* Scale for volume */
-    GtkWidget *mute_check;              /* Checkbox for mute state */
-    GtkWidget *menu_popup;              /* Right-click menu */
-    GtkWidget *options_dlg;             /* Device options dialog */
-    GtkWidget *outputs;                 /* Output select menu */
-    GtkWidget *inputs;                  /* Input select menu */
-    GtkWidget *intprofiles;             /* Vbox for profile combos */
-    GtkWidget *alsaprofiles;            /* Vbox for profile combos */
-    GtkWidget *btprofiles;              /* Vbox for profile combos */
-    gboolean show_popup;                /* Toggle to show and hide the popup on left click */
-    guint volume_scale_handler;         /* Handler for vscale widget */
-    guint mute_check_handler;           /* Handler for mute_check widget */
-
-    /* Bluetooth interface */
-    GDBusObjectManager *objmanager;     /* BlueZ object manager */
-    char *bt_conname;                   /* BlueZ name of device - just used during connection */
-    char *bt_reconname;                 /* BlueZ name of second device - used during reconnection */
-    gboolean bt_input;                  /* Is the device being connected as an input or an output? */
-    GtkWidget *conn_dialog;             /* Connection dialog box */
-    GtkWidget *conn_label;              /* Dialog box text field */
-    GtkWidget *conn_ok;                 /* Dialog box button */
-
-    /* HDMI devices */
-    guint hdmis;                        /* Number of HDMI devices */
-    char *mon_names[2];                 /* Names of HDMI devices */
-
-    /* PulseAudio interface */
-    pa_threaded_mainloop *pa_mainloop;
-    pa_context *pa_context;
-    pa_context_state_t pa_state;
-    char *pa_default_sink;              /* current default sink name */
-    char *pa_default_source;            /* current default source name */
-    int pa_channels;                    /* number of channels on default sink */
-    int pa_volume;                      /* volume setting on default sink */
-    int pa_mute;                        /* mute setting on default sink */
-    char *pa_profile;                   /* current profile for card */
-    GList *pa_indices;                  /* indices for current streams */
-
-#ifdef OPTIONS
-    /* graphics */
-    GtkWidget *options_play;            /* Playback options table */
-    GtkWidget *options_capt;            /* Capture options table */
-    GtkWidget *options_set;             /* General settings box */
-
-    /* ALSA interface. */
-    snd_mixer_t *mixer;
-
-    /* PulseAudio interface */
-    char *pa_alsadev;                   /* device name of ALSA device matching current default source or sink */
-    char *pa_alsaname;                  /* display name of ALSA device matching current default source or sink */
-#endif
-} VolumeALSAPlugin;
+#include "volumepulse.h"
+#include "pulse.h"
 
 #define BLUEALSA_DEV (-99)
 
@@ -179,13 +96,13 @@ static gint volumealsa_delete_connect_dialog (GtkWidget *widget, GdkEvent *event
 static gboolean volumealsa_button_press_event (GtkWidget *widget, GdkEventButton *event, LXPanel *panel);
 
 /* Menu popup */
-static GtkWidget *volumealsa_menu_item_add (VolumeALSAPlugin *vol, GtkWidget *menu, const char *label, const char *name, gboolean enabled, gboolean input, GCallback cb);
+GtkWidget *volumealsa_add_item_to_menu (VolumeALSAPlugin *vol, GtkWidget *menu, const char *label, const char *name, gboolean enabled, gboolean input, GCallback cb);
 static void volumealsa_menu_show_default_sink (GtkWidget *widget, gpointer data);
 static void volumealsa_menu_show_default_source (GtkWidget *widget, gpointer data);
-static const char *volumealsa_device_display_name (VolumeALSAPlugin *vol, const char *name);
+const char *volumealsa_device_display_name (VolumeALSAPlugin *vol, const char *name);
 static void volumealsa_build_device_menu (VolumeALSAPlugin *vol);
-static void volumealsa_set_external_output (GtkWidget *widget, VolumeALSAPlugin *vol);
-static void volumealsa_set_external_input (GtkWidget *widget, VolumeALSAPlugin *vol);
+void volumealsa_set_external_output (GtkWidget *widget, VolumeALSAPlugin *vol);
+void volumealsa_set_external_input (GtkWidget *widget, VolumeALSAPlugin *vol);
 static void volumealsa_set_bluetooth_output (GtkWidget *widget, VolumeALSAPlugin *vol);
 static void volumealsa_set_bluetooth_input (GtkWidget *widget, VolumeALSAPlugin *vol);
 
@@ -204,39 +121,14 @@ static void profiles_ok_handler (GtkButton *button, gpointer *user_data);
 static gboolean profiles_wd_close_handler (GtkWidget *wid, GdkEvent *event, gpointer user_data);
 static void profile_changed (GtkComboBox *combo, gpointer *userdata);
 static void relocate_last_item (GtkWidget *box);
-static void volumealsa_add_combo_to_profiles (VolumeALSAPlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *name, const char *label);
+void volumealsa_add_combo_to_profiles (VolumeALSAPlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *name, const char *label);
 
-/* PulseAudio */
-static void pulse_init (VolumeALSAPlugin *vol);
-static void pulse_disconnect (VolumeALSAPlugin *vol);
-static void pulse_close (VolumeALSAPlugin *vol);
-static void pa_error_handler (VolumeALSAPlugin *vol, char *name);
-static int pulse_set_subscription (VolumeALSAPlugin *vol);
-static int pulse_get_default_sink_source (VolumeALSAPlugin *vol);
-static int pulse_replace_cards_with_sinks (VolumeALSAPlugin *vol);
-static int pulse_replace_cards_with_sources (VolumeALSAPlugin *vol);
-static int pulse_set_default_sink (VolumeALSAPlugin *vol, const char *sinkname);
-static int pulse_move_streams_to_default_sink (VolumeALSAPlugin *vol);
-static int pulse_move_streams_to_default_source (VolumeALSAPlugin *vol);
-static void pulse_change_sink (VolumeALSAPlugin *vol, const char *sinkname);
-static int pulse_set_default_source (VolumeALSAPlugin *vol, const char *sourcename);
-static void pulse_change_source (VolumeALSAPlugin *vol, const char *sourcename);
-static int pulse_get_current_vol_mute (VolumeALSAPlugin *vol);
-static int pulse_set_volume (VolumeALSAPlugin *vol, int volume);
-static int pulse_get_volume (VolumeALSAPlugin *vol);
-static int pulse_set_mute (VolumeALSAPlugin *vol, int mute);
-static int pulse_get_mute (VolumeALSAPlugin *vol);
 static char *bluez_to_pa_sink_name (char *bluez_name, char *profile);
 static char *bluez_to_pa_source_name (char *bluez_name);
 static char *bluez_to_pa_card_name (char *bluez_name);
-static char *pa_sink_to_bluez_name (char *pa_name);
-static char *pa_source_to_bluez_name (char *pa_name);
+static char *bluez_from_pa_name (char *pa_name);
 static int pa_bt_sink_source_compare (char *sink, char *source);
 static int pa_bluez_device_same (const char *padev, const char *btdev);
-static int pulse_set_profile (VolumeALSAPlugin *vol, const char *card, const char *profile);
-static int pulse_get_profile (VolumeALSAPlugin *vol, const char *card);
-static int pulse_add_devices_to_profile_dialog (VolumeALSAPlugin *vol);
-static int pulse_add_devices_to_menu (VolumeALSAPlugin *vol, gboolean input, gboolean internal);
 
 /* Plugin */
 static GtkWidget *volumealsa_configure (LXPanel *panel, GtkWidget *plugin);
@@ -244,27 +136,6 @@ static void volumealsa_panel_configuration_changed (LXPanel *panel, GtkWidget *p
 static gboolean volumealsa_control_msg (GtkWidget *plugin, const char *cmd);
 static GtkWidget *volumealsa_constructor (LXPanel *panel, config_setting_t *settings);
 static void volumealsa_destructor (gpointer user_data);
-
-/* Options dialog */
-#ifdef OPTIONS
-static long lrint_dir (double x, int dir);
-static int get_normalized_volume (snd_mixer_elem_t *elem, gboolean capture);
-static int set_normalized_volume (snd_mixer_elem_t *elem, int volume, int dir, gboolean capture);
-static void show_options (VolumeALSAPlugin *vol, snd_mixer_t *mixer, gboolean input, const char *devname);
-static void show_alsa_options (VolumeALSAPlugin *vol, gboolean input);
-static void update_options (VolumeALSAPlugin *vol);
-static void close_options (VolumeALSAPlugin *vol);
-static void options_ok_handler (GtkButton *button, gpointer *user_data);
-static gboolean options_wd_close_handler (GtkWidget *wid, GdkEvent *event, gpointer user_data);
-static void playback_range_change_event (GtkRange *range, gpointer user_data);
-static void capture_range_change_event (GtkRange *range, gpointer user_data);
-static void playback_switch_toggled_event (GtkToggleButton *togglebutton, gpointer user_data);
-static void capture_switch_toggled_event (GtkToggleButton *togglebutton, gpointer user_data);
-static void enum_changed_event (GtkComboBox *combo, gpointer *user_data);
-static GtkWidget *find_box_child (GtkWidget *container, gint type, const char *name);
-static int pulse_get_sink_alsa_device (VolumeALSAPlugin *vol);
-static int pulse_get_source_alsa_device (VolumeALSAPlugin *vol);
-#endif
 
 /*----------------------------------------------------------------------------*/
 /* Generic helper functions                                                   */
@@ -370,8 +241,8 @@ static void bt_cb_object_added (GDBusObjectManager *manager, GDBusObject *object
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
     const char *obj = g_dbus_object_get_object_path (object);
     pulse_get_default_sink_source (vol);
-    char *device = pa_sink_to_bluez_name (vol->pa_default_sink);
-    char *idevice = pa_source_to_bluez_name (vol->pa_default_source);
+    char *device = bluez_from_pa_name (vol->pa_default_sink);
+    char *idevice = bluez_from_pa_name (vol->pa_default_source);
     if (g_strcmp0 (obj, device) || g_strcmp0 (obj, idevice))
     {
         DEBUG ("Selected Bluetooth audio device has connected");
@@ -386,8 +257,8 @@ static void bt_cb_object_removed (GDBusObjectManager *manager, GDBusObject *obje
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
     const char *obj = g_dbus_object_get_object_path (object);
     pulse_get_default_sink_source (vol);
-    char *device = pa_sink_to_bluez_name (vol->pa_default_sink);
-    char *idevice = pa_source_to_bluez_name (vol->pa_default_source);
+    char *device = bluez_from_pa_name (vol->pa_default_sink);
+    char *idevice = bluez_from_pa_name (vol->pa_default_source);
     if (g_strcmp0 (obj, device) || g_strcmp0 (obj, idevice))
     {
         DEBUG ("Selected Bluetooth audio device has disconnected");
@@ -419,8 +290,8 @@ static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, co
 
         /* Check whether a Bluetooth audio device is the current default output or input - connect to one or both if so */
         pulse_get_default_sink_source (vol);
-        char *device = pa_sink_to_bluez_name (vol->pa_default_sink);
-        char *idevice = pa_source_to_bluez_name (vol->pa_default_source);
+        char *device = bluez_from_pa_name (vol->pa_default_sink);
+        char *idevice = bluez_from_pa_name (vol->pa_default_source);
         if (device || idevice)
         {
             /* Reconnect the current Bluetooth audio device */
@@ -726,6 +597,13 @@ static void volumealsa_update_display (VolumeALSAPlugin *vol)
     g_free (tooltip);
 }
 
+gboolean volumealsa_update_disp_cb (gpointer userdata)
+{
+    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+    volumealsa_update_display (vol);
+    return FALSE;
+}
+
 static void volumealsa_theme_change (GtkWidget *widget, VolumeALSAPlugin *vol)
 {
     volumealsa_update_display (vol);
@@ -855,7 +733,7 @@ static void menu_add_separator (GtkWidget *menu)
     gtk_menu_shell_append (GTK_MENU_SHELL (menu), mi);
 }
 
-static GtkWidget *volumealsa_menu_item_add (VolumeALSAPlugin *vol, GtkWidget *menu, const char *label, const char *name, gboolean enabled, gboolean input, GCallback cb)
+GtkWidget *volumealsa_add_item_to_menu (VolumeALSAPlugin *vol, GtkWidget *menu, const char *label, const char *name, gboolean enabled, gboolean input, GCallback cb)
 {
     GtkWidget *mi = gtk_image_menu_item_new_with_label (label);
     gtk_image_menu_item_set_always_show_image (GTK_IMAGE_MENU_ITEM (mi), TRUE);
@@ -954,14 +832,14 @@ static void volumealsa_menu_add_bluetooth (VolumeALSAPlugin *vol, gboolean input
                         GVariant *trusted = g_dbus_proxy_get_cached_property (G_DBUS_PROXY (interface), "Trusted");
                         if (name && icon && paired && trusted && g_variant_get_boolean (paired) && g_variant_get_boolean (trusted))
                         {
-                            // create a menu if there isn't one already
                             if (input)
                             {
+                                // create a menu if there isn't one already
                                 if (!vol->inputs) vol->inputs = gtk_menu_new ();
-                                volumealsa_menu_item_add (vol, vol->inputs, g_variant_get_string (name, NULL), objpath, TRUE, TRUE, G_CALLBACK (volumealsa_set_bluetooth_input));
+                                volumealsa_add_item_to_menu (vol, vol->inputs, g_variant_get_string (name, NULL), objpath, TRUE, TRUE, G_CALLBACK (volumealsa_set_bluetooth_input));
                             }
                             else
-                                volumealsa_menu_item_add (vol, vol->outputs, g_variant_get_string (name, NULL), objpath, TRUE, FALSE, G_CALLBACK (volumealsa_set_bluetooth_output));
+                                volumealsa_add_item_to_menu (vol, vol->outputs, g_variant_get_string (name, NULL), objpath, TRUE, FALSE, G_CALLBACK (volumealsa_set_bluetooth_output));
                         }
                         g_variant_unref (name);
                         g_variant_unref (icon);
@@ -977,7 +855,7 @@ static void volumealsa_menu_add_bluetooth (VolumeALSAPlugin *vol, gboolean input
     }
 }
 
-static const char *volumealsa_device_display_name (VolumeALSAPlugin *vol, const char *name)
+const char *volumealsa_device_display_name (VolumeALSAPlugin *vol, const char *name)
 {
     if (!g_strcmp0 (name, "bcm2835 HDMI 1"))
         return vol->hdmis == 1 ? _("HDMI") : vol->mon_names[0];
@@ -1073,8 +951,7 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
     }
 
     // update the menu item names, which are currently ALSA device names, to PulseAudio sink/source names
-    pulse_replace_cards_with_sinks (vol);
-    pulse_replace_cards_with_sources (vol);
+    pulse_update_devices (vol);
 
     // show the fallback sink and source in the menu
     pulse_get_default_sink_source (vol);
@@ -1094,12 +971,12 @@ static void volumealsa_build_device_menu (VolumeALSAPlugin *vol)
     }
 }
 
-static void volumealsa_set_external_output (GtkWidget *widget, VolumeALSAPlugin *vol)
+void volumealsa_set_external_output (GtkWidget *widget, VolumeALSAPlugin *vol)
 {
     if (strstr (vol->pa_default_sink, "bluez") && pa_bt_sink_source_compare (vol->pa_default_sink, vol->pa_default_source))
     {
         // if the current default sink is Bluetooth and not also the default source, disconnect it
-        char *bt_name = pa_sink_to_bluez_name (vol->pa_default_sink);
+        char *bt_name = bluez_from_pa_name (vol->pa_default_sink);
         bt_disconnect_device (vol, bt_name);
         g_free (bt_name);
     }
@@ -1108,12 +985,12 @@ static void volumealsa_set_external_output (GtkWidget *widget, VolumeALSAPlugin 
     volumealsa_update_display (vol);
 }
 
-static void volumealsa_set_external_input (GtkWidget *widget, VolumeALSAPlugin *vol)
+void volumealsa_set_external_input (GtkWidget *widget, VolumeALSAPlugin *vol)
 {
     if (strstr (vol->pa_default_source, "bluez") && pa_bt_sink_source_compare (vol->pa_default_sink, vol->pa_default_source))
     {
         // if the current default source is Bluetooth and not also the default sink, disconnect it
-        char *bt_name = pa_source_to_bluez_name (vol->pa_default_source);
+        char *bt_name = bluez_from_pa_name (vol->pa_default_source);
         bt_disconnect_device (vol, bt_name);
         g_free (bt_name);
     }
@@ -1126,7 +1003,7 @@ static void volumealsa_set_bluetooth_output (GtkWidget *widget, VolumeALSAPlugin
 {
     volumealsa_update_display (vol);
 
-    char *odevice = pa_sink_to_bluez_name (vol->pa_default_sink);
+    char *odevice = bluez_from_pa_name (vol->pa_default_sink);
 
     // is this device already connected and attached - might want to force reconnect here?
     if (!g_strcmp0 (widget->name, odevice))
@@ -1147,7 +1024,7 @@ static void volumealsa_set_bluetooth_output (GtkWidget *widget, VolumeALSAPlugin
         return;
     }
 
-    char *idevice = pa_source_to_bluez_name (vol->pa_default_source);
+    char *idevice = bluez_from_pa_name (vol->pa_default_source);
 
     // check to see if this device is already connected
     if (!g_strcmp0 (widget->name, idevice))
@@ -1186,7 +1063,7 @@ static void volumealsa_set_bluetooth_output (GtkWidget *widget, VolumeALSAPlugin
 
 static void volumealsa_set_bluetooth_input (GtkWidget *widget, VolumeALSAPlugin *vol)
 {
-    char *idevice = pa_source_to_bluez_name (vol->pa_default_source);
+    char *idevice = bluez_from_pa_name (vol->pa_default_source);
 
     // is this device already connected and attached - might want to force reconnect here?
     if (!g_strcmp0 (widget->name, idevice))
@@ -1207,7 +1084,7 @@ static void volumealsa_set_bluetooth_input (GtkWidget *widget, VolumeALSAPlugin 
         return;
     }
 
-    char *odevice = pa_sink_to_bluez_name (vol->pa_default_sink);
+    char *odevice = bluez_from_pa_name (vol->pa_default_sink);
 
     // check to see if this device is already connected
     if (!g_strcmp0 (widget->name, odevice))
@@ -1487,481 +1364,47 @@ static void relocate_last_item (GtkWidget *box)
     gtk_box_reorder_child (GTK_BOX (box), newcomb, n + 1);
 }
 
-/*----------------------------------------------------------------------------*/
-/* PulseAudio controller                                                      */
-/*----------------------------------------------------------------------------*/
-
-/* Initialisation / teardown
- * -------------------------
- * The PulseAudio controller runs asynchronously in a new thread.
- * The initial functions are to set up and tear down the controller,
- * which is subsequently accessed by its context, which is created
- * during the init function and a pointer to which is stored in the
- * plugin global data structure
- */
-
-static void pa_cb_state (pa_context *pacontext, void *userdata)
+static void profile_changed (GtkComboBox *combo, gpointer *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
 
-    if (pacontext == NULL)
+    const char *option;
+    GtkTreeIter iter;
+
+    gtk_combo_box_get_active_iter (combo, &iter);
+    gtk_tree_model_get (gtk_combo_box_get_model (combo), &iter, 0, &option, -1);
+    pulse_set_profile (vol, gtk_widget_get_name (GTK_WIDGET (combo)), option);
+}
+
+void volumealsa_add_combo_to_profiles (VolumeALSAPlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *name, const char *label)
+{
+    GtkWidget *lbl, *comb;
+    GtkCellRenderer *rend;
+
+    lbl = gtk_label_new (label);
+    gtk_box_pack_start (GTK_BOX (dest), lbl, FALSE, FALSE, 5);
+
+    if (ls)
     {
-        vol->pa_state = PA_CONTEXT_FAILED;
-        pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-        return;
+        comb = gtk_combo_box_new_with_model (GTK_TREE_MODEL (ls));
+        gtk_widget_set_name (comb, name);
+        rend = gtk_cell_renderer_text_new ();
+        gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (comb), rend, FALSE);
+        gtk_cell_layout_add_attribute (GTK_CELL_LAYOUT (comb), rend, "text", 1);
     }
-
-    vol->pa_state = pa_context_get_state (pacontext);
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static void pulse_init (VolumeALSAPlugin *vol)
-{
-    pa_proplist *paprop;
-    pa_mainloop_api *paapi;
-
-    vol->pa_context = NULL;
-    vol->pa_mainloop = pa_threaded_mainloop_new ();
-    pa_threaded_mainloop_start (vol->pa_mainloop);
-
-    pa_threaded_mainloop_lock (vol->pa_mainloop);
-    paapi = pa_threaded_mainloop_get_api (vol->pa_mainloop);
-
-    paprop = pa_proplist_new ();
-    pa_proplist_sets (paprop, PA_PROP_APPLICATION_NAME, "unknown");
-    pa_proplist_sets (paprop, PA_PROP_MEDIA_ROLE, "music");
-    vol->pa_context = pa_context_new_with_proplist (paapi, "unknown", paprop);
-    pa_proplist_free (paprop);
-
-    if (vol->pa_context == NULL)
+    else
     {
-        pa_threaded_mainloop_unlock (vol->pa_mainloop);
-        pa_error_handler (vol, "create context");
-        return;
+        comb = gtk_combo_box_text_new ();
+        gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (comb), _("Device not connected"));
+        gtk_widget_set_sensitive (comb, FALSE);
     }
+    gtk_combo_box_set_active (GTK_COMBO_BOX (comb), sel);
+    gtk_box_pack_start (GTK_BOX (dest), comb, FALSE, FALSE, 5);
 
-    vol->pa_state = PA_CONTEXT_UNCONNECTED;
+    relocate_last_item (dest);
 
-    pa_context_set_state_callback (vol->pa_context, &pa_cb_state, vol);
-    pa_context_connect (vol->pa_context, NULL, PA_CONTEXT_NOAUTOSPAWN, NULL);
-
-    while (vol->pa_state != PA_CONTEXT_READY && vol->pa_state != PA_CONTEXT_FAILED)
-    {
-        pa_threaded_mainloop_wait (vol->pa_mainloop);
-    }
-
-    pa_threaded_mainloop_unlock (vol->pa_mainloop);
-
-    if (vol->pa_state != PA_CONTEXT_READY)
-    {
-        pa_error_handler (vol, "init context");
-        return;
-    }
-
-    vol->pa_default_sink = NULL;
-    vol->pa_default_source = NULL;
-    vol->pa_profile = NULL;
-    vol->pa_indices = NULL;
-
-    pulse_set_subscription (vol);
+    if (ls) g_signal_connect (comb, "changed", G_CALLBACK (profile_changed), vol);
 }
-
-static void pulse_disconnect (VolumeALSAPlugin *vol)
-{
-    if (vol->pa_context != NULL)
-    {
-        pa_threaded_mainloop_lock (vol->pa_mainloop);
-        pa_context_disconnect (vol->pa_context);
-        pa_context_unref (vol->pa_context);
-        vol->pa_context = NULL;
-        pa_threaded_mainloop_unlock (vol->pa_mainloop);
-    }
-}
-
-static void pulse_close (VolumeALSAPlugin *vol)
-{
-    if (vol->pa_mainloop != NULL)
-    {
-        pa_threaded_mainloop_stop (vol->pa_mainloop);
-        pa_threaded_mainloop_free (vol->pa_mainloop);
-    }
-}
-
-static void pa_error_handler (VolumeALSAPlugin *vol, char *name)
-{
-    int rc;
-
-    if (vol->pa_context != NULL)
-    {
-        rc = pa_context_errno (vol->pa_context);
-        g_warning ("%s: err:%d %s\n", name, rc, pa_strerror (rc));
-        pulse_disconnect (vol);
-    }
-    pulse_close (vol);
-}
-
-static void pa_cb_generic_success (pa_context *context, int success, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-    if (!success) DEBUG ("pulse success callback failed");
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-/* Generic operations
- * ------------------
- *
- * Access to the controller is via asynchronous functions which request
- * information or settings. Because the plugin itself runs synchronously,
- * all controller access functions are wrapped in code which waits for
- * them to complete. Returned values, where appropriate, are written to
- * the plugin global data structure via callbacks from the async functions.
- * The macros below are the boilerplate around each async call.
- */
-
-#define START_PA_OPERATION \
-    pa_operation *op; \
-    pa_threaded_mainloop_lock (vol->pa_mainloop);
-
-#define END_PA_OPERATION(name) \
-    if (!op) \
-    { \
-        pa_threaded_mainloop_unlock (vol->pa_mainloop); \
-        pa_error_handler (vol, name); \
-        return 0; \
-    } \
-    while (pa_operation_get_state (op) == PA_OPERATION_RUNNING) \
-    { \
-        pa_threaded_mainloop_wait (vol->pa_mainloop); \
-    } \
-    pa_operation_unref (op); \
-    pa_threaded_mainloop_unlock (vol->pa_mainloop); \
-    return 1;
-
-/* Event notification
- * ------------------
- *
- * Subscribe to and handle notifications from the Pulse server
- */
-
-static gboolean update_disp (gpointer userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-    volumealsa_update_display (vol);
-    return FALSE;
-}
-
-static void pa_cb_subscription (pa_context *pacontext, pa_subscription_event_type_t event, uint32_t idx, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    g_idle_add (update_disp, vol);
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static int pulse_set_subscription (VolumeALSAPlugin *vol)
-{
-    pa_context_set_subscribe_callback (vol->pa_context, &pa_cb_subscription, vol);
-    START_PA_OPERATION
-    op = pa_context_subscribe (vol->pa_context, PA_SUBSCRIPTION_MASK_ALL, &pa_cb_generic_success, vol);
-    END_PA_OPERATION ("subscribe")
-}
-
-/* Get defaults
- * ------------
- *
- * Updates the names of the current default sink and source in the plugin
- * global data structure.
- */
-
-static void pa_cb_get_default_sink_source (pa_context *context, const pa_server_info *i, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    DEBUG ("pa_cb_get_default_sink_source %s %s", i->default_sink_name, i->default_source_name);
-    if (vol->pa_default_sink) g_free (vol->pa_default_sink);
-    vol->pa_default_sink = g_strdup (i->default_sink_name);
-
-    if (vol->pa_default_source) g_free (vol->pa_default_source);
-    vol->pa_default_source = g_strdup (i->default_source_name);
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static int pulse_get_default_sink_source (VolumeALSAPlugin *vol)
-{
-    DEBUG ("pulse_get_default_sink_source");
-    START_PA_OPERATION
-    op = pa_context_get_server_info (vol->pa_context, &pa_cb_get_default_sink_source, vol);
-    END_PA_OPERATION ("get_server_info")
-}
-
-/* Updating card names in menu
- * ---------------------------
- *
- * The device select menu reads the list of audio cards from Pulse,
- * which are stored with their card names. After discovery, the sink
- * and source info is queried and used to replace the card name with
- * the relevant sink or source name.
- */
-
-static void replace_alsa_on_match (GtkWidget *widget, gpointer data)
-{
-    pa_sink_info *i = (pa_sink_info *) data;
-    const char *alsaname = pa_proplist_gets (i->proplist, "alsa.card_name");
-
-    if (!strcmp (alsaname, gtk_widget_get_name (widget)))
-    {
-        gtk_widget_set_name (widget, i->name);
-        gtk_widget_set_sensitive (widget, TRUE);
-        gtk_widget_set_tooltip_text (widget, NULL);
-    }
-}
-
-static void pa_cb_replace_cards_with_sinks (pa_context *context, const pa_sink_info *i, int eol, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    if (!eol)
-    {
-        DEBUG ("pa_cb_replace_cards_with_sinks");
-        const char *api = pa_proplist_gets (i->proplist, "device.api");
-        if (!g_strcmp0 (api, "alsa"))
-            gtk_container_foreach (GTK_CONTAINER (vol->outputs), replace_alsa_on_match, (void *) i);
-    }
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static int pulse_replace_cards_with_sinks (VolumeALSAPlugin *vol)
-{
-    DEBUG ("pulse_replace_cards_with_sinks");
-    START_PA_OPERATION
-    op = pa_context_get_sink_info_list (vol->pa_context, &pa_cb_replace_cards_with_sinks, vol);
-    END_PA_OPERATION ("get_sink_info_list")
-}
-
-static void pa_cb_replace_cards_with_sources (pa_context *context, const pa_source_info *i, int eol, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    if (!eol)
-    {
-        DEBUG ("pa_cb_replace_cards_with_sources");
-        const char *api = pa_proplist_gets (i->proplist, "device.api");
-        if (!g_strcmp0 (api, "alsa"))
-            gtk_container_foreach (GTK_CONTAINER (vol->inputs), replace_alsa_on_match, (void *) i);
-    }
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static int pulse_replace_cards_with_sources (VolumeALSAPlugin *vol)
-{
-    DEBUG ("pulse_replace_cards_with_sources");
-    START_PA_OPERATION
-    op = pa_context_get_source_info_list (vol->pa_context, &pa_cb_replace_cards_with_sources, vol);
-    END_PA_OPERATION ("get_source_info_list")
-}
-
-/* Changing default sink
- * ---------------------
- *
- * To change a sink, first the default sink is updated to the new sink.
- * Then, all currently active output streams are listed in pa_indices.
- * Finally, all streams listed in pa_indices are moved to the new sink.
- */
-
-static int pulse_set_default_sink (VolumeALSAPlugin *vol, const char *sinkname)
-{
-    DEBUG ("pulse_set_default_sink %s", sinkname);
-    START_PA_OPERATION
-    op = pa_context_set_default_sink (vol->pa_context, sinkname, &pa_cb_generic_success, vol);
-    END_PA_OPERATION ("set_default_sink")
-}
-
-static void pa_cb_get_output_streams (pa_context *context, const pa_sink_input_info *i, int eol, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    if (!eol)
-    {
-        DEBUG ("pa_cb_get_output_streams %d", i->index);
-        vol->pa_indices = g_list_append (vol->pa_indices, (void *) i->index);
-    }
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static int pulse_get_output_streams (VolumeALSAPlugin *vol)
-{
-    DEBUG ("pulse_get_output_streams");
-    START_PA_OPERATION
-    op = pa_context_get_sink_input_info_list (vol->pa_context, &pa_cb_get_output_streams, vol);
-    END_PA_OPERATION ("get_sink_input_info_list")
-}
-
-static int pulse_move_stream_to_default_sink (VolumeALSAPlugin *vol, int index)
-{
-    DEBUG ("pulse_move_stream_to_default_sink %d", index);
-    START_PA_OPERATION
-    op = pa_context_move_sink_input_by_name (vol->pa_context, index, vol->pa_default_sink, &pa_cb_generic_success, vol);
-    END_PA_OPERATION ("move_sink_input_by_name")
-}
-
-static void list_move_to_default_sink (gpointer data, gpointer userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    pulse_move_stream_to_default_sink (vol, (int) data);
-}
-
-static void pulse_change_sink (VolumeALSAPlugin *vol, const char *sinkname)
-{
-    DEBUG ("pulse_change_sink %s", sinkname);
-    if (vol->pa_default_sink) g_free (vol->pa_default_sink);
-    vol->pa_default_sink = g_strdup (sinkname);
-
-    vol->pa_indices = NULL;
-    pulse_set_default_sink (vol, sinkname);
-    pulse_get_output_streams (vol);
-    g_list_foreach (vol->pa_indices, list_move_to_default_sink, vol);
-    g_list_free (vol->pa_indices);
-    DEBUG ("pulse_change_sink done");
-}
-
-/* Changing default source
- * -----------------------
- *
- * As for changing sink.
- */
-
-static int pulse_set_default_source (VolumeALSAPlugin *vol, const char *sourcename)
-{
-    DEBUG ("pulse_set_default_source %s", sourcename);
-    START_PA_OPERATION
-    op = pa_context_set_default_source (vol->pa_context, sourcename, &pa_cb_generic_success, vol);
-    END_PA_OPERATION ("set_default_source")
-}
-
-static void pa_cb_get_input_streams (pa_context *context, const pa_source_output_info *i, int eol, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    if (!eol)
-    {
-        DEBUG ("pa_cb_get_input_streams %d", i->index);
-        vol->pa_indices = g_list_append (vol->pa_indices, (void *) i->index);
-    }
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static int pulse_get_input_streams (VolumeALSAPlugin *vol)
-{
-    DEBUG ("pulse_get_input_streams");
-    START_PA_OPERATION
-    op = pa_context_get_source_output_info_list (vol->pa_context, &pa_cb_get_input_streams, vol);
-    END_PA_OPERATION ("get_sink_input_info_list")
-}
-
-static int pulse_move_stream_to_default_source (VolumeALSAPlugin *vol, int index)
-{
-    DEBUG ("pulse_move_stream_to_default_source %d", index);
-    START_PA_OPERATION
-    op = pa_context_move_source_output_by_name (vol->pa_context, index, vol->pa_default_source, &pa_cb_generic_success, vol);
-    END_PA_OPERATION ("move_source_output_by_name")
-}
-
-static void list_move_to_default_source (gpointer data, gpointer userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    pulse_move_stream_to_default_source (vol, (int) data);
-}
-
-static void pulse_change_source (VolumeALSAPlugin *vol, const char *sourcename)
-{
-    DEBUG ("pulse_change_source %s", sourcename);
-    if (vol->pa_default_source) g_free (vol->pa_default_source);
-    vol->pa_default_source = g_strdup (sourcename);
-
-    vol->pa_indices = NULL;
-    pulse_set_default_source (vol, sourcename);
-    pulse_get_input_streams (vol);
-    g_list_foreach (vol->pa_indices, list_move_to_default_source, vol);
-    g_list_free (vol->pa_indices);
-    DEBUG ("pulse_change_source done");
-}
-
-/* Volume and mute control
- * -----------------------
- *
- * For get operations, the generic get_sink_info operation is called on the
- * current default sink; the values are written into the global structure
- * by the callbacks, and the top-level functions return them from there.
- * For set operations, the specific set_sink_xxx operations are called.
- */
-
-#define PA_VOL_SCALE 655    /* GTK volume scale is 0-100; PA scale is 0-65535 */
-
-static void pa_cb_get_current_vol_mute (pa_context *context, const pa_sink_info *i, int eol, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    if (!eol)
-    {
-        DEBUG ("pa_cb_get_current_vol_mute %d %d %d", i->volume.channels, i->volume.values[0], i->mute);
-        vol->pa_channels = i->volume.channels;
-        vol->pa_volume = i->volume.values[0];
-        vol->pa_mute = i->mute;
-    }
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static int pulse_get_current_vol_mute (VolumeALSAPlugin *vol)
-{
-    DEBUG ("pulse_get_current_vol_mute");
-    START_PA_OPERATION
-    op = pa_context_get_sink_info_by_name (vol->pa_context, vol->pa_default_sink, &pa_cb_get_current_vol_mute, vol);
-    END_PA_OPERATION ("get_sink_info_by_name")
-}
-
-static int pulse_get_volume (VolumeALSAPlugin *vol)
-{
-    pulse_get_current_vol_mute (vol);
-    return vol->pa_volume / PA_VOL_SCALE;
-}
-
-static int pulse_get_mute (VolumeALSAPlugin *vol)
-{
-    pulse_get_current_vol_mute (vol);
-    return vol->pa_mute;
-}
-
-static int pulse_set_volume (VolumeALSAPlugin *vol, int volume)
-{
-    pa_cvolume cvol;
-    cvol.channels = vol->pa_channels;
-    cvol.values[0] = volume * PA_VOL_SCALE;
-    cvol.values[1] = volume * PA_VOL_SCALE;
-
-    DEBUG ("pulse_set_volume %d", volume);
-    START_PA_OPERATION
-    op = pa_context_set_sink_volume_by_name (vol->pa_context, vol->pa_default_sink, &cvol, &pa_cb_generic_success, vol);
-    END_PA_OPERATION ("set_sink_volume_by_name")
-}
-
-static int pulse_set_mute (VolumeALSAPlugin *vol, int mute)
-{
-    DEBUG ("pulse_set_mute %d", mute);
-    START_PA_OPERATION
-    op = pa_context_set_sink_mute_by_name (vol->pa_context, vol->pa_default_sink, mute, &pa_cb_generic_success, vol);
-    END_PA_OPERATION ("set_sink_mute_by_name");
-}
-
 
 /* Bluetooth name remapping
  * ------------------------
@@ -2009,29 +1452,13 @@ static char *bluez_to_pa_card_name (char *bluez_name)
     return g_strdup_printf ("bluez_card.%02X_%02X_%02X_%02X_%02X_%02X", b1, b2, b3, b4, b5, b6);
 }
 
-static char *pa_sink_to_bluez_name (char *pa_name)
+static char *bluez_from_pa_name (char *pa_name)
 {
     unsigned int b1, b2, b3, b4, b5, b6;
 
     if (pa_name == NULL) return NULL;
-    if (sscanf (pa_name, "bluez_sink.%x_%x_%x_%x_%x_%x.a2dp_sink", &b1, &b2, &b3, &b4, &b5, &b6) != 6)
-    {
-        DEBUG ("PulseAudio sink name invalid : %s", pa_name);
-        return NULL;
-    }
-    return g_strdup_printf ("/org/bluez/hci0/dev_%02X_%02X_%02X_%02X_%02X_%02X", b1, b2, b3, b4, b5, b6);
-}
-
-static char *pa_source_to_bluez_name (char *pa_name)
-{
-    unsigned int b1, b2, b3, b4, b5, b6;
-
-    if (pa_name == NULL) return NULL;
-    if (sscanf (pa_name, "bluez_source.%x_%x_%x_%x_%x_%x.headset_head_unit", &b1, &b2, &b3, &b4, &b5, &b6) != 6)
-    {
-        DEBUG ("PulseAudio source name invalid : %s", pa_name);
-        return NULL;
-    }
+    if (strstr (pa_name, "bluez") == NULL) return NULL;
+    if (sscanf (strstr (pa_name, ".") + 1, "%x_%x_%x_%x_%x_%x", &b1, &b2, &b3, &b4, &b5, &b6) != 6) return NULL;
     return g_strdup_printf ("/org/bluez/hci0/dev_%02X_%02X_%02X_%02X_%02X_%02X", b1, b2, b3, b4, b5, b6);
 }
 
@@ -2047,223 +1474,6 @@ static int pa_bluez_device_same (const char *padev, const char *btdev)
 {
     if (strstr (btdev, "bluez") && strstr (padev, btdev + 20)) return 1;
     return 0;
-}
-
-/* Profiles
- * --------
- *
- * Under PA, cards have various profiles which control which sources and sinks
- * are available to the system. These are exposed through the profile setting
- * dialog.
- */
-
-static int pulse_set_profile (VolumeALSAPlugin *vol, const char *card, const char *profile)
-{
-    DEBUG ("pulse_set_profile %s %s", card, profile);
-    START_PA_OPERATION
-    op = pa_context_set_card_profile_by_name (vol->pa_context, card, profile, &pa_cb_generic_success, vol);
-    END_PA_OPERATION ("set_card_profile_by_name")
-}
-
-static void pa_cb_get_profile (pa_context *c, const pa_card_info *i, int eol, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    if (!eol)
-    {
-        DEBUG ("pulse get profile : %s", i->active_profile2->name);
-        if (vol->pa_profile) g_free (vol->pa_profile);
-        vol->pa_profile = g_strdup (i->active_profile2->name);
-    }
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static int pulse_get_profile (VolumeALSAPlugin *vol, const char *card)
-{
-    DEBUG ("pulse_get_profile %s", card);
-    START_PA_OPERATION
-    op = pa_context_get_card_info_by_name (vol->pa_context, card, &pa_cb_get_profile, vol);
-    END_PA_OPERATION ("get_card_info_by_name")
-}
-
-/* Profiles dialog
- * ---------------
- *
- * Populate the boxes on the profiles dialog with input, external output
- * and internal output devices.
- */
-
-static void profile_changed (GtkComboBox *combo, gpointer *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    const char *option;
-    GtkTreeIter iter;
-
-    gtk_combo_box_get_active_iter (combo, &iter);
-    gtk_tree_model_get (gtk_combo_box_get_model (combo), &iter, 0, &option, -1);
-    pulse_set_profile (vol, gtk_widget_get_name (GTK_WIDGET (combo)), option);
-}
-
-static void volumealsa_add_combo_to_profiles (VolumeALSAPlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *name, const char *label)
-{
-    GtkWidget *lbl, *comb;
-    GtkCellRenderer *rend;
-
-    lbl = gtk_label_new (label);
-    gtk_box_pack_start (GTK_BOX (dest), lbl, FALSE, FALSE, 5);
-
-    if (ls)
-    {
-        comb = gtk_combo_box_new_with_model (GTK_TREE_MODEL (ls));
-        gtk_widget_set_name (comb, name);
-        rend = gtk_cell_renderer_text_new ();
-        gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (comb), rend, FALSE);
-        gtk_cell_layout_add_attribute (GTK_CELL_LAYOUT (comb), rend, "text", 1);
-    }
-    else
-    {
-        comb = gtk_combo_box_text_new ();
-        gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (comb), _("Device not connected"));
-        gtk_widget_set_sensitive (comb, FALSE);
-    }
-    gtk_combo_box_set_active (GTK_COMBO_BOX (comb), sel);
-    gtk_box_pack_start (GTK_BOX (dest), comb, FALSE, FALSE, 5);
-
-    relocate_last_item (dest);
-
-    if (ls) g_signal_connect (comb, "changed", G_CALLBACK (profile_changed), vol);
-}
-
-static void pa_cb_add_devices_to_profile_dialog (pa_context *c, const pa_card_info *i, int eol, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    GtkListStore *ls;
-    int index = 0, sel;
-
-    if (!eol)
-    {
-        // loop through profiles, adding each to list store
-        ls = gtk_list_store_new (2, G_TYPE_STRING, G_TYPE_STRING);
-        pa_card_profile_info2 **profile = i->profiles2;
-        while (*profile)
-        {
-            if (*profile == i->active_profile2) sel = index;
-            gtk_list_store_insert_with_values (ls, NULL, index++, 0, (*profile)->name, 1, (*profile)->description, -1);
-            profile++;
-        }
-
-        if (!g_strcmp0 (pa_proplist_gets (i->proplist, "device.api"), "bluez"))
-            volumealsa_add_combo_to_profiles (vol, ls, vol->btprofiles, sel, i->name, pa_proplist_gets (i->proplist, "device.description"));
-        else
-        {
-            if (g_strcmp0 (pa_proplist_gets (i->proplist, "device.description"), "Built-in Audio"))
-                volumealsa_add_combo_to_profiles (vol, ls, vol->alsaprofiles, sel, i->name, volumealsa_device_display_name (vol, pa_proplist_gets (i->proplist, "alsa.card_name")));
-            else
-                volumealsa_add_combo_to_profiles (vol, ls, vol->intprofiles, sel, i->name, volumealsa_device_display_name (vol, pa_proplist_gets (i->proplist, "alsa.card_name")));
-        }
-    }
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static int pulse_add_devices_to_profile_dialog (VolumeALSAPlugin *vol)
-{
-    DEBUG ("pulse_add_devices_to_profile_dialog");
-    START_PA_OPERATION
-    op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_add_devices_to_profile_dialog, vol);
-    END_PA_OPERATION ("get_card_info_list")
-}
-
-/* Device menu
- * -----------
- *
- * Populate the device menu with input, external output and internal
- * output devices.
- */
-
-static gboolean card_has_port (const pa_card_info *i, pa_direction_t dir)
-{
-    pa_card_port_info **port = i->ports;
-    while (*port)
-    {
-        if ((*port)->direction == dir) return TRUE;
-        port++;
-    }
-    return FALSE;
-}
-
-static void pa_cb_get_info_inputs (pa_context *c, const pa_card_info *i, int eol, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    if (!eol)
-    {
-        if (card_has_port (i, PA_DIRECTION_INPUT))
-        {
-            const char *nam = pa_proplist_gets (i->proplist, "alsa.card_name");
-            DEBUG ("pa_cb_get_info_inputs %s", nam);
-            if (!vol->inputs) vol->inputs = gtk_menu_new ();
-            volumealsa_menu_item_add (vol, vol->inputs, nam, nam, FALSE, TRUE, G_CALLBACK (volumealsa_set_external_input));
-        }
-    }
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static void pa_cb_get_info_internal (pa_context *c, const pa_card_info *i, int eol, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    if (!eol)
-    {
-        if (!g_strcmp0 (pa_proplist_gets (i->proplist, "device.description"), "Built-in Audio"))
-        {
-            if (card_has_port (i, PA_DIRECTION_OUTPUT))
-            {
-                const char *nam = pa_proplist_gets (i->proplist, "alsa.card_name");
-                DEBUG ("pa_cb_get_info_internal %s", nam);
-                volumealsa_menu_item_add (vol, vol->outputs, volumealsa_device_display_name (vol, nam), nam, FALSE, FALSE, G_CALLBACK (volumealsa_set_external_output));
-            }
-        }
-    }
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static void pa_cb_get_info_external (pa_context *c, const pa_card_info *i, int eol, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    if (!eol)
-    {
-        if (g_strcmp0 (pa_proplist_gets (i->proplist, "device.description"), "Built-in Audio"))
-        {
-            if (card_has_port (i, PA_DIRECTION_OUTPUT))
-            {
-                const char *nam = pa_proplist_gets (i->proplist, "alsa.card_name");
-                DEBUG ("pa_cb_get_info_external %s", nam);
-                volumealsa_menu_item_add (vol, vol->outputs, nam, nam, FALSE, FALSE, G_CALLBACK (volumealsa_set_external_output));
-            }
-        }
-    }
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static int pulse_add_devices_to_menu (VolumeALSAPlugin *vol, gboolean input, gboolean internal)
-{
-    DEBUG ("pulse_add_devices_to_menu %d %d", input, internal);
-    START_PA_OPERATION
-    if (input)
-        op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_get_info_inputs, vol);
-    else if (internal)
-        op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_get_info_internal, vol);
-    else
-        op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_get_info_external, vol);
-    END_PA_OPERATION ("get_card_info_list")
 }
 
 /*----------------------------------------------------------------------------*/
@@ -2396,8 +1606,7 @@ static void volumealsa_destructor (gpointer user_data)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
 
-    pulse_disconnect (vol);
-    pulse_close (vol);
+    pulse_terminate (vol);
 
     /* If the dialog box is open, dismiss it. */
     if (vol->popup_window != NULL) gtk_widget_destroy (vol->popup_window);
@@ -2425,566 +1634,3 @@ LXPanelPluginInit fm_module_init_lxpanel_gtk =
 
 /* End of file */
 /*----------------------------------------------------------------------------*/
-
-
-
-
-
-
-
-/*----------------------------------------------------------------------------*/
-/* Options dialog                                                             */
-/*----------------------------------------------------------------------------*/
-
-#ifdef OPTIONS
-
-static void show_options (VolumeALSAPlugin *vol, snd_mixer_t *mixer, gboolean input, const char *devname)
-{
-    snd_mixer_elem_t *elem;
-    GtkWidget *slid, *box, *btn, *scr, *wid;
-    GtkObject *adj;
-    guint cols;
-    int swval;
-    char *lbl;
-
-    vol->options_play = NULL;
-    vol->options_capt = NULL;
-    vol->options_set = NULL;
-
-    // loop through elements, adding controls to relevant tabs
-    for (elem = snd_mixer_first_elem (mixer); elem != NULL; elem = snd_mixer_elem_next (elem))
-    {
-#if 0
-        printf ("Element %s %d %d %d %d %d\n",
-            snd_mixer_selem_get_name (elem),
-            snd_mixer_selem_is_active (elem),
-            snd_mixer_selem_has_playback_volume (elem),
-            snd_mixer_selem_has_playback_switch (elem),
-            snd_mixer_selem_has_capture_volume (elem),
-            snd_mixer_selem_has_capture_switch (elem));
-#endif
-        if (snd_mixer_selem_has_playback_volume (elem))
-        {
-            if (!vol->options_play) vol->options_play = gtk_hbox_new (FALSE, 5);
-            box = gtk_vbox_new (FALSE, 5);
-            gtk_box_pack_start (GTK_BOX (vol->options_play), box, FALSE, FALSE, 5);
-            gtk_box_pack_start (GTK_BOX (box), gtk_label_new (snd_mixer_selem_get_name (elem)), FALSE, FALSE, 5);
-            if (snd_mixer_selem_has_playback_switch (elem))
-            {
-                btn = gtk_check_button_new_with_label (_("Enable"));
-                gtk_widget_set_name (btn, snd_mixer_selem_get_name (elem));
-                snd_mixer_selem_get_playback_switch (elem, SND_MIXER_SCHN_MONO, &swval);
-                gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (btn), swval);
-                gtk_box_pack_end (GTK_BOX (box), btn, FALSE, FALSE, 5);
-                g_signal_connect (btn, "toggled", G_CALLBACK (playback_switch_toggled_event), elem);
-            }
-            adj = gtk_adjustment_new (50.0, 0.0, 100.0, 1.0, 0.0, 0.0);
-            slid = gtk_vscale_new (GTK_ADJUSTMENT (adj));
-            gtk_widget_set_name (slid, snd_mixer_selem_get_name (elem));
-            gtk_range_set_inverted (GTK_RANGE (slid), TRUE);
-            gtk_range_set_update_policy (GTK_RANGE (slid), GTK_UPDATE_DISCONTINUOUS);
-            gtk_range_set_value (GTK_RANGE (slid), get_normalized_volume (elem, FALSE));
-            gtk_widget_set_size_request (slid, 80, 150);
-            gtk_scale_set_draw_value (GTK_SCALE (slid), FALSE);
-            gtk_box_pack_start (GTK_BOX (box), slid, FALSE, FALSE, 0);
-            g_signal_connect (slid, "value-changed", G_CALLBACK (playback_range_change_event), elem);
-        }
-        else if (snd_mixer_selem_has_playback_switch (elem))
-        {
-            if (!vol->options_set) vol->options_set = gtk_vbox_new (FALSE, 5);
-            box = gtk_hbox_new (FALSE, 5);
-            lbl = g_strdup_printf (_("%s (Playback)"), snd_mixer_selem_get_name (elem));
-            gtk_box_pack_start (GTK_BOX (box), gtk_label_new (lbl), FALSE, FALSE, 5);
-            g_free (lbl);
-            btn = gtk_check_button_new ();
-            gtk_box_pack_end (GTK_BOX (box), btn, FALSE, FALSE, 5);
-            gtk_widget_set_name (btn, snd_mixer_selem_get_name (elem));
-            snd_mixer_selem_get_playback_switch (elem, SND_MIXER_SCHN_MONO, &swval);
-            gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (btn), swval);
-            gtk_box_pack_start (GTK_BOX (vol->options_set), box, FALSE, FALSE, 5);
-            g_signal_connect (btn, "toggled", G_CALLBACK (playback_switch_toggled_event), elem);
-        }
-
-        if (snd_mixer_selem_has_capture_volume (elem))
-        {
-            if (!vol->options_capt) vol->options_capt = gtk_hbox_new (FALSE, 5);
-            box = gtk_vbox_new (FALSE, 5);
-            gtk_box_pack_start (GTK_BOX (vol->options_capt), box, FALSE, FALSE, 5);
-            gtk_box_pack_start (GTK_BOX (box), gtk_label_new (snd_mixer_selem_get_name (elem)), FALSE, FALSE, 5);
-            if (snd_mixer_selem_has_capture_switch (elem))
-            {
-                btn = gtk_check_button_new_with_label (_("Enable"));
-                gtk_widget_set_name (btn, snd_mixer_selem_get_name (elem));
-                snd_mixer_selem_get_capture_switch (elem, SND_MIXER_SCHN_MONO, &swval);
-                gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (btn), swval);
-                gtk_box_pack_end (GTK_BOX (box), btn, FALSE, FALSE, 5);
-                g_signal_connect (btn, "toggled", G_CALLBACK (capture_switch_toggled_event), elem);
-            }
-            adj = gtk_adjustment_new (50.0, 0.0, 100.0, 1.0, 0.0, 0.0);
-            slid = gtk_vscale_new (GTK_ADJUSTMENT (adj));
-            gtk_widget_set_name (slid, snd_mixer_selem_get_name (elem));
-            gtk_range_set_inverted (GTK_RANGE (slid), TRUE);
-            gtk_range_set_update_policy (GTK_RANGE (slid), GTK_UPDATE_DISCONTINUOUS);
-            gtk_range_set_value (GTK_RANGE (slid), get_normalized_volume (elem, TRUE));
-            gtk_widget_set_size_request (slid, 80, 150);
-            gtk_scale_set_draw_value (GTK_SCALE (slid), FALSE);
-            gtk_box_pack_start (GTK_BOX (box), slid, FALSE, FALSE, 0);
-            g_signal_connect (slid, "value-changed", G_CALLBACK (capture_range_change_event), elem);
-        }
-        else if (snd_mixer_selem_has_capture_switch (elem))
-        {
-            if (!vol->options_set) vol->options_set = gtk_vbox_new (FALSE, 5);
-            box = gtk_hbox_new (FALSE, 5);
-            lbl = g_strdup_printf (_("%s (Capture)"), snd_mixer_selem_get_name (elem));
-            gtk_box_pack_start (GTK_BOX (box), gtk_label_new (lbl), FALSE, FALSE, 5);
-            g_free (lbl);
-            btn = gtk_check_button_new ();
-            gtk_box_pack_end (GTK_BOX (box), btn, FALSE, FALSE, 5);
-            gtk_widget_set_name (btn, snd_mixer_selem_get_name (elem));
-            snd_mixer_selem_get_capture_switch (elem, SND_MIXER_SCHN_MONO, &swval);
-            gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (btn), swval);
-            gtk_box_pack_start (GTK_BOX (vol->options_set), box, FALSE, FALSE, 5);
-            g_signal_connect (btn, "toggled", G_CALLBACK (capture_switch_toggled_event), elem);
-        }
-
-        if (snd_mixer_selem_is_enumerated (elem))
-        {
-            if (!vol->options_set) vol->options_set = gtk_vbox_new (FALSE, 5);
-            box = gtk_hbox_new (FALSE, 5);
-            if (snd_mixer_selem_is_enum_playback (elem) && !snd_mixer_selem_is_enum_capture (elem))
-                lbl = g_strdup_printf (_("%s (Playback)"), snd_mixer_selem_get_name (elem));
-            else if (snd_mixer_selem_is_enum_capture (elem) && !snd_mixer_selem_is_enum_playback (elem))
-                lbl = g_strdup_printf (_("%s (Capture)"), snd_mixer_selem_get_name (elem));
-            else
-                lbl = g_strdup_printf ("%s", snd_mixer_selem_get_name (elem));
-            gtk_box_pack_start (GTK_BOX (box), gtk_label_new (lbl), FALSE, FALSE, 5);
-            g_free (lbl);
-            btn = gtk_combo_box_text_new ();
-            gtk_box_pack_end (GTK_BOX (box), btn, FALSE, FALSE, 5);
-            gtk_widget_set_name (btn, snd_mixer_selem_get_name (elem));
-            int items = snd_mixer_selem_get_enum_items (elem);
-            for (int i = 0; i < items; i++)
-            {
-                char buffer[128];
-                snd_mixer_selem_get_enum_item_name (elem, i, 128, buffer);
-                gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (btn), buffer);
-            }
-            int sel;
-            snd_mixer_selem_get_enum_item (elem, SND_MIXER_SCHN_MONO, &sel);
-            gtk_combo_box_set_active (GTK_COMBO_BOX (btn), sel);
-            gtk_box_pack_start (GTK_BOX (vol->options_set), box, FALSE, FALSE, 5);
-            g_signal_connect (btn, "changed", G_CALLBACK (enum_changed_event), elem);
-        }
-    }
-
-    // create the window itself
-    vol->options_dlg = gtk_window_new (GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title (GTK_WINDOW (vol->options_dlg), input ? _("Input Device Options") : _("Output Device Options"));
-    gtk_window_set_position (GTK_WINDOW (vol->options_dlg), GTK_WIN_POS_CENTER);
-    gtk_window_set_default_size (GTK_WINDOW (vol->options_dlg), 400, 300);
-    gtk_container_set_border_width (GTK_CONTAINER (vol->options_dlg), 10);
-    gtk_window_set_icon_name (GTK_WINDOW (vol->options_dlg), "multimedia-volume-control");
-    g_signal_connect (vol->options_dlg, "delete-event", G_CALLBACK (options_wd_close_handler), vol);
-
-    box = gtk_vbox_new (FALSE, 5);
-    gtk_container_add (GTK_CONTAINER (vol->options_dlg), box);
-
-    char *dev = g_strdup_printf (_("%s Device : %s"), input ? _("Input") : _("Output"), devname);
-    wid = gtk_label_new (dev);
-    gtk_misc_set_alignment (GTK_MISC (wid), 0.0, 0.5);
-    gtk_box_pack_start (GTK_BOX (box), wid, FALSE, FALSE, 5);
-    g_free (dev);
-
-    if (!vol->options_play && !vol->options_capt && !vol->options_set)
-    {
-        gtk_box_pack_start (GTK_BOX (box), gtk_label_new (_("No controls available on this device")), TRUE, TRUE, 0);
-    }
-    else
-    {
-        wid = gtk_notebook_new ();
-        if (vol->options_play)
-        {
-            scr = gtk_scrolled_window_new (NULL, NULL);
-            gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scr), GTK_POLICY_AUTOMATIC, GTK_POLICY_NEVER);
-            gtk_scrolled_window_add_with_viewport (GTK_SCROLLED_WINDOW (scr), vol->options_play);
-            gtk_notebook_append_page (GTK_NOTEBOOK (wid), scr, gtk_label_new (_("Playback")));
-        }
-        if (vol->options_capt)
-        {
-            scr = gtk_scrolled_window_new (NULL, NULL);
-            gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scr), GTK_POLICY_AUTOMATIC, GTK_POLICY_NEVER);
-            gtk_scrolled_window_add_with_viewport (GTK_SCROLLED_WINDOW (scr), vol->options_capt);
-            gtk_notebook_append_page (GTK_NOTEBOOK (wid), scr, gtk_label_new (_("Capture")));
-        }
-        if (vol->options_set)
-        {
-            scr = gtk_scrolled_window_new (NULL, NULL);
-            gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scr), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-            gtk_scrolled_window_add_with_viewport (GTK_SCROLLED_WINDOW (scr), vol->options_set);
-            gtk_notebook_append_page (GTK_NOTEBOOK (wid), scr, gtk_label_new (_("Options")));
-        }
-        gtk_box_pack_start (GTK_BOX (box), wid, FALSE, FALSE, 5);
-    }
-
-    wid = gtk_hbutton_box_new ();
-    gtk_button_box_set_layout (GTK_BUTTON_BOX (wid), GTK_BUTTONBOX_END);
-    gtk_box_pack_start (GTK_BOX (box), wid, FALSE, FALSE, 5);
-
-    btn = gtk_button_new_from_stock (GTK_STOCK_OK);
-    g_signal_connect (btn, "clicked", G_CALLBACK (options_ok_handler), vol);
-    gtk_box_pack_end (GTK_BOX (wid), btn, FALSE, FALSE, 5);
-
-    gtk_widget_show_all (vol->options_dlg);
-}
-
-static void show_alsa_options (VolumeALSAPlugin *vol, gboolean input)
-{
-    snd_mixer_t *mixer;
-
-    if (input)
-        pulse_get_source_alsa_device (vol);
-    else
-        pulse_get_sink_alsa_device (vol);
-
-    vol->mixer = NULL;
-
-    // create and attach the mixer
-    if (snd_mixer_open (&mixer, 0)) return;
-
-    if (snd_mixer_attach (mixer, vol->pa_alsadev))
-    {
-        snd_mixer_close (mixer);
-        return;
-    }
-
-    if (snd_mixer_selem_register (mixer, NULL, NULL) || snd_mixer_load (mixer))
-    {
-        snd_mixer_detach (mixer, vol->pa_alsadev);
-        snd_mixer_close (mixer);
-        return;
-    }
-
-    vol->mixer = mixer;
-
-    if (vol->mixer)
-        show_options (vol, vol->mixer, input, volumealsa_device_display_name (vol, vol->pa_alsaname));
-}
-
-static void update_options (VolumeALSAPlugin *vol)
-{
-    snd_mixer_elem_t *elem;
-    guint pcol = 0, ccol = 0;
-    GtkWidget *wid;
-    int swval;
-
-    for (elem = snd_mixer_first_elem (vol->mixer); elem != NULL; elem = snd_mixer_elem_next (elem))
-    {
-        if (snd_mixer_selem_has_playback_volume (elem))
-        {
-            wid = find_box_child (vol->options_play, GTK_TYPE_VSCALE, snd_mixer_selem_get_name (elem));
-            if (wid)
-            {
-                g_signal_handlers_block_by_func (wid, playback_range_change_event, elem);
-                gtk_range_set_value (GTK_RANGE (wid), get_normalized_volume (elem, FALSE));
-                g_signal_handlers_unblock_by_func (wid, playback_range_change_event, elem);
-            }
-        }
-        if (snd_mixer_selem_has_playback_switch (elem))
-        {
-            wid = find_box_child (vol->options_play, GTK_TYPE_CHECK_BUTTON, snd_mixer_selem_get_name (elem));
-            if (!wid) wid = find_box_child (vol->options_set, GTK_TYPE_CHECK_BUTTON, snd_mixer_selem_get_name (elem));
-            if (wid)
-            {
-                snd_mixer_selem_get_playback_switch (elem, SND_MIXER_SCHN_MONO, &swval);
-                g_signal_handlers_block_by_func (wid, playback_switch_toggled_event, elem);
-                gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (wid), swval);
-                g_signal_handlers_unblock_by_func (wid, playback_switch_toggled_event, elem);
-            }
-        }
-        if (snd_mixer_selem_has_capture_volume (elem))
-        {
-            wid = find_box_child (vol->options_capt, GTK_TYPE_VSCALE, snd_mixer_selem_get_name (elem));
-            {
-                g_signal_handlers_block_by_func (wid, capture_range_change_event, elem);
-                gtk_range_set_value (GTK_RANGE (wid), get_normalized_volume (elem, TRUE));
-                g_signal_handlers_unblock_by_func (wid, capture_range_change_event, elem);
-            }
-        }
-        if (snd_mixer_selem_has_capture_switch (elem))
-        {
-            wid = find_box_child (vol->options_capt, GTK_TYPE_CHECK_BUTTON, snd_mixer_selem_get_name (elem));
-            if (!wid) wid = find_box_child (vol->options_set, GTK_TYPE_CHECK_BUTTON, snd_mixer_selem_get_name (elem));
-            if (wid)
-            {
-                snd_mixer_selem_get_capture_switch (elem, SND_MIXER_SCHN_MONO, &swval);
-                g_signal_handlers_block_by_func (wid, capture_switch_toggled_event, elem);
-                gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (wid), swval);
-                g_signal_handlers_unblock_by_func (wid, capture_switch_toggled_event, elem);
-            }
-        }
-        if (snd_mixer_selem_is_enumerated (elem))
-        {
-            wid = find_box_child (vol->options_set, GTK_TYPE_COMBO_BOX_TEXT, snd_mixer_selem_get_name (elem));
-            if (wid)
-            {
-                snd_mixer_selem_get_enum_item (elem, SND_MIXER_SCHN_MONO, &swval);
-                g_signal_handlers_block_by_func (wid, enum_changed_event, elem);
-                gtk_combo_box_set_active (GTK_COMBO_BOX (wid), swval);
-                g_signal_handlers_unblock_by_func (wid, enum_changed_event, elem);
-            }
-        }
-    }
-}
-
-static void close_options (VolumeALSAPlugin *vol)
-{
-    snd_mixer_detach (vol->mixer, vol->pa_alsadev);
-    snd_mixer_close (vol->mixer);
-    gtk_widget_destroy (vol->options_dlg);
-    vol->options_dlg = NULL;
-}
-
-static void options_ok_handler (GtkButton *button, gpointer *user_data)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
-
-    close_options (vol);
-}
-
-static gboolean options_wd_close_handler (GtkWidget *wid, GdkEvent *event, gpointer user_data)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
-
-    close_options (vol);
-    return TRUE;
-}
-
-static void playback_range_change_event (GtkRange *range, gpointer user_data)
-{
-    snd_mixer_elem_t *elem = (snd_mixer_elem_t *) user_data;
-
-    int volume = (int) gtk_range_get_value (range);
-    set_normalized_volume (elem, volume, volume - get_normalized_volume (elem, FALSE), FALSE);
-
-    g_signal_handlers_block_by_func (range, playback_range_change_event, elem);
-    gtk_range_set_value (range, get_normalized_volume (elem, FALSE));
-    g_signal_handlers_unblock_by_func (range, playback_range_change_event, elem);
-}
-
-static void capture_range_change_event (GtkRange *range, gpointer user_data)
-{
-    snd_mixer_elem_t *elem = (snd_mixer_elem_t *) user_data;
-
-    int volume = (int) gtk_range_get_value (range);
-    set_normalized_volume (elem, volume, volume - get_normalized_volume (elem, TRUE), TRUE);
-
-    g_signal_handlers_block_by_func (range, capture_range_change_event, elem);
-    gtk_range_set_value (range, get_normalized_volume (elem, TRUE));
-    g_signal_handlers_unblock_by_func (range, capture_range_change_event, elem);
-}
-
-static void playback_switch_toggled_event (GtkToggleButton *togglebutton, gpointer user_data)
-{
-    snd_mixer_elem_t *elem = (snd_mixer_elem_t *) user_data;
-
-    snd_mixer_selem_set_playback_switch_all (elem, gtk_toggle_button_get_active (togglebutton));
-}
-
-static void capture_switch_toggled_event (GtkToggleButton *togglebutton, gpointer user_data)
-{
-    snd_mixer_elem_t *elem = (snd_mixer_elem_t *) user_data;
-
-    snd_mixer_selem_set_capture_switch_all (elem, gtk_toggle_button_get_active (togglebutton));
-}
-
-static void enum_changed_event (GtkComboBox *combo, gpointer *user_data)
-{
-    snd_mixer_elem_t *elem = (snd_mixer_elem_t *) user_data;
-
-    snd_mixer_selem_set_enum_item (elem, SND_MIXER_SCHN_MONO, gtk_combo_box_get_active (combo));
-}
-
-static GtkWidget *find_box_child (GtkWidget *container, gint type, const char *name)
-{
-    GList *l, *list = gtk_container_get_children (GTK_CONTAINER (container));
-    for (l = list; l; l = l->next)
-    {
-        GList *m, *mist = gtk_container_get_children (GTK_CONTAINER (l->data));
-        for (m = mist; m; m = m->next)
-        {
-            if (G_OBJECT_TYPE (m->data) == type && !g_strcmp0 (name, gtk_widget_get_name (m->data)))
-                return m->data;
-            if (G_OBJECT_TYPE (m->data) == GTK_TYPE_HBUTTON_BOX)
-            {
-                GList *n, *nist = gtk_container_get_children (GTK_CONTAINER (m->data));
-                for (n = nist; n; n = n->next)
-                {
-                    if (G_OBJECT_TYPE (n->data) == type && !g_strcmp0 (name, gtk_widget_get_name (n->data)))
-                        return n->data;
-                }
-            }
-        }
-    }
-    return NULL;
-}
-
-#ifdef __UCLIBC__
-#define exp10(x) (exp((x) * log(10)))
-#endif
-
-static long lrint_dir (double x, int dir)
-{
-    if (dir > 0) return lrint (ceil(x));
-    else if (dir < 0) return lrint (floor(x));
-    else return lrint (x);
-}
-
-static int get_normalized_volume (snd_mixer_elem_t *elem, gboolean capture)
-{
-    long min, max, lvalue, rvalue;
-    double normalized, min_norm;
-    int err;
-
-    err = capture ? snd_mixer_selem_get_capture_dB_range (elem, &min, &max) : snd_mixer_selem_get_playback_dB_range (elem, &min, &max);
-    if (err < 0 || min >= max)
-    {
-        err = capture ? snd_mixer_selem_get_capture_volume_range (elem, &min, &max) : snd_mixer_selem_get_playback_volume_range (elem, &min, &max);
-        if (err < 0 || min == max) return 0;
-
-        err = capture ? snd_mixer_selem_get_capture_volume (elem, SND_MIXER_SCHN_FRONT_LEFT, &lvalue) : snd_mixer_selem_get_playback_volume (elem, SND_MIXER_SCHN_FRONT_LEFT, &lvalue);
-        if (err < 0) return 0;
-
-        err = capture ? snd_mixer_selem_get_capture_volume (elem, SND_MIXER_SCHN_FRONT_RIGHT, &rvalue) : snd_mixer_selem_get_playback_volume (elem, SND_MIXER_SCHN_FRONT_RIGHT, &rvalue);
-        if (err < 0) return 0;
-
-        lvalue += rvalue;
-        lvalue >>= 1;
-        lvalue -= min;
-        lvalue *= 100;
-        lvalue /= (max - min);
-        return (int) lvalue;
-    }
-
-    err = capture ? snd_mixer_selem_get_capture_dB (elem, SND_MIXER_SCHN_FRONT_LEFT, &lvalue) : snd_mixer_selem_get_playback_dB (elem, SND_MIXER_SCHN_FRONT_LEFT, &lvalue);
-    if (err < 0) return 0;
-
-    err = capture ? snd_mixer_selem_get_capture_dB (elem, SND_MIXER_SCHN_FRONT_RIGHT, &rvalue) : snd_mixer_selem_get_playback_dB (elem, SND_MIXER_SCHN_FRONT_RIGHT, &rvalue);
-    if (err < 0) return 0;
-
-    lvalue += rvalue;
-    lvalue >>= 1;
-
-    if (max - min <= 2400)
-    {
-        lvalue -= min;
-        lvalue *= 100;
-        lvalue /= (max - min);
-        return (int) lvalue;
-    }
-
-    normalized = exp10 ((lvalue - max) / 6000.0);
-    if (min != SND_CTL_TLV_DB_GAIN_MUTE)
-    {
-        min_norm = exp10 ((min - max) / 6000.0);
-        normalized = (normalized - min_norm) / (1 - min_norm);
-    }
-
-    return (int) round (normalized * 100);
-}
-
-static int set_normalized_volume (snd_mixer_elem_t *elem, int volume, int dir, gboolean capture)
-{
-    long min, max, value;
-    double min_norm;
-    int err;
-    double vol_perc = (double) volume / 100;
-
-    err = capture ? snd_mixer_selem_get_capture_dB_range (elem, &min, &max) : snd_mixer_selem_get_playback_dB_range (elem, &min, &max);
-    if (err < 0 || min >= max)
-    {
-        err = capture ? snd_mixer_selem_get_capture_volume_range (elem, &min, &max) : snd_mixer_selem_get_playback_volume_range (elem, &min, &max);
-        if (err < 0) return err;
-
-        value = lrint_dir (vol_perc * (max - min), dir) + min;
-        return capture ? snd_mixer_selem_set_capture_volume_all (elem, value) : snd_mixer_selem_set_playback_volume_all (elem, value);
-    }
-
-    if (max - min <= 2400)
-    {
-        value = lrint_dir (vol_perc * (max - min), dir) + min;
-        if (dir == 0) dir = 1;  // dir = 0 seems to round down...
-        return capture ? snd_mixer_selem_set_capture_dB_all (elem, value, dir) : snd_mixer_selem_set_playback_dB_all (elem, value, dir);
-    }
-
-    if (min != SND_CTL_TLV_DB_GAIN_MUTE)
-    {
-        min_norm = exp10 ((min - max) / 6000.0);
-        vol_perc = vol_perc * (1 - min_norm) + min_norm;
-    }
-    value = lrint_dir (6000.0 * log10 (vol_perc), dir) + max;
-    return capture ? snd_mixer_selem_set_capture_dB_all (elem, value, dir) : snd_mixer_selem_set_playback_dB_all (elem, value, dir);
-}
-
-static void volumealsa_open_config_dialog (GtkWidget *widget, VolumeALSAPlugin *vol)
-{
-    gtk_menu_popdown (GTK_MENU (vol->menu_popup));
-    show_alsa_options (vol, FALSE);
-}
-
-static void volumealsa_open_input_config_dialog (GtkWidget *widget, VolumeALSAPlugin *vol)
-{
-    gtk_menu_popdown (GTK_MENU (vol->menu_popup));
-    show_alsa_options (vol, TRUE);
-}
-
-static void pa_cb_get_alsa_sink (pa_context *context, const pa_sink_info *i, int eol, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    if (!eol)
-    {
-        if (!g_strcmp0 (pa_proplist_gets (i->proplist, "device.api"), "bluez"))
-            vol->pa_alsadev = g_strdup ("bluealsa");
-        else
-            vol->pa_alsadev = g_strdup_printf ("hw:%s", pa_proplist_gets (i->proplist, "alsa.card"));
-        vol->pa_alsaname = g_strdup (pa_proplist_gets (i->proplist, "alsa.card_name"));
-    }
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static int pulse_get_sink_alsa_device (VolumeALSAPlugin *vol)
-{
-    START_PA_OPERATION
-    op = pa_context_get_sink_info_by_name (vol->pa_context, vol->pa_default_sink, &pa_cb_get_alsa_sink, vol);
-    END_PA_OPERATION ("get_sink_info_by_name")
-}
-
-static void pa_cb_get_alsa_source (pa_context *context, const pa_source_info *i, int eol, void *userdata)
-{
-    VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-
-    if (!eol)
-    {
-        if (!g_strcmp0 (pa_proplist_gets (i->proplist, "device.api"), "bluez"))
-            vol->pa_alsadev = g_strdup ("bluealsa");
-        else
-            vol->pa_alsadev = g_strdup_printf ("hw:%s", pa_proplist_gets (i->proplist, "alsa.card"));
-        vol->pa_alsaname = g_strdup (pa_proplist_gets (i->proplist, "alsa.card_name"));
-    }
-
-    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
-}
-
-static int pulse_get_source_alsa_device (VolumeALSAPlugin *vol)
-{
-    START_PA_OPERATION
-    op = pa_context_get_source_info_by_name (vol->pa_context, vol->pa_default_source, &pa_cb_get_alsa_source, vol);
-    END_PA_OPERATION ("get_source_info_by_name")
-}
-
-#endif
-
-
-
-
