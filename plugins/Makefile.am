@@ -13,9 +13,10 @@ EXTRA_LTLIBRARIES = \
 
 pkglibdir = $(libdir)/lxpanel/plugins
 
-# volumealsabt
+# volumepulse
 volumepulse_la_SOURCES = \
-	volumepulse/volumepulse.c
+	volumepulse/volumepulse.c \
+	volumepulse/pulse.c
 
 volumepulse_la_CFLAGS = \
 	-I$(top_srcdir) \
@@ -29,7 +30,6 @@ volumepulse_la_CFLAGS = \
 volumepulse_la_LDFLAGS = \
 	$(PACKAGE_LIBS) \
 	-module @LXPANEL_MODULE@ \
-	-lasound \
 	-lpulse \
 	-lxml2
 
