@@ -202,7 +202,7 @@ static void show_profiles (VolumeALSAPlugin *vol);
 static void close_profiles (VolumeALSAPlugin *vol);
 static void profiles_ok_handler (GtkButton *button, gpointer *user_data);
 static gboolean profiles_wd_close_handler (GtkWidget *wid, GdkEvent *event, gpointer user_data);
-static void profile_changed_handler (GtkComboBox *combo, gpointer *userdata);
+static void profile_changed (GtkComboBox *combo, gpointer *userdata);
 static void relocate_item (GtkWidget *box);
 
 /* PulseAudio */
@@ -232,8 +232,8 @@ static char *pa_sink_to_bluez_name (char *pa_name);
 static char *pa_source_to_bluez_name (char *pa_name);
 static int pa_bt_sink_source_compare (char *sink, char *source);
 static int pa_bluez_device_same (const char *padev, const char *btdev);
-static int pulse_set_profile (VolumeALSAPlugin *vol, char *card, char *profile);
-static int pulse_get_profile (VolumeALSAPlugin *vol, char *card);
+static int pulse_set_profile (VolumeALSAPlugin *vol, const char *card, const char *profile);
+static int pulse_get_profile (VolumeALSAPlugin *vol, const char *card);
 static int pulse_add_devices_to_profile_dialog (VolumeALSAPlugin *vol);
 static int pulse_add_devices_to_menu (VolumeALSAPlugin *vol, gboolean input, gboolean internal);
 
@@ -2063,7 +2063,7 @@ static int pa_bluez_device_same (const char *padev, const char *btdev)
  * dialog.
  */
 
-static int pulse_set_profile (VolumeALSAPlugin *vol, char *card, char *profile)
+static int pulse_set_profile (VolumeALSAPlugin *vol, const char *card, const char *profile)
 {
     DEBUG ("pulse_set_profile %s %s", card, profile);
     START_PA_OPERATION
@@ -2085,7 +2085,7 @@ static void pa_cb_get_profile (pa_context *c, const pa_card_info *i, int eol, vo
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
-static int pulse_get_profile (VolumeALSAPlugin *vol, char *card)
+static int pulse_get_profile (VolumeALSAPlugin *vol, const char *card)
 {
     DEBUG ("pulse_get_profile %s", card);
     START_PA_OPERATION
@@ -2093,68 +2093,73 @@ static int pulse_get_profile (VolumeALSAPlugin *vol, char *card)
     END_PA_OPERATION ("get_card_info_by_name")
 }
 
-/* Profiles dialog */
+/* Profiles dialog
+ * ---------------
+ *
+ * Populate the boxes on the profiles dialog with input, external output
+ * and internal output devices.
+ */
 
-static void profile_changed_handler (GtkComboBox *combo, gpointer *userdata)
+static void profile_changed (GtkComboBox *combo, gpointer *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
-    char *option;
+
+    const char *option;
     GtkTreeIter iter;
-    GtkTreeModel *model = gtk_combo_box_get_model (combo);
+    GtkTreeModel *model;
+
+    model = gtk_combo_box_get_model (combo);
     gtk_combo_box_get_active_iter (combo, &iter);
     gtk_tree_model_get (model, &iter, 0, &option, -1);
-    pulse_set_profile (vol, (char *) gtk_widget_get_name (GTK_WIDGET (combo)), option);
+    pulse_set_profile (vol, gtk_widget_get_name (GTK_WIDGET (combo)), option);
 }
 
 static void pa_cb_add_devices_to_profile_dialog (pa_context *c, const pa_card_info *i, int eol, void *userdata)
 {
-    GtkWidget *btn;
-    GtkListStore *ls = gtk_list_store_new (2, G_TYPE_STRING, G_TYPE_STRING);
-    GtkCellRenderer *rend = gtk_cell_renderer_text_new ();
-    GtkTreeIter iter;
-    int index;
-
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
+
+    GtkWidget *lbl, *comb, *dest;
+    GtkListStore *ls;
+    GtkCellRenderer *rend;
+    GtkTreeIter iter;
+
     if (!eol)
     {
-        btn = gtk_combo_box_new_with_model (GTK_TREE_MODEL (ls));
-        gtk_widget_set_name (GTK_WIDGET (btn), i->name);
-        gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (btn), rend, FALSE);
-        gtk_cell_layout_add_attribute (GTK_CELL_LAYOUT (btn), rend, "text", 1);
+        ls = gtk_list_store_new (2, G_TYPE_STRING, G_TYPE_STRING);
+        comb = gtk_combo_box_new_with_model (GTK_TREE_MODEL (ls));
+        gtk_widget_set_name (GTK_WIDGET (comb), i->name);
+        rend = gtk_cell_renderer_text_new ();
+        gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (comb), rend, FALSE);
+        gtk_cell_layout_add_attribute (GTK_CELL_LAYOUT (comb), rend, "text", 1);
+
+        // loop through profiles, adding each to list store
         pa_card_profile_info2 **profile = i->profiles2;
-        index = 0;
         while (*profile)
         {
-            gtk_list_store_insert_with_values (ls, &iter, index++, 0, (*profile)->name, 1, (*profile)->description, -1);
-            if (*profile == i->active_profile2) gtk_combo_box_set_active_iter (GTK_COMBO_BOX (btn), &iter);
+            gtk_list_store_append (ls, &iter);
+            gtk_list_store_set (ls, &iter, 0, (*profile)->name, 1, (*profile)->description, -1);
+            if (*profile == i->active_profile2) gtk_combo_box_set_active_iter (GTK_COMBO_BOX (comb), &iter);
             profile++;
-            index++;
         }
-        g_signal_connect (btn, "changed", G_CALLBACK (profile_changed_handler), vol);
+        g_signal_connect (comb, "changed", G_CALLBACK (profile_changed), vol);
 
         if (!g_strcmp0 (pa_proplist_gets (i->proplist, "device.api"), "bluez"))
         {
-            gtk_box_pack_start (GTK_BOX (vol->btprofiles), gtk_label_new (pa_proplist_gets (i->proplist, "device.description")), FALSE, FALSE, 5);
-            gtk_box_pack_start (GTK_BOX (vol->btprofiles), btn, FALSE, FALSE, 5);
-            relocate_item (vol->btprofiles);
+            dest = vol->btprofiles;
+            lbl = gtk_label_new (pa_proplist_gets (i->proplist, "device.description"));
         }
         else
         {
-            const char *name = pa_proplist_gets (i->proplist, "alsa.card_name");
-
             if (g_strcmp0 (pa_proplist_gets (i->proplist, "device.description"), "Built-in Audio"))
-            {
-                gtk_box_pack_start (GTK_BOX (vol->alsaprofiles), gtk_label_new (volumealsa_device_display_name (vol, name)), FALSE, FALSE, 5);
-                gtk_box_pack_start (GTK_BOX (vol->alsaprofiles), btn, FALSE, FALSE, 5);
-                relocate_item (vol->alsaprofiles);
-            }
+                dest = vol->alsaprofiles;
             else
-            {
-                gtk_box_pack_start (GTK_BOX (vol->intprofiles), gtk_label_new (volumealsa_device_display_name (vol, name)), FALSE, FALSE, 5);
-                gtk_box_pack_start (GTK_BOX (vol->intprofiles), btn, FALSE, FALSE, 5);
-                relocate_item (vol->intprofiles);
-            }
+                dest = vol->intprofiles;
+            lbl = gtk_label_new (volumealsa_device_display_name (vol, pa_proplist_gets (i->proplist, "alsa.card_name")));
         }
+
+        gtk_box_pack_start (GTK_BOX (dest), lbl, FALSE, FALSE, 5);
+        gtk_box_pack_start (GTK_BOX (dest), comb, FALSE, FALSE, 5);
+        relocate_item (dest);
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
