@@ -2180,25 +2180,28 @@ static int pulse_add_devices_to_profile_dialog (VolumeALSAPlugin *vol)
  * output devices.
  */
 
+static gboolean card_has_port (const pa_card_info *i, pa_direction_t dir)
+{
+    pa_card_port_info **port = i->ports;
+    while (*port)
+    {
+        if ((*port)->direction == dir) return TRUE;
+        port++;
+    }
+    return FALSE;
+}
+
 static void pa_cb_get_info_inputs (pa_context *c, const pa_card_info *i, int eol, void *userdata)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) userdata;
 
     if (!eol)
     {
-        gboolean input = FALSE;
-        pa_card_port_info **port = i->ports;
-        while (*port)
+        if (card_has_port (i, PA_DIRECTION_INPUT))
         {
-            if ((*port)->direction == PA_DIRECTION_INPUT) input = TRUE;
-            port++;
-        }
-
-        if (input)
-        {
-            if (!vol->inputs) vol->inputs = gtk_menu_new ();
             const char *nam = pa_proplist_gets (i->proplist, "alsa.card_name");
             DEBUG ("pa_cb_get_info_inputs %s", nam);
+            if (!vol->inputs) vol->inputs = gtk_menu_new ();
             volumealsa_menu_item_add (vol, vol->inputs, nam, nam, FALSE, TRUE, G_CALLBACK (volumealsa_set_external_input));
         }
     }
@@ -2214,15 +2217,7 @@ static void pa_cb_get_info_internal (pa_context *c, const pa_card_info *i, int e
     {
         if (!g_strcmp0 (pa_proplist_gets (i->proplist, "device.description"), "Built-in Audio"))
         {
-            gboolean output = FALSE;
-            pa_card_port_info **port = i->ports;
-            while (*port)
-            {
-                if ((*port)->direction == PA_DIRECTION_OUTPUT) output = TRUE;
-                port++;
-            }
-
-            if (output)
+            if (card_has_port (i, PA_DIRECTION_OUTPUT))
             {
                 const char *nam = pa_proplist_gets (i->proplist, "alsa.card_name");
                 DEBUG ("pa_cb_get_info_internal %s", nam);
@@ -2242,15 +2237,7 @@ static void pa_cb_get_info_external (pa_context *c, const pa_card_info *i, int e
     {
         if (g_strcmp0 (pa_proplist_gets (i->proplist, "device.description"), "Built-in Audio"))
         {
-            gboolean output = FALSE;
-            pa_card_port_info **port = i->ports;
-            while (*port)
-            {
-                if ((*port)->direction == PA_DIRECTION_OUTPUT) output = TRUE;
-                port++;
-            }
-
-            if (output)
+            if (card_has_port (i, PA_DIRECTION_OUTPUT))
             {
                 const char *nam = pa_proplist_gets (i->proplist, "alsa.card_name");
                 DEBUG ("pa_cb_get_info_external %s", nam);
