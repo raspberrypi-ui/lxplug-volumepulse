@@ -294,8 +294,8 @@ static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, co
             /* Reconnect the current Bluetooth audio device */
             if (vol->bt_conname) g_free (vol->bt_conname);
             if (vol->bt_reconname) g_free (vol->bt_reconname);
-            if (device) vol->bt_conname = device;
-            else if (idevice) vol->bt_conname = idevice;
+            if (device) vol->bt_conname = g_strdup (device);
+            else if (idevice) vol->bt_conname = g_strdup (idevice);
 
             if (device && idevice && g_strcmp0 (device, idevice)) vol->bt_reconname = idevice;
             else vol->bt_reconname = NULL;
