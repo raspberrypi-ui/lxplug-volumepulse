@@ -46,11 +46,8 @@ static gboolean pa_card_has_port (const pa_card_info *i, pa_direction_t dir);
 /* Functions in volumepulse.c needed here */
 
 extern gboolean volumepulse_update_disp_cb (gpointer userdata);
-extern GtkWidget *volumepulse_add_item_to_menu (VolumePulsePlugin *vol, GtkWidget *menu, const char *label, const char *name, gboolean enabled, gboolean input, GCallback cb);
-extern void volumepulse_add_combo_to_profiles (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *name, const char *label);
-extern const char *volumepulse_device_display_name (VolumePulsePlugin *vol, const char *name);
-extern void volumepulse_set_external_output (GtkWidget *widget, VolumePulsePlugin *vol);
-extern void volumepulse_set_external_input (GtkWidget *widget, VolumePulsePlugin *vol);
+extern void volumepulse_add_item_to_menu (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input);
+extern void volumepulse_add_combo_to_profiles (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name);
 
 /*----------------------------------------------------------------------------*/
 /* PulseAudio controller                                                      */
@@ -597,13 +594,13 @@ static void pa_cb_add_devices_to_profile_dialog (pa_context *c, const pa_card_in
         }
 
         if (!g_strcmp0 (pa_proplist_gets (i->proplist, "device.api"), "bluez"))
-            volumepulse_add_combo_to_profiles (vol, ls, vol->btprofiles, sel, i->name, pa_proplist_gets (i->proplist, "device.description"));
+            volumepulse_add_combo_to_profiles (vol, ls, vol->btprofiles, sel, pa_proplist_gets (i->proplist, "device.description"), i->name);
         else
         {
             if (g_strcmp0 (pa_proplist_gets (i->proplist, "device.description"), "Built-in Audio"))
-                volumepulse_add_combo_to_profiles (vol, ls, vol->alsaprofiles, sel, i->name, volumepulse_device_display_name (vol, pa_proplist_gets (i->proplist, "alsa.card_name")));
+                volumepulse_add_combo_to_profiles (vol, ls, vol->alsaprofiles, sel, pa_proplist_gets (i->proplist, "alsa.card_name"), i->name);
             else
-                volumepulse_add_combo_to_profiles (vol, ls, vol->intprofiles, sel, i->name, volumepulse_device_display_name (vol, pa_proplist_gets (i->proplist, "alsa.card_name")));
+                volumepulse_add_combo_to_profiles (vol, ls, vol->intprofiles, sel, pa_proplist_gets (i->proplist, "alsa.card_name"), i->name);
         }
     }
 
@@ -649,7 +646,7 @@ static void pa_cb_get_info_inputs (pa_context *c, const pa_card_info *i, int eol
             if (nam)
             {
                 if (!vol->inputs) vol->inputs = gtk_menu_new ();
-                volumepulse_add_item_to_menu (vol, vol->inputs, nam, nam, FALSE, TRUE, G_CALLBACK (volumepulse_set_external_input));
+                volumepulse_add_item_to_menu (vol, nam, nam, TRUE);
             }
         }
     }
@@ -671,7 +668,7 @@ static void pa_cb_get_info_internal (pa_context *c, const pa_card_info *i, int e
                 if (nam)
                 {
                     DEBUG ("pa_cb_get_info_internal %s", nam);
-                    volumepulse_add_item_to_menu (vol, vol->outputs, volumepulse_device_display_name (vol, nam), nam, FALSE, FALSE, G_CALLBACK (volumepulse_set_external_output));
+                    volumepulse_add_item_to_menu (vol, nam, nam, FALSE);
                 }
             }
         }
@@ -694,7 +691,7 @@ static void pa_cb_get_info_external (pa_context *c, const pa_card_info *i, int e
                 if (nam)
                 {
                     DEBUG ("pa_cb_get_info_external %s", nam);
-                    volumepulse_add_item_to_menu (vol, vol->outputs, nam, nam, FALSE, FALSE, G_CALLBACK (volumepulse_set_external_output));
+                    volumepulse_add_item_to_menu (vol, nam, nam, FALSE);
                 }
             }
         }
