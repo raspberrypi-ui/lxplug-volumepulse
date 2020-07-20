@@ -43,15 +43,17 @@ static int pulse_get_output_streams (VolumePulsePlugin *vol);
 static int pulse_get_input_streams (VolumePulsePlugin *vol);
 static gboolean pa_card_has_port (const pa_card_info *i, pa_direction_t dir);
 
-/* Functions in volumepulse.c needed here */
-
-extern gboolean volumepulse_update_disp_cb (gpointer userdata);
-extern void volumepulse_add_item_to_menu (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input);
-extern void volumepulse_add_combo_to_profiles (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name);
 
 /*----------------------------------------------------------------------------*/
 /* PulseAudio controller                                                      */
 /*----------------------------------------------------------------------------*/
+
+static gboolean volumepulse_update_disp_cb (gpointer userdata)
+{
+    VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
+    volumepulse_update_display (vol);
+    return FALSE;
+}
 
 /* Initialisation / teardown
  * -------------------------

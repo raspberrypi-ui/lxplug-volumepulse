@@ -16,7 +16,8 @@ pkglibdir = $(libdir)/lxpanel/plugins
 # volumepulse
 volumepulse_la_SOURCES = \
 	volumepulse/volumepulse.c \
-	volumepulse/pulse.c
+	volumepulse/pulse.c \
+	volumepulse/bluetooth.c
 
 volumepulse_la_CFLAGS = \
 	-I$(top_srcdir) \
