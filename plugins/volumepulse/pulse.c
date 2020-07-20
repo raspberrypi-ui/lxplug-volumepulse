@@ -173,7 +173,7 @@ static void pa_error_handler (VolumePulsePlugin *vol, char *name)
 static void pa_cb_generic_success (pa_context *context, int success, void *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
-    if (!success) DEBUG ("pulse success callback failed");
+    if (!success) DEBUG ("pulse success callback failed : %s", pa_strerror (pa_context_errno (context)));
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }

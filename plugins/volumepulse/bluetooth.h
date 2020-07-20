@@ -37,9 +37,7 @@ extern void bt_disconnect_device (VolumePulsePlugin *vol, char *device);
 extern void bt_add_devices_to_profile_dialog (VolumePulsePlugin *vol);
 extern void bt_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input);
 
-extern char *bluez_to_pa_sink_name (char *bluez_name, char *profile);
-extern char *bluez_to_pa_source_name (char *bluez_name);
-extern char *bluez_to_pa_card_name (char *bluez_name);
+extern char *bluez_to_pa_name (char *bluez_name, char *type, char *profile);
 extern char *bluez_from_pa_name (char *pa_name);
 extern int pa_bt_sink_source_compare (char *sink, char *source);
 extern int pa_bluez_device_same (const char *padev, const char *btdev);

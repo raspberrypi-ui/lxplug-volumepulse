@@ -56,7 +56,7 @@ void bluetooth_init (VolumePulsePlugin *vol)
  * Bluez device names.
  */
 
-char *bluez_to_pa_sink_name (char *bluez_name, char *profile)
+char *bluez_to_pa_name (char *bluez_name, char *type, char *profile)
 {
     unsigned int b1, b2, b3, b4, b5, b6;
 
@@ -66,33 +66,7 @@ char *bluez_to_pa_sink_name (char *bluez_name, char *profile)
         DEBUG ("Bluez name invalid : %s", bluez_name);
         return NULL;
     }
-    return g_strdup_printf ("bluez_sink.%02X_%02X_%02X_%02X_%02X_%02X.%s", b1, b2, b3, b4, b5, b6, profile);
-}
-
-char *bluez_to_pa_source_name (char *bluez_name)
-{
-    unsigned int b1, b2, b3, b4, b5, b6;
-
-    if (bluez_name == NULL) return NULL;
-    if (sscanf (bluez_name, "/org/bluez/hci0/dev_%x_%x_%x_%x_%x_%x", &b1, &b2, &b3, &b4, &b5, &b6) != 6)
-    {
-        DEBUG ("Bluez name invalid : %s", bluez_name);
-        return NULL;
-    }
-    return g_strdup_printf ("bluez_source.%02X_%02X_%02X_%02X_%02X_%02X.headset_head_unit", b1, b2, b3, b4, b5, b6);
-}
-
-char *bluez_to_pa_card_name (char *bluez_name)
-{
-    unsigned int b1, b2, b3, b4, b5, b6;
-
-    if (bluez_name == NULL) return NULL;
-    if (sscanf (bluez_name, "/org/bluez/hci0/dev_%x_%x_%x_%x_%x_%x", &b1, &b2, &b3, &b4, &b5, &b6) != 6)
-    {
-        DEBUG ("Bluez name invalid : %s", bluez_name);
-        return NULL;
-    }
-    return g_strdup_printf ("bluez_card.%02X_%02X_%02X_%02X_%02X_%02X", b1, b2, b3, b4, b5, b6);
+    return g_strdup_printf ("bluez_%s.%02X_%02X_%02X_%02X_%02X_%02X%s%s", type, b1, b2, b3, b4, b5, b6, profile ? "." : "", profile ? profile : "");
 }
 
 char *bluez_from_pa_name (char *pa_name)
@@ -256,20 +230,21 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
         DEBUG ("Connected OK");
 
         // some devices take a very long time to be valid PulseAudio cards after connection
-        pacard = bluez_to_pa_card_name (vol->bt_conname);
+        pacard = bluez_to_pa_name (vol->bt_conname, "card", NULL);
         do pulse_get_profile (vol, pacard);
         while (vol->pa_profile == NULL);
+        DEBUG ("profile %s", vol->pa_profile);
 
         // set connected device as PulseAudio default
         if (vol->bt_input)
         {
-            paname = bluez_to_pa_source_name (vol->bt_conname);
+            paname = bluez_to_pa_name (vol->bt_conname, "source", "headset_head_unit");
             pulse_set_profile (vol, pacard, "headset_head_unit");
             pulse_change_source (vol, paname);
         }
         else
         {
-            paname = bluez_to_pa_sink_name (vol->bt_conname, vol->pa_profile);
+            paname = bluez_to_pa_name (vol->bt_conname, "sink", vol->pa_profile);
             pulse_change_sink (vol, paname);
         }
         g_free (paname);
@@ -454,7 +429,7 @@ void bt_add_devices_to_profile_dialog (VolumePulsePlugin *vol)
                         if (name && icon && paired && trusted && g_variant_get_boolean (paired) && g_variant_get_boolean (trusted))
                         {
                             // only disconnected devices here...
-                            char *pacard = bluez_to_pa_card_name ((char *) objpath);
+                            char *pacard = bluez_to_pa_name ((char *) objpath, "card", NULL);
                             pulse_get_profile (vol, pacard);
                             if (vol->pa_profile == NULL)
                                 volumepulse_add_combo_to_profiles (vol, NULL, vol->btprofiles, 0, g_variant_get_string (name, NULL), NULL);

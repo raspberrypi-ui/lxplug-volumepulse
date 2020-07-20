@@ -617,9 +617,9 @@ static void volumepulse_set_bluetooth_output (GtkWidget *widget, VolumePulsePlug
     if (!g_strcmp0 (widget->name, idevice))
     {
         DEBUG ("Device %s is already connected", widget->name);
-        char *pacard = bluez_to_pa_card_name (widget->name);
+        char *pacard = bluez_to_pa_name (widget->name, "card", NULL);
         pulse_get_profile (vol, pacard);
-        char *paname = bluez_to_pa_sink_name (widget->name, vol->pa_profile);
+        char *paname = bluez_to_pa_name (widget->name, "sink", vol->pa_profile);
         pulse_change_sink (vol, paname);
         g_free (paname);
         g_free (pacard);
@@ -677,8 +677,8 @@ static void volumepulse_set_bluetooth_input (GtkWidget *widget, VolumePulsePlugi
     if (!g_strcmp0 (widget->name, odevice))
     {
         DEBUG ("Device %s is already connected\n", widget->name);
-        char *paname = bluez_to_pa_source_name (widget->name);
-        char *pacard = bluez_to_pa_card_name (widget->name);
+        char *paname = bluez_to_pa_name (widget->name, "source", "headset_head_unit");
+        char *pacard = bluez_to_pa_name (widget->name, "card", NULL);
         pulse_set_profile (vol, pacard, "headset_head_unit");
         pulse_change_source (vol, paname);
         g_free (paname);
