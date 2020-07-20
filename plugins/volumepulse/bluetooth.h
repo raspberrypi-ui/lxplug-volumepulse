@@ -32,10 +32,10 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 extern void bluetooth_init (VolumePulsePlugin *vol);
-extern void bt_connect_device (VolumePulsePlugin *vol);
-extern void bt_disconnect_device (VolumePulsePlugin *vol, char *device);
-extern void bt_add_devices_to_profile_dialog (VolumePulsePlugin *vol);
-extern void bt_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input);
+extern void bluetooth_connect_device (VolumePulsePlugin *vol);
+extern void bluetooth_disconnect_device (VolumePulsePlugin *vol, char *device);
+extern void bluetooth_add_devices_to_profile_dialog (VolumePulsePlugin *vol);
+extern void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input);
 
 extern char *bluez_to_pa_name (char *bluez_name, char *type, char *profile);
 extern char *bluez_from_pa_name (char *pa_name);

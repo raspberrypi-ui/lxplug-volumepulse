@@ -596,13 +596,13 @@ static void pa_cb_add_devices_to_profile_dialog (pa_context *c, const pa_card_in
         }
 
         if (!g_strcmp0 (pa_proplist_gets (i->proplist, "device.api"), "bluez"))
-            volumepulse_add_combo_to_profiles (vol, ls, vol->btprofiles, sel, pa_proplist_gets (i->proplist, "device.description"), i->name);
+            volumepulse_profiles_add_combo (vol, ls, vol->btprofiles, sel, pa_proplist_gets (i->proplist, "device.description"), i->name);
         else
         {
             if (g_strcmp0 (pa_proplist_gets (i->proplist, "device.description"), "Built-in Audio"))
-                volumepulse_add_combo_to_profiles (vol, ls, vol->alsaprofiles, sel, pa_proplist_gets (i->proplist, "alsa.card_name"), i->name);
+                volumepulse_profiles_add_combo (vol, ls, vol->alsaprofiles, sel, pa_proplist_gets (i->proplist, "alsa.card_name"), i->name);
             else
-                volumepulse_add_combo_to_profiles (vol, ls, vol->intprofiles, sel, pa_proplist_gets (i->proplist, "alsa.card_name"), i->name);
+                volumepulse_profiles_add_combo (vol, ls, vol->intprofiles, sel, pa_proplist_gets (i->proplist, "alsa.card_name"), i->name);
         }
     }
 
@@ -648,7 +648,7 @@ static void pa_cb_get_info_inputs (pa_context *c, const pa_card_info *i, int eol
             if (nam)
             {
                 if (!vol->inputs) vol->inputs = gtk_menu_new ();
-                volumepulse_add_item_to_menu (vol, nam, nam, TRUE);
+                volumepulse_menu_add_item (vol, nam, nam, TRUE);
             }
         }
     }
@@ -670,7 +670,7 @@ static void pa_cb_get_info_internal (pa_context *c, const pa_card_info *i, int e
                 if (nam)
                 {
                     DEBUG ("pa_cb_get_info_internal %s", nam);
-                    volumepulse_add_item_to_menu (vol, nam, nam, FALSE);
+                    volumepulse_menu_add_item (vol, nam, nam, FALSE);
                 }
             }
         }
@@ -693,7 +693,7 @@ static void pa_cb_get_info_external (pa_context *c, const pa_card_info *i, int e
                 if (nam)
                 {
                     DEBUG ("pa_cb_get_info_external %s", nam);
-                    volumepulse_add_item_to_menu (vol, nam, nam, FALSE);
+                    volumepulse_menu_add_item (vol, nam, nam, FALSE);
                 }
             }
         }

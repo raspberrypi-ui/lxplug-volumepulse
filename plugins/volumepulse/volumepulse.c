@@ -73,7 +73,7 @@ static gint volumepulse_delete_connect_dialog (GtkWidget *widget, GdkEvent *even
 static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButton *event, LXPanel *panel);
 
 /* Menu popup */
-void volumepulse_add_item_to_menu (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input);
+void volumepulse_menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input);
 static void volumepulse_menu_show_default_sink (GtkWidget *widget, gpointer data);
 static void volumepulse_menu_show_default_source (GtkWidget *widget, gpointer data);
 static const char *volumepulse_device_display_name (VolumePulsePlugin *vol, const char *name);
@@ -92,13 +92,13 @@ static void volumepulse_popup_set_position (GtkWidget *menu, gint *px, gint *py,
 static gboolean volumepulse_mouse_out (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
 
 /* Profiles dialog */
-static void show_profiles (VolumePulsePlugin *vol);
-static void close_profiles (VolumePulsePlugin *vol);
-static void profiles_ok_handler (GtkButton *button, gpointer *user_data);
-static gboolean profiles_wd_close_handler (GtkWidget *wid, GdkEvent *event, gpointer user_data);
-static void profile_changed (GtkComboBox *combo, gpointer *userdata);
-static void relocate_last_item (GtkWidget *box);
-void volumepulse_add_combo_to_profiles (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name);
+static void volumepulse_profiles_show (VolumePulsePlugin *vol);
+static void volumepulse_profiles_close (VolumePulsePlugin *vol);
+static void volumepulse_profiles_ok_handler (GtkButton *button, gpointer *user_data);
+static gboolean volumepulse_profiles_close_handler (GtkWidget *wid, GdkEvent *event, gpointer user_data);
+static void volumepulse_profiles_changed_handler (GtkComboBox *combo, gpointer *userdata);
+static void volumepulse_profiles_relocate_last_item (GtkWidget *box);
+void volumepulse_profiles_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name);
 
 /* Plugin */
 static GtkWidget *volumepulse_configure (LXPanel *panel, GtkWidget *plugin);
@@ -251,7 +251,7 @@ static void volumepulse_theme_change (GtkWidget *widget, VolumePulsePlugin *vol)
 static void volumepulse_open_profile_dialog (GtkWidget *widget, VolumePulsePlugin *vol)
 {
     gtk_menu_popdown (GTK_MENU (vol->menu_popup));
-    show_profiles (vol);
+    volumepulse_profiles_show (vol);
 }
 
 static void volumepulse_show_connect_dialog (VolumePulsePlugin *vol, const gchar *param)
@@ -364,7 +364,7 @@ static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButto
 /* Device select menu                                                         */
 /*----------------------------------------------------------------------------*/
 
-static void menu_add_separator (GtkWidget *menu)
+static void volumepulse_menu_add_separator (GtkWidget *menu)
 {
     if (menu == NULL) return;
 
@@ -376,7 +376,7 @@ static void menu_add_separator (GtkWidget *menu)
     gtk_menu_shell_append (GTK_MENU_SHELL (menu), mi);
 }
 
-void volumepulse_add_item_to_menu (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input)
+void volumepulse_menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input)
 {
     GtkWidget *menu = input ? vol->inputs : vol->outputs;
     const char *disp_label = volumepulse_device_display_name (vol, label);
@@ -478,14 +478,14 @@ static void volumepulse_build_device_menu (VolumePulsePlugin *vol)
 
     // add ALSA inputs
     pulse_add_devices_to_menu (vol, TRUE, FALSE);
-    menu_add_separator (vol->inputs);
+    volumepulse_menu_add_separator (vol->inputs);
 
     // add Bluetooth inputs
-    bt_add_devices_to_menu (vol, TRUE);
+    bluetooth_add_devices_to_menu (vol, TRUE);
 
     if (vol->inputs)
     {
-        menu_add_separator (vol->inputs);
+        volumepulse_menu_add_separator (vol->inputs);
 
         mi = gtk_image_menu_item_new_with_label (_("Device Profiles..."));
         g_signal_connect (mi, "activate", G_CALLBACK (volumepulse_open_profile_dialog), (gpointer) vol);
@@ -498,20 +498,20 @@ static void volumepulse_build_device_menu (VolumePulsePlugin *vol)
 
     // add internal outputs
     pulse_add_devices_to_menu (vol, FALSE, TRUE);
-    menu_add_separator (vol->outputs);
+    volumepulse_menu_add_separator (vol->outputs);
 
     // add external outputs
     pulse_add_devices_to_menu (vol, FALSE, FALSE);
-    menu_add_separator (vol->outputs);
+    volumepulse_menu_add_separator (vol->outputs);
 
     // add Bluetooth devices
-    bt_add_devices_to_menu (vol, FALSE);
+    bluetooth_add_devices_to_menu (vol, FALSE);
 
     // did we find any output devices? if not, the menu will be empty...
     if (gtk_container_get_children (GTK_CONTAINER (vol->outputs)) != NULL)
     {
         // add the output options menu item to the output menu
-        menu_add_separator (vol->outputs);
+        volumepulse_menu_add_separator (vol->outputs);
 
         mi = gtk_image_menu_item_new_with_label (_("Device Profiles..."));
         g_signal_connect (mi, "activate", G_CALLBACK (volumepulse_open_profile_dialog), (gpointer) vol);
@@ -566,7 +566,7 @@ static void volumepulse_set_alsa_output (GtkWidget *widget, VolumePulsePlugin *v
     {
         // if the current default sink is Bluetooth and not also the default source, disconnect it
         char *bt_name = bluez_from_pa_name (vol->pa_default_sink);
-        bt_disconnect_device (vol, bt_name);
+        bluetooth_disconnect_device (vol, bt_name);
         g_free (bt_name);
     }
 
@@ -580,7 +580,7 @@ static void volumepulse_set_alsa_input (GtkWidget *widget, VolumePulsePlugin *vo
     {
         // if the current default source is Bluetooth and not also the default sink, disconnect it
         char *bt_name = bluez_from_pa_name (vol->pa_default_source);
-        bt_disconnect_device (vol, bt_name);
+        bluetooth_disconnect_device (vol, bt_name);
         g_free (bt_name);
     }
 
@@ -605,7 +605,7 @@ static void volumepulse_set_bluetooth_output (GtkWidget *widget, VolumePulsePlug
         volumepulse_show_connect_dialog (vol, gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
 
         // disconnect the device prior to reconnect
-        bt_disconnect_device (vol, odevice);
+        bluetooth_disconnect_device (vol, odevice);
 
         g_free (odevice);
         return;
@@ -626,7 +626,7 @@ static void volumepulse_set_bluetooth_output (GtkWidget *widget, VolumePulsePlug
         volumepulse_update_display (vol);
 
         /* disconnect old Bluetooth output device */
-        if (odevice) bt_disconnect_device (vol, odevice);
+        if (odevice) bluetooth_disconnect_device (vol, odevice);
     }
     else
     {
@@ -640,8 +640,8 @@ static void volumepulse_set_bluetooth_output (GtkWidget *widget, VolumePulsePlug
         volumepulse_show_connect_dialog (vol, gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
 
         // disconnect the current output device unless it is also the input device; otherwise just connect the new device
-        if (odevice && g_strcmp0 (idevice, odevice)) bt_disconnect_device (vol, odevice);
-        else bt_connect_device (vol);
+        if (odevice && g_strcmp0 (idevice, odevice)) bluetooth_disconnect_device (vol, odevice);
+        else bluetooth_connect_device (vol);
     }
 
     if (idevice) g_free (idevice);
@@ -665,7 +665,7 @@ static void volumepulse_set_bluetooth_input (GtkWidget *widget, VolumePulsePlugi
         volumepulse_show_connect_dialog (vol, gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
 
         // disconnect the current input device unless it is also the output device; otherwise just connect the new device
-        bt_disconnect_device (vol, idevice);
+        bluetooth_disconnect_device (vol, idevice);
 
         g_free (idevice);
         return;
@@ -685,7 +685,7 @@ static void volumepulse_set_bluetooth_input (GtkWidget *widget, VolumePulsePlugi
         g_free (pacard);
 
         /* disconnect old Bluetooth input device */
-        if (idevice) bt_disconnect_device (vol, idevice);
+        if (idevice) bluetooth_disconnect_device (vol, idevice);
     }
     else
     {
@@ -699,8 +699,8 @@ static void volumepulse_set_bluetooth_input (GtkWidget *widget, VolumePulsePlugi
         volumepulse_show_connect_dialog (vol, gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
 
         // disconnect the current input device unless it is also the output device; otherwise just connect the new device
-        if (idevice && g_strcmp0 (idevice, odevice)) bt_disconnect_device (vol, idevice);
-        else bt_connect_device (vol);
+        if (idevice && g_strcmp0 (idevice, odevice)) bluetooth_disconnect_device (vol, idevice);
+        else bluetooth_connect_device (vol);
     }
 
     if (idevice) g_free (idevice);
@@ -830,7 +830,7 @@ static gboolean volumepulse_mouse_out (GtkWidget *widget, GdkEventButton *event,
 /* Profiles dialog                                                            */
 /*----------------------------------------------------------------------------*/
 
-static void show_profiles (VolumePulsePlugin *vol)
+static void volumepulse_profiles_show (VolumePulsePlugin *vol)
 {
     GtkWidget *btn, *wid, *box;
     char *lbl;
@@ -842,7 +842,7 @@ static void show_profiles (VolumePulsePlugin *vol)
     gtk_window_set_default_size (GTK_WINDOW (vol->options_dlg), 400, 300);
     gtk_container_set_border_width (GTK_CONTAINER (vol->options_dlg), 10);
     gtk_window_set_icon_name (GTK_WINDOW (vol->options_dlg), "multimedia-volume-control");
-    g_signal_connect (vol->options_dlg, "delete-event", G_CALLBACK (profiles_wd_close_handler), vol);
+    g_signal_connect (vol->options_dlg, "delete-event", G_CALLBACK (volumepulse_profiles_close_handler), vol);
 
     box = gtk_vbox_new (FALSE, 5);
     vol->intprofiles = gtk_vbox_new (FALSE, 5);
@@ -857,41 +857,41 @@ static void show_profiles (VolumePulsePlugin *vol)
     pulse_add_devices_to_profile_dialog (vol);
 
     // then loop through Bluetooth devices
-    bt_add_devices_to_profile_dialog (vol);
+    bluetooth_add_devices_to_profile_dialog (vol);
 
     wid = gtk_hbutton_box_new ();
     gtk_button_box_set_layout (GTK_BUTTON_BOX (wid), GTK_BUTTONBOX_END);
     gtk_box_pack_start (GTK_BOX (box), wid, FALSE, FALSE, 5);
 
     btn = gtk_button_new_from_stock (GTK_STOCK_OK);
-    g_signal_connect (btn, "clicked", G_CALLBACK (profiles_ok_handler), vol);
+    g_signal_connect (btn, "clicked", G_CALLBACK (volumepulse_profiles_ok_handler), vol);
     gtk_box_pack_end (GTK_BOX (wid), btn, FALSE, FALSE, 5);
 
     gtk_widget_show_all (vol->options_dlg);
 }
 
-static void close_profiles (VolumePulsePlugin *vol)
+static void volumepulse_profiles_close (VolumePulsePlugin *vol)
 {
     gtk_widget_destroy (vol->options_dlg);
     vol->options_dlg = NULL;
 }
 
-static void profiles_ok_handler (GtkButton *button, gpointer *user_data)
+static void volumepulse_profiles_ok_handler (GtkButton *button, gpointer *user_data)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
 
-    close_profiles (vol);
+    volumepulse_profiles_close (vol);
 }
 
-static gboolean profiles_wd_close_handler (GtkWidget *wid, GdkEvent *event, gpointer user_data)
+static gboolean volumepulse_profiles_close_handler (GtkWidget *wid, GdkEvent *event, gpointer user_data)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
 
-    close_profiles (vol);
+    volumepulse_profiles_close (vol);
     return TRUE;
 }
 
-static void relocate_last_item (GtkWidget *box)
+static void volumepulse_profiles_relocate_last_item (GtkWidget *box)
 {
     GtkWidget *elem;
     GList *children = gtk_container_get_children (GTK_CONTAINER (box));
@@ -910,7 +910,7 @@ static void relocate_last_item (GtkWidget *box)
     gtk_box_reorder_child (GTK_BOX (box), newcomb, n + 1);
 }
 
-static void profile_changed (GtkComboBox *combo, gpointer *userdata)
+static void volumepulse_profiles_changed_handler (GtkComboBox *combo, gpointer *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
@@ -922,7 +922,7 @@ static void profile_changed (GtkComboBox *combo, gpointer *userdata)
     pulse_set_profile (vol, gtk_widget_get_name (GTK_WIDGET (combo)), option);
 }
 
-void volumepulse_add_combo_to_profiles (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name)
+void volumepulse_profiles_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name)
 {
     GtkWidget *lbl, *comb;
     GtkCellRenderer *rend;
@@ -947,9 +947,9 @@ void volumepulse_add_combo_to_profiles (VolumePulsePlugin *vol, GtkListStore *ls
     gtk_combo_box_set_active (GTK_COMBO_BOX (comb), sel);
     gtk_box_pack_start (GTK_BOX (dest), comb, FALSE, FALSE, 5);
 
-    relocate_last_item (dest);
+    volumepulse_profiles_relocate_last_item (dest);
 
-    if (ls) g_signal_connect (comb, "changed", G_CALLBACK (profile_changed), vol);
+    if (ls) g_signal_connect (comb, "changed", G_CALLBACK (volumepulse_profiles_changed_handler), vol);
 }
 
 /*----------------------------------------------------------------------------*/

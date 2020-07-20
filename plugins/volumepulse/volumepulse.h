@@ -90,8 +90,8 @@ typedef struct {
 
 extern void volumepulse_update_display (VolumePulsePlugin *vol);
 extern void volumepulse_update_connect_dialog (VolumePulsePlugin *vol, const char *msg);
-extern void volumepulse_add_item_to_menu (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input);
-extern void volumepulse_add_combo_to_profiles (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name);
+extern void volumepulse_menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input);
+extern void volumepulse_profiles_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name);
 
 /* End of file */
 /*----------------------------------------------------------------------------*/
