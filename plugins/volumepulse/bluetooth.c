@@ -202,7 +202,7 @@ void bluetooth_connect_device (VolumePulsePlugin *vol)
     else
     {
         DEBUG ("Couldn't get device interface from object manager");
-        if (vol->conn_dialog) volumepulse_update_connect_dialog (vol, _("Could not get BlueZ interface"));
+        if (vol->conn_dialog) volumepulse_connect_dialog_update (vol, _("Could not get BlueZ interface"));
         if (vol->bt_conname) g_free (vol->bt_conname);
         vol->bt_conname = NULL;
     }
@@ -222,7 +222,7 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
         DEBUG ("Connect error %s", error->message);
 
         // update dialog to show a warning
-        if (vol->conn_dialog) volumepulse_update_connect_dialog (vol, error->message);
+        if (vol->conn_dialog) volumepulse_connect_dialog_update (vol, error->message);
         g_error_free (error);
     }
     else
@@ -251,7 +251,7 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
         g_free (pacard);
 
         // close the connection dialog
-        volumepulse_update_connect_dialog (vol, NULL);
+        volumepulse_connect_dialog_update (vol, NULL);
     }
 
     // delete the connection information

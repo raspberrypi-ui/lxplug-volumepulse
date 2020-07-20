@@ -128,6 +128,7 @@ void pulse_init (VolumePulsePlugin *vol)
     vol->pa_indices = NULL;
 
     pulse_set_subscription (vol);
+    pulse_get_default_sink_source (vol);
 }
 
 static void pulse_disconnect (VolumePulsePlugin *vol)

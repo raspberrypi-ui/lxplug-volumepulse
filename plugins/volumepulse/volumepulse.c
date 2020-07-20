@@ -58,33 +58,30 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /* Helpers */
 static char *get_string (const char *fmt, ...);
 static int get_value (const char *fmt, ...);
-static int vsystem (const char *fmt, ...);
-static int hdmi_monitors (VolumePulsePlugin *vol);
+static void hdmi_init (VolumePulsePlugin *vol);
+static const char *volumepulse_device_display_name (VolumePulsePlugin *vol, const char *name);
 
 /* Handlers and graphics */
 void volumepulse_update_display (VolumePulsePlugin *vol);
 static void volumepulse_theme_change (GtkWidget *widget, VolumePulsePlugin *vol);
-static void volumepulse_open_config_dialog (GtkWidget *widget, VolumePulsePlugin *vol);
-static void volumepulse_open_input_config_dialog (GtkWidget *widget, VolumePulsePlugin *vol);
 static void volumepulse_open_profile_dialog (GtkWidget *widget, VolumePulsePlugin *vol);
-static void volumepulse_show_connect_dialog (VolumePulsePlugin *vol, const gchar *param);
-static void volumepulse_close_connect_dialog (GtkButton *button, gpointer user_data);
-static gint volumepulse_delete_connect_dialog (GtkWidget *widget, GdkEvent *event, gpointer user_data);
+static void volumepulse_connect_dialog_show (VolumePulsePlugin *vol, const gchar *param);
+static void volumepulse_connect_dialog_close (GtkButton *button, gpointer user_data);
+static gint volumepulse_connect_dialog_delete (GtkWidget *widget, GdkEvent *event, gpointer user_data);
 static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButton *event, LXPanel *panel);
 
 /* Menu popup */
 void volumepulse_menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input);
 static void volumepulse_menu_show_default_sink (GtkWidget *widget, gpointer data);
 static void volumepulse_menu_show_default_source (GtkWidget *widget, gpointer data);
-static const char *volumepulse_device_display_name (VolumePulsePlugin *vol, const char *name);
-static void volumepulse_build_device_menu (VolumePulsePlugin *vol);
+static void volumepulse_menu_build (VolumePulsePlugin *vol);
 static void volumepulse_set_alsa_output (GtkWidget *widget, VolumePulsePlugin *vol);
 static void volumepulse_set_alsa_input (GtkWidget *widget, VolumePulsePlugin *vol);
 static void volumepulse_set_bluetooth_output (GtkWidget *widget, VolumePulsePlugin *vol);
 static void volumepulse_set_bluetooth_input (GtkWidget *widget, VolumePulsePlugin *vol);
 
 /* Volume popup */
-static void volumepulse_build_popup_window (GtkWidget *p);
+static void volumepulse_popup_build (GtkWidget *p);
 static void volumepulse_popup_scale_changed (GtkRange *range, VolumePulsePlugin *vol);
 static void volumepulse_popup_scale_scrolled (GtkScale *scale, GdkEventScroll *evt, VolumePulsePlugin *vol);
 static void volumepulse_popup_mute_toggled (GtkWidget *widget, VolumePulsePlugin *vol);
@@ -101,7 +98,6 @@ static void volumepulse_profiles_relocate_last_item (GtkWidget *box);
 void volumepulse_profiles_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name);
 
 /* Plugin */
-static GtkWidget *volumepulse_configure (LXPanel *panel, GtkWidget *plugin);
 static void volumepulse_panel_configuration_changed (LXPanel *panel, GtkWidget *plugin);
 static gboolean volumepulse_control_msg (GtkWidget *plugin, const char *cmd);
 static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *settings);
@@ -150,23 +146,9 @@ static int get_value (const char *fmt, ...)
     else return m;
 }
 
-static int vsystem (const char *fmt, ...)
-{
-    char *cmdline;
-    int res;
-
-    va_list arg;
-    va_start (arg, fmt);
-    g_vasprintf (&cmdline, fmt, arg);
-    va_end (arg);
-    res = system (cmdline);
-    g_free (cmdline);
-    return res;
-}
-
 /* Multiple HDMI support */
 
-static int hdmi_monitors (VolumePulsePlugin *vol)
+static void hdmi_init (VolumePulsePlugin *vol)
 {
     int i, m;
 
@@ -189,9 +171,21 @@ static int hdmi_monitors (VolumePulsePlugin *vol)
                 m = 1;
     }
 
-    return m;
+    vol->hdmis = m;
 }
 
+/* Remap internal to display names for BCM device */
+
+static const char *volumepulse_device_display_name (VolumePulsePlugin *vol, const char *name)
+{
+    if (!g_strcmp0 (name, "bcm2835 HDMI 1"))
+        return vol->hdmis == 1 ? _("HDMI") : vol->mon_names[0];
+    else if (!g_strcmp0 (name, "bcm2835 HDMI 2"))
+        return vol->hdmis == 1 ? _("HDMI") : vol->mon_names[1];
+    else if (!g_strcmp0 (name, "bcm2835 Headphones"))
+        return _("Analog");
+    else return name;
+}
 
 /*----------------------------------------------------------------------------*/
 /* Plugin handlers and graphics                                               */
@@ -254,7 +248,7 @@ static void volumepulse_open_profile_dialog (GtkWidget *widget, VolumePulsePlugi
     volumepulse_profiles_show (vol);
 }
 
-static void volumepulse_show_connect_dialog (VolumePulsePlugin *vol, const gchar *param)
+static void volumepulse_connect_dialog_show (VolumePulsePlugin *vol, const gchar *param)
 {
     char buffer[256];
 
@@ -268,11 +262,11 @@ static void volumepulse_show_connect_dialog (VolumePulsePlugin *vol, const gchar
     gtk_label_set_justify (GTK_LABEL (vol->conn_label), GTK_JUSTIFY_LEFT);
     gtk_misc_set_alignment (GTK_MISC (vol->conn_label), 0.0, 0.0);
     gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (vol->conn_dialog))), vol->conn_label, TRUE, TRUE, 0);
-    g_signal_connect (GTK_OBJECT (vol->conn_dialog), "delete_event", G_CALLBACK (volumepulse_delete_connect_dialog), vol);
+    g_signal_connect (GTK_OBJECT (vol->conn_dialog), "delete_event", G_CALLBACK (volumepulse_connect_dialog_delete), vol);
     gtk_widget_show_all (vol->conn_dialog);
 }
 
-static void volumepulse_close_connect_dialog (GtkButton *button, gpointer user_data)
+static void volumepulse_connect_dialog_close (GtkButton *button, gpointer user_data)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
     if (vol->conn_dialog)
@@ -282,7 +276,7 @@ static void volumepulse_close_connect_dialog (GtkButton *button, gpointer user_d
     }
 }
 
-void volumepulse_update_connect_dialog (VolumePulsePlugin *vol, const gchar *param)
+void volumepulse_connect_dialog_update (VolumePulsePlugin *vol, const gchar *param)
 {
     if (param)
     {
@@ -291,13 +285,13 @@ void volumepulse_update_connect_dialog (VolumePulsePlugin *vol, const gchar *par
         sprintf (buffer, _("Failed to connect to device - %s. Try to connect again."), param);
         gtk_label_set_text (GTK_LABEL (vol->conn_label), buffer);
         vol->conn_ok = gtk_dialog_add_button (GTK_DIALOG (vol->conn_dialog), _("_OK"), 1);
-        g_signal_connect (vol->conn_ok, "clicked", G_CALLBACK (volumepulse_close_connect_dialog), vol);
+        g_signal_connect (vol->conn_ok, "clicked", G_CALLBACK (volumepulse_connect_dialog_close), vol);
         gtk_widget_show (vol->conn_ok);
     }
-    else volumepulse_close_connect_dialog (NULL, vol);
+    else volumepulse_connect_dialog_close (NULL, vol);
 }
 
-static gint volumepulse_delete_connect_dialog (GtkWidget *widget, GdkEvent *event, gpointer user_data)
+static gint volumepulse_connect_dialog_delete (GtkWidget *widget, GdkEvent *event, gpointer user_data)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
     if (vol->conn_dialog)
@@ -328,7 +322,7 @@ static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButto
         }
         else
         {
-            volumepulse_build_popup_window (vol->plugin);
+            volumepulse_popup_build (vol->plugin);
             volumepulse_update_display (vol);
 
             gint x, y;
@@ -352,7 +346,7 @@ static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButto
     else if (event->button == 3)
     {
         /* right-click - show device list */
-        volumepulse_build_device_menu (vol);
+        volumepulse_menu_build (vol);
         gtk_widget_show_all (vol->menu_popup);
         gtk_menu_popup (GTK_MENU (vol->menu_popup), NULL, NULL, (GtkMenuPositionFunc) volumepulse_popup_set_position, (gpointer) vol,
             event->button, event->time);
@@ -456,18 +450,7 @@ static void volumepulse_menu_show_default_source (GtkWidget *widget, gpointer da
     }
 }
 
-static const char *volumepulse_device_display_name (VolumePulsePlugin *vol, const char *name)
-{
-    if (!g_strcmp0 (name, "bcm2835 HDMI 1"))
-        return vol->hdmis == 1 ? _("HDMI") : vol->mon_names[0];
-    else if (!g_strcmp0 (name, "bcm2835 HDMI 2"))
-        return vol->hdmis == 1 ? _("HDMI") : vol->mon_names[1];
-    else if (!g_strcmp0 (name, "bcm2835 Headphones"))
-        return _("Analog");
-    else return name;
-}
-
-static void volumepulse_build_device_menu (VolumePulsePlugin *vol)
+static void volumepulse_menu_build (VolumePulsePlugin *vol)
 {
     GtkWidget *mi;
 
@@ -602,7 +585,7 @@ static void volumepulse_set_bluetooth_output (GtkWidget *widget, VolumePulsePlug
         vol->bt_input = FALSE;
 
         // show the connection dialog
-        volumepulse_show_connect_dialog (vol, gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
+        volumepulse_connect_dialog_show (vol, gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
 
         // disconnect the device prior to reconnect
         bluetooth_disconnect_device (vol, odevice);
@@ -637,7 +620,7 @@ static void volumepulse_set_bluetooth_output (GtkWidget *widget, VolumePulsePlug
         vol->bt_input = FALSE;
 
         // show the connection dialog
-        volumepulse_show_connect_dialog (vol, gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
+        volumepulse_connect_dialog_show (vol, gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
 
         // disconnect the current output device unless it is also the input device; otherwise just connect the new device
         if (odevice && g_strcmp0 (idevice, odevice)) bluetooth_disconnect_device (vol, odevice);
@@ -662,7 +645,7 @@ static void volumepulse_set_bluetooth_input (GtkWidget *widget, VolumePulsePlugi
         vol->bt_input = TRUE;
 
         // show the connection dialog
-        volumepulse_show_connect_dialog (vol, gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
+        volumepulse_connect_dialog_show (vol, gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
 
         // disconnect the current input device unless it is also the output device; otherwise just connect the new device
         bluetooth_disconnect_device (vol, idevice);
@@ -696,7 +679,7 @@ static void volumepulse_set_bluetooth_input (GtkWidget *widget, VolumePulsePlugi
         vol->bt_input = TRUE;
 
         // show the connection dialog
-        volumepulse_show_connect_dialog (vol, gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
+        volumepulse_connect_dialog_show (vol, gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
 
         // disconnect the current input device unless it is also the output device; otherwise just connect the new device
         if (idevice && g_strcmp0 (idevice, odevice)) bluetooth_disconnect_device (vol, idevice);
@@ -713,7 +696,7 @@ static void volumepulse_set_bluetooth_input (GtkWidget *widget, VolumePulsePlugi
 /*----------------------------------------------------------------------------*/
 
 /* Build the window that appears when the top level widget is clicked. */
-static void volumepulse_build_popup_window (GtkWidget *p)
+static void volumepulse_popup_build (GtkWidget *p)
 {
     VolumePulsePlugin *vol = lxpanel_plugin_get_data (p);
 
@@ -962,7 +945,7 @@ static void volumepulse_panel_configuration_changed (LXPanel *panel, GtkWidget *
 {
     VolumePulsePlugin *vol = lxpanel_plugin_get_data (plugin);
 
-    volumepulse_build_popup_window (vol->plugin);
+    volumepulse_popup_build (vol->plugin);
     volumepulse_update_display (vol);
     if (vol->show_popup) gtk_widget_show_all (vol->popup_window);
 }
@@ -1052,21 +1035,21 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     vol->tray_icon = gtk_image_new ();
     gtk_container_add (GTK_CONTAINER (p), vol->tray_icon);
 
-    bluetooth_init (vol);
-
     /* Initialize volume scale */
-    volumepulse_build_popup_window (p);
+    volumepulse_popup_build (p);
 
     /* Connect signals. */
     g_signal_connect (G_OBJECT (p), "scroll-event", G_CALLBACK (volumepulse_popup_scale_scrolled), vol);
     g_signal_connect (panel_get_icon_theme (panel), "changed", G_CALLBACK (volumepulse_theme_change), vol);
 
     /* Set up for multiple HDMIs */
-    vol->hdmis = hdmi_monitors (vol);
+    hdmi_init (vol);
 
-    /* set up PulseAudio context */
+    /* Set up Bluez D-bus interface */
+    bluetooth_init (vol);
+
+    /* Set up PulseAudio */
     pulse_init (vol);
-    pulse_get_default_sink_source (vol);
 
     /* Update the display, show the widget, and return. */
     volumepulse_update_display (vol);
