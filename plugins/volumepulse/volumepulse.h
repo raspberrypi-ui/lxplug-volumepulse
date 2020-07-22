@@ -61,12 +61,12 @@ typedef struct {
 
     /* Bluetooth interface */
     GDBusObjectManager *objmanager;     /* BlueZ object manager */
-    char *bt_conname;                   /* BlueZ name of device - just used during connection */
-    char *bt_reconname;                 /* BlueZ name of second device - used during reconnection */
-    gboolean bt_input;                  /* Is the device being connected as an input or an output? */
     GtkWidget *conn_dialog;             /* Connection dialog box */
     GtkWidget *conn_label;              /* Dialog box text field */
     GtkWidget *conn_ok;                 /* Dialog box button */
+    GList *bt_ops;                      /* List of Bluetooth connect and disconnect operations */
+    char *bt_iname;                     /* Input device name for use in list */
+    char *bt_oname;                     /* Output device name for use in list */
 
     /* HDMI devices */
     guint hdmis;                        /* Number of HDMI devices */

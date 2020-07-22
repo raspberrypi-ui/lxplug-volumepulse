@@ -30,15 +30,32 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BT_SERV_HSP             "00001108"
 #define BT_SERV_HFP             "0000111E"
 
+typedef struct {
+    const char *device;
+    gboolean disconnect;
+    gboolean input;
+} bt_operation_t;
+
+typedef enum {
+    CONNECT,
+    DISCONNECT
+} cd_t;
+
+typedef enum {
+    INPUT,
+    OUTPUT
+} dir_t;
 
 extern void bluetooth_init (VolumePulsePlugin *vol);
-extern void bluetooth_connect_device (VolumePulsePlugin *vol);
-extern void bluetooth_disconnect_device (VolumePulsePlugin *vol, char *device);
+extern void bluetooth_connect_device (VolumePulsePlugin *vol, const char *device);
+extern void bluetooth_disconnect_device (VolumePulsePlugin *vol, const char *device);
 extern void bluetooth_add_devices_to_profile_dialog (VolumePulsePlugin *vol);
 extern void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input);
+extern void bluetooth_add_operation (VolumePulsePlugin *vol, const char *device, cd_t cd, dir_t dir);
+extern void bluetooth_do_operation (VolumePulsePlugin *vol);
 
-extern char *bluez_to_pa_name (char *bluez_name, char *type, char *profile);
-extern char *bluez_from_pa_name (char *pa_name);
+extern char *bluez_to_pa_name (const char *bluez_name, char *type, char *profile);
+extern char *bluez_from_pa_name (const char *pa_name);
 extern int pa_bt_sink_source_compare (char *sink, char *source);
 extern int pa_bluez_device_same (const char *padev, const char *btdev);
 

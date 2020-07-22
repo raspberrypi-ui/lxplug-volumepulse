@@ -250,14 +250,11 @@ static void volumepulse_open_profile_dialog (GtkWidget *widget, VolumePulsePlugi
 
 static void volumepulse_connect_dialog_show (VolumePulsePlugin *vol, const gchar *param)
 {
-    char buffer[256];
-
     vol->conn_dialog = gtk_dialog_new_with_buttons (_("Connecting Audio Device"), NULL, GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, NULL);
     gtk_window_set_icon_name (GTK_WINDOW (vol->conn_dialog), "preferences-system-bluetooth");
     gtk_window_set_position (GTK_WINDOW (vol->conn_dialog), GTK_WIN_POS_CENTER);
     gtk_container_set_border_width (GTK_CONTAINER (vol->conn_dialog), 10);
-    sprintf (buffer, _("Connecting to Bluetooth audio device '%s'..."), param);
-    vol->conn_label = gtk_label_new (buffer);
+    vol->conn_label = gtk_label_new (param);
     gtk_label_set_line_wrap (GTK_LABEL (vol->conn_label), TRUE);
     gtk_label_set_justify (GTK_LABEL (vol->conn_label), GTK_JUSTIFY_LEFT);
     gtk_misc_set_alignment (GTK_MISC (vol->conn_label), 0.0, 0.0);
@@ -278,6 +275,7 @@ static void volumepulse_connect_dialog_close (GtkButton *button, gpointer user_d
 
 void volumepulse_connect_dialog_update (VolumePulsePlugin *vol, const gchar *param)
 {
+    if (!vol->conn_dialog) return;
     if (param)
     {
         char buffer[256];
@@ -559,12 +557,17 @@ static void volumepulse_set_alsa_output (GtkWidget *widget, VolumePulsePlugin *v
 
 static void volumepulse_set_alsa_input (GtkWidget *widget, VolumePulsePlugin *vol)
 {
-    if (strstr (vol->pa_default_source, "bluez") && pa_bt_sink_source_compare (vol->pa_default_sink, vol->pa_default_source))
+    if (strstr (vol->pa_default_source, "bluez") && !pa_bt_sink_source_compare (vol->pa_default_sink, vol->pa_default_source))
     {
-        // if the current default source is Bluetooth and not also the default sink, disconnect it
-        char *bt_name = bluez_from_pa_name (vol->pa_default_source);
-        bluetooth_disconnect_device (vol, bt_name);
-        g_free (bt_name);
+        // if the current default source and sink are both Bluetooth, disconnect the input and force the output
+        // to reconnect as A2DP...
+        volumepulse_connect_dialog_show (vol, _("Reconnecting Bluetooth input device as output only..."));
+        vol->bt_oname = bluez_from_pa_name (vol->pa_default_sink);
+        bluetooth_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
+        bluetooth_add_operation (vol, vol->bt_oname, DISCONNECT, INPUT);
+        bluetooth_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
+
+        bluetooth_do_operation (vol);
     }
 
     pulse_change_source (vol, gtk_widget_get_name (widget));
@@ -573,121 +576,39 @@ static void volumepulse_set_alsa_input (GtkWidget *widget, VolumePulsePlugin *vo
 
 static void volumepulse_set_bluetooth_output (GtkWidget *widget, VolumePulsePlugin *vol)
 {
-    char *odevice = bluez_from_pa_name (vol->pa_default_sink);
+    char *buf = g_strdup_printf (_("Connecting Bluetooth device '%s' as output..."), gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
+    volumepulse_connect_dialog_show (vol, buf);
+    g_free (buf);
 
-    // is this device already connected and attached - might want to force reconnect here?
-    if (!g_strcmp0 (widget->name, odevice))
-    {
-        DEBUG ("Reconnect device %s", widget->name);
-        // store the name of the BlueZ device to connect to
-        if (vol->bt_conname) g_free (vol->bt_conname);
-        vol->bt_conname = g_strdup (widget->name);
-        vol->bt_input = FALSE;
+    // to ensure an output device connects with the correct profile, disconnect
+    // any existing input device first and then reconnect the input after 
+    // connecting the output...
+    vol->bt_oname = bluez_from_pa_name (vol->pa_default_sink);
+    vol->bt_iname = bluez_from_pa_name (vol->pa_default_source);
+    if (vol->bt_oname) bluetooth_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
+    if (vol->bt_iname) bluetooth_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
+    bluetooth_add_operation (vol, widget->name, CONNECT, OUTPUT);
+    if (vol->bt_iname) bluetooth_add_operation (vol, vol->bt_iname, CONNECT, INPUT);
 
-        // show the connection dialog
-        volumepulse_connect_dialog_show (vol, gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
-
-        // disconnect the device prior to reconnect
-        bluetooth_disconnect_device (vol, odevice);
-
-        g_free (odevice);
-        return;
-    }
-
-    char *idevice = bluez_from_pa_name (vol->pa_default_source);
-
-    // check to see if this device is already connected
-    if (!g_strcmp0 (widget->name, idevice))
-    {
-        DEBUG ("Device %s is already connected", widget->name);
-        char *pacard = bluez_to_pa_name (widget->name, "card", NULL);
-        pulse_get_profile (vol, pacard);
-        char *paname = bluez_to_pa_name (widget->name, "sink", vol->pa_profile);
-        pulse_change_sink (vol, paname);
-        g_free (paname);
-        g_free (pacard);
-        volumepulse_update_display (vol);
-
-        /* disconnect old Bluetooth output device */
-        if (odevice) bluetooth_disconnect_device (vol, odevice);
-    }
-    else
-    {
-        DEBUG ("Need to connect device %s", widget->name);
-        // store the name of the BlueZ device to connect to
-        if (vol->bt_conname) g_free (vol->bt_conname);
-        vol->bt_conname = g_strdup (widget->name);
-        vol->bt_input = FALSE;
-
-        // show the connection dialog
-        volumepulse_connect_dialog_show (vol, gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
-
-        // disconnect the current output device unless it is also the input device; otherwise just connect the new device
-        if (odevice && g_strcmp0 (idevice, odevice)) bluetooth_disconnect_device (vol, odevice);
-        else bluetooth_connect_device (vol);
-    }
-
-    if (idevice) g_free (idevice);
-    if (odevice) g_free (odevice);
+    bluetooth_do_operation (vol);
 }
 
 static void volumepulse_set_bluetooth_input (GtkWidget *widget, VolumePulsePlugin *vol)
 {
-    char *idevice = bluez_from_pa_name (vol->pa_default_source);
+    char *buf = g_strdup_printf (_("Connecting Bluetooth device '%s' as input..."), gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
+    volumepulse_connect_dialog_show (vol, buf);
+    g_free (buf);
 
-    // is this device already connected and attached - might want to force reconnect here?
-    if (!g_strcmp0 (widget->name, idevice))
-    {
-        DEBUG ("Reconnect device %s", widget->name);
-        // store the name of the BlueZ device to connect to
-        if (vol->bt_conname) g_free (vol->bt_conname);
-        vol->bt_conname = g_strdup (widget->name);
-        vol->bt_input = TRUE;
+    // profiles load correctly for inputs, but may need to change the profile of
+    // a device which is currently being used for output, so reload them both anyway...
+    vol->bt_oname = bluez_from_pa_name (vol->pa_default_sink);
+    vol->bt_iname = bluez_from_pa_name (vol->pa_default_source);
+    if (vol->bt_oname) bluetooth_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
+    if (vol->bt_iname) bluetooth_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
+    if (vol->bt_oname) bluetooth_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
+    bluetooth_add_operation (vol, widget->name, CONNECT, INPUT);
 
-        // show the connection dialog
-        volumepulse_connect_dialog_show (vol, gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
-
-        // disconnect the current input device unless it is also the output device; otherwise just connect the new device
-        bluetooth_disconnect_device (vol, idevice);
-
-        g_free (idevice);
-        return;
-    }
-
-    char *odevice = bluez_from_pa_name (vol->pa_default_sink);
-
-    // check to see if this device is already connected
-    if (!g_strcmp0 (widget->name, odevice))
-    {
-        DEBUG ("Device %s is already connected\n", widget->name);
-        char *paname = bluez_to_pa_name (widget->name, "source", "headset_head_unit");
-        char *pacard = bluez_to_pa_name (widget->name, "card", NULL);
-        pulse_set_profile (vol, pacard, "headset_head_unit");
-        pulse_change_source (vol, paname);
-        g_free (paname);
-        g_free (pacard);
-
-        /* disconnect old Bluetooth input device */
-        if (idevice) bluetooth_disconnect_device (vol, idevice);
-    }
-    else
-    {
-        DEBUG ("Need to connect device %s", widget->name);
-        // store the name of the BlueZ device to connect to
-        if (vol->bt_conname) g_free (vol->bt_conname);
-        vol->bt_conname = g_strdup (widget->name);
-        vol->bt_input = TRUE;
-
-        // show the connection dialog
-        volumepulse_connect_dialog_show (vol, gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
-
-        // disconnect the current input device unless it is also the output device; otherwise just connect the new device
-        if (idevice && g_strcmp0 (idevice, odevice)) bluetooth_disconnect_device (vol, idevice);
-        else bluetooth_connect_device (vol);
-    }
-
-    if (idevice) g_free (idevice);
-    if (odevice) g_free (odevice);
+    bluetooth_do_operation (vol);
 }
 
 
@@ -1017,8 +938,6 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     textdomain (GETTEXT_PACKAGE);
 #endif
 
-    vol->bt_conname = NULL;
-    vol->bt_reconname = NULL;
     vol->options_dlg = NULL;
 
     /* Allocate top level widget and set into Plugin widget pointer. */

@@ -565,6 +565,11 @@ static void pa_cb_get_profile (pa_context *c, const pa_card_info *i, int eol, vo
 int pulse_get_profile (VolumePulsePlugin *vol, const char *card)
 {
     DEBUG ("pulse_get_profile %s", card);
+    if (vol->pa_profile)
+    {
+        g_free (vol->pa_profile);
+        vol->pa_profile = NULL;
+    }
     START_PA_OPERATION
     op = pa_context_get_card_info_by_name (vol->pa_context, card, &pa_cb_get_profile, vol);
     END_PA_OPERATION ("get_card_info_by_name")
