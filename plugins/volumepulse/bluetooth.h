@@ -25,27 +25,6 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#define BT_SERV_AUDIO_SOURCE    "0000110A"
-#define BT_SERV_AUDIO_SINK      "0000110B"
-#define BT_SERV_HSP             "00001108"
-#define BT_SERV_HFP             "0000111E"
-
-typedef struct {
-    const char *device;
-    gboolean disconnect;
-    gboolean input;
-} bt_operation_t;
-
-typedef enum {
-    CONNECT,
-    DISCONNECT
-} cd_t;
-
-typedef enum {
-    INPUT,
-    OUTPUT
-} dir_t;
-
 extern void bluetooth_init (VolumePulsePlugin *vol);
 extern void bluetooth_add_devices_to_profile_dialog (VolumePulsePlugin *vol);
 extern void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input);

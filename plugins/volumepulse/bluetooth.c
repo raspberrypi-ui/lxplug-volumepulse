@@ -29,6 +29,27 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "pulse.h"
 #include "bluetooth.h"
 
+#define BT_SERV_AUDIO_SOURCE    "0000110A"
+#define BT_SERV_AUDIO_SINK      "0000110B"
+#define BT_SERV_HSP             "00001108"
+#define BT_SERV_HFP             "0000111E"
+
+typedef struct {
+    const char *device;
+    gboolean disconnect;
+    gboolean input;
+} bt_operation_t;
+
+typedef enum {
+    CONNECT,
+    DISCONNECT
+} cd_t;
+
+typedef enum {
+    INPUT,
+    OUTPUT
+} dir_t;
+
 static void bt_cb_object_added (GDBusObjectManager *manager, GDBusObject *object, gpointer user_data);
 static void bt_cb_object_removed (GDBusObjectManager *manager, GDBusObject *object, gpointer user_data);
 static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, const gchar *owner, gpointer user_data);
