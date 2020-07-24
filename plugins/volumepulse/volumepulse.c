@@ -260,6 +260,7 @@ static void volumepulse_connect_dialog_show (VolumePulsePlugin *vol, const gchar
     gtk_misc_set_alignment (GTK_MISC (vol->conn_label), 0.0, 0.0);
     gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (vol->conn_dialog))), vol->conn_label, TRUE, TRUE, 0);
     g_signal_connect (GTK_OBJECT (vol->conn_dialog), "delete_event", G_CALLBACK (volumepulse_connect_dialog_delete), vol);
+    vol->conn_ok = NULL;
     gtk_widget_show_all (vol->conn_dialog);
 }
 
@@ -286,7 +287,7 @@ void volumepulse_connect_dialog_update (VolumePulsePlugin *vol, const gchar *par
         g_signal_connect (vol->conn_ok, "clicked", G_CALLBACK (volumepulse_connect_dialog_close), vol);
         gtk_widget_show (vol->conn_ok);
     }
-    else volumepulse_connect_dialog_close (NULL, vol);
+    else if (vol->conn_ok == NULL) volumepulse_connect_dialog_close (NULL, vol);
 }
 
 static gint volumepulse_connect_dialog_delete (GtkWidget *widget, GdkEvent *event, gpointer user_data)

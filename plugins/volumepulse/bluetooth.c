@@ -281,6 +281,7 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
     GError *error = NULL;
     char *paname, *pacard;
+    int count;
 
     GVariant *var = g_dbus_proxy_call_finish (G_DBUS_PROXY (source), res, &error);
     if (var) g_variant_unref (var);
@@ -301,47 +302,64 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
 
         // some devices take a very long time to be valid PulseAudio cards after connection
         pacard = bluez_to_pa_name (btop->device, "card", NULL);
-        do pulse_get_profile (vol, pacard);
-        while (vol->pa_profile == NULL);
-        DEBUG ("current profile %s", vol->pa_profile);
-
-        // set connected device as PulseAudio default
-        if (btop->input)
+        count = 0;
+        do
         {
-            vsystem ("echo %s > ~/.btin", btop->device);
-            paname = bluez_to_pa_name (btop->device, "source", "headset_head_unit");
-            pulse_set_profile (vol, pacard, "headset_head_unit");
-            DEBUG ("profile set to headset_head_unit");
-            pulse_change_source (vol, paname);
+            pulse_get_profile (vol, pacard);
+            count++;
+        }
+        while (vol->pa_profile == NULL && count < 100);
+
+        if (vol->pa_profile == NULL)
+        {
+            DEBUG ("No PulseAudio device");
+
+            // update dialog to show a warning
+            volumepulse_connect_dialog_update (vol, _("Device not found by PulseAudio"));
         }
         else
         {
-            vsystem ("echo %s > ~/.btout", btop->device);
-            //paname = bluez_to_pa_name (btop->device, "sink", vol->pa_profile);
-            const char *nextdev = NULL;
-            if (vol->bt_ops->next)
+            DEBUG ("Current profile %s", vol->pa_profile);
+
+            // set connected device as PulseAudio default
+            if (btop->input)
             {
-                bt_operation_t *nop = (bt_operation_t *) vol->bt_ops->next->data;
-                nextdev = nop->device;
-            }
-            if (!g_strcmp0 (btop->device, nextdev))
-            {
-                paname = bluez_to_pa_name (btop->device, "sink", "headset_head_unit");
+                vsystem ("echo %s > ~/.btin", btop->device);
+
+                paname = bluez_to_pa_name (btop->device, "source", "headset_head_unit");
                 pulse_set_profile (vol, pacard, "headset_head_unit");
-                DEBUG ("profile set to headset_head_unit");
+                DEBUG ("Profile set to headset_head_unit");
+                pulse_change_source (vol, paname);
             }
             else
             {
-                paname = bluez_to_pa_name (btop->device, "sink", "a2dp_sink");
-                pulse_set_profile (vol, pacard, "a2dp_sink");
-                DEBUG ("profile set to a2dp_sink");
-            }
-            pulse_change_sink (vol, paname);
-        }
-        g_free (paname);
-        g_free (pacard);
+                vsystem ("echo %s > ~/.btout", btop->device);
 
-        volumepulse_connect_dialog_update (vol, NULL);
+                const char *nextdev = NULL;
+                if (vol->bt_ops->next)
+                {
+                    bt_operation_t *nop = (bt_operation_t *) vol->bt_ops->next->data;
+                    nextdev = nop->device;
+                }
+                if (!g_strcmp0 (btop->device, nextdev))
+                {
+                    paname = bluez_to_pa_name (btop->device, "sink", "headset_head_unit");
+                    pulse_set_profile (vol, pacard, "headset_head_unit");
+                    DEBUG ("Profile set to headset_head_unit");
+                }
+                else
+                {
+                    paname = bluez_to_pa_name (btop->device, "sink", "a2dp_sink");
+                    pulse_set_profile (vol, pacard, "a2dp_sink");
+                    DEBUG ("Profile set to a2dp_sink");
+                }
+                pulse_change_sink (vol, paname);
+            }
+            g_free (paname);
+            g_free (pacard);
+
+            volumepulse_connect_dialog_update (vol, NULL);
+        }
     }
 
     bt_next_operation (vol);
