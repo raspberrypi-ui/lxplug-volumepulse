@@ -39,12 +39,19 @@ static void bt_cb_reconnected (GObject *source, GAsyncResult *res, gpointer user
 static void bt_cb_disconnected (GObject *source, GAsyncResult *res, gpointer user_data);
 static void bt_reconnect_devices (VolumePulsePlugin *vol);
 static gboolean bt_has_service (VolumePulsePlugin *vol, const gchar *path, const gchar *service);
+static void bluetooth_add_operation (VolumePulsePlugin *vol, const char *device, cd_t cd, dir_t dir);
+static void bluetooth_do_operation (VolumePulsePlugin *vol);
 static void bluetooth_next_operation (VolumePulsePlugin *vol);
 static void bluetooth_cancel_ops (VolumePulsePlugin *vol);
+static int pa_bt_sink_source_compare (char *sink, char *source);
+static char *bluez_to_pa_name (const char *bluez_name, char *type, char *profile);
+static char *bluez_from_pa_name (const char *pa_name);
+static void bluetooth_connect_device (VolumePulsePlugin *vol, const char *device);
+static void bluetooth_disconnect_device (VolumePulsePlugin *vol, const char *device);
 
 //static gboolean bt_is_connected (VolumePulsePlugin *vol, const gchar *path);
 
-void bluetooth_add_operation (VolumePulsePlugin *vol, const char *device, cd_t cd, dir_t dir)
+static void bluetooth_add_operation (VolumePulsePlugin *vol, const char *device, cd_t cd, dir_t dir)
 {
     bt_operation_t *newop = malloc (sizeof (bt_operation_t));
 
@@ -55,7 +62,7 @@ void bluetooth_add_operation (VolumePulsePlugin *vol, const char *device, cd_t c
     vol->bt_ops = g_list_append (vol->bt_ops, newop);
 }
 
-void bluetooth_do_operation (VolumePulsePlugin *vol)
+static void bluetooth_do_operation (VolumePulsePlugin *vol)
 {
     if (vol->bt_ops)
     {
@@ -119,7 +126,7 @@ void bluetooth_init (VolumePulsePlugin *vol)
  * Bluez device names.
  */
 
-char *bluez_to_pa_name (const char *bluez_name, char *type, char *profile)
+static char *bluez_to_pa_name (const char *bluez_name, char *type, char *profile)
 {
     unsigned int b1, b2, b3, b4, b5, b6;
 
@@ -132,7 +139,7 @@ char *bluez_to_pa_name (const char *bluez_name, char *type, char *profile)
     return g_strdup_printf ("bluez_%s.%02X_%02X_%02X_%02X_%02X_%02X%s%s", type, b1, b2, b3, b4, b5, b6, profile ? "." : "", profile ? profile : "");
 }
 
-char *bluez_from_pa_name (const char *pa_name)
+static char *bluez_from_pa_name (const char *pa_name)
 {
     unsigned int b1, b2, b3, b4, b5, b6;
 
@@ -142,7 +149,7 @@ char *bluez_from_pa_name (const char *pa_name)
     return g_strdup_printf ("/org/bluez/hci0/dev_%02X_%02X_%02X_%02X_%02X_%02X", b1, b2, b3, b4, b5, b6);
 }
 
-int pa_bt_sink_source_compare (char *sink, char *source)
+static int pa_bt_sink_source_compare (char *sink, char *source)
 {
     if (sink == NULL || source == NULL) return 1;
     if (strstr (sink, "bluez") == NULL) return 1;
@@ -246,7 +253,7 @@ static void bt_cb_name_unowned (GDBusConnection *connection, const gchar *name, 
     vol->objmanager = NULL;
 }
 
-void bluetooth_connect_device (VolumePulsePlugin *vol, const char *device)
+static void bluetooth_connect_device (VolumePulsePlugin *vol, const char *device)
 {
     GDBusInterface *interface = g_dbus_object_manager_get_interface (vol->objmanager, device, "org.bluez.Device1");
     DEBUG ("Connecting device %s...", device);
@@ -352,7 +359,7 @@ static void bt_cb_trusted (GObject *source, GAsyncResult *res, gpointer user_dat
     else DEBUG ("Trusted OK");
 }
 
-void bluetooth_disconnect_device (VolumePulsePlugin *vol, const char *device)
+static void bluetooth_disconnect_device (VolumePulsePlugin *vol, const char *device)
 {
     GDBusInterface *interface = g_dbus_object_manager_get_interface (vol->objmanager, device, "org.bluez.Device1");
     DEBUG ("Disconnecting device %s...", device);
@@ -565,4 +572,83 @@ void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input)
     }
 }
 
+
+void bluetooth_set_output (VolumePulsePlugin *vol, const char *name)
+{
+    pulse_get_default_sink_source (vol);
+    vol->bt_oname = bluez_from_pa_name (vol->pa_default_sink);
+    vol->bt_iname = bluez_from_pa_name (vol->pa_default_source);
+
+    // to ensure an output device connects with the correct profile, disconnect
+    // any existing input device first and then reconnect the input after
+    // connecting the output...
+    if (vol->bt_oname) bluetooth_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
+    if (vol->bt_iname) bluetooth_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
+    bluetooth_add_operation (vol, name, CONNECT, OUTPUT);
+    if (vol->bt_iname) bluetooth_add_operation (vol, vol->bt_iname, CONNECT, INPUT);
+
+    bluetooth_do_operation (vol);
+}
+
+
+void bluetooth_set_input (VolumePulsePlugin *vol, const char *name)
+{
+    pulse_get_default_sink_source (vol);
+    vol->bt_oname = bluez_from_pa_name (vol->pa_default_sink);
+    vol->bt_iname = bluez_from_pa_name (vol->pa_default_source);
+
+    // profiles load correctly for inputs, but may need to change the profile of
+    // a device which is currently being used for output, so reload them both anyway...
+    if (vol->bt_oname) bluetooth_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
+    if (vol->bt_iname) bluetooth_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
+    if (vol->bt_oname) bluetooth_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
+    bluetooth_add_operation (vol, name, CONNECT, INPUT);
+
+    bluetooth_do_operation (vol);
+}
+
+void bluetooth_remove_output (VolumePulsePlugin *vol)
+{
+    pulse_get_default_sink_source (vol);
+    if (strstr (vol->pa_default_sink, "bluez"))
+    {
+        if (pa_bt_sink_source_compare (vol->pa_default_sink, vol->pa_default_source))
+        {
+            // if the current default sink is Bluetooth and not also the default source, disconnect it
+            vol->bt_oname = bluez_from_pa_name (vol->pa_default_sink);
+            bluetooth_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
+
+            bluetooth_do_operation (vol);
+        }
+    }
+}
+
+gboolean bluetooth_remove_input (VolumePulsePlugin *vol)
+{
+    pulse_get_default_sink_source (vol);
+    if (strstr (vol->pa_default_source, "bluez"))
+    {
+        if (pa_bt_sink_source_compare (vol->pa_default_sink, vol->pa_default_source))
+        {
+            // if the current default source is Bluetooth and not also the default sink, disconnect it
+            vol->bt_iname = bluez_from_pa_name (vol->pa_default_source);
+            bluetooth_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
+
+            bluetooth_do_operation (vol);
+        }
+        else
+        {
+            // if the current default source and sink are both the same device, disconnect the input and force the output
+            // to reconnect as A2DP...
+            vol->bt_oname = bluez_from_pa_name (vol->pa_default_sink);
+            bluetooth_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
+            bluetooth_add_operation (vol, vol->bt_oname, DISCONNECT, INPUT);
+            bluetooth_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
+
+            bluetooth_do_operation (vol);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
 

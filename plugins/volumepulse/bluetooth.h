@@ -47,15 +47,12 @@ typedef enum {
 } dir_t;
 
 extern void bluetooth_init (VolumePulsePlugin *vol);
-extern void bluetooth_connect_device (VolumePulsePlugin *vol, const char *device);
-extern void bluetooth_disconnect_device (VolumePulsePlugin *vol, const char *device);
 extern void bluetooth_add_devices_to_profile_dialog (VolumePulsePlugin *vol);
 extern void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input);
-extern void bluetooth_add_operation (VolumePulsePlugin *vol, const char *device, cd_t cd, dir_t dir);
-extern void bluetooth_do_operation (VolumePulsePlugin *vol);
+extern void bluetooth_set_output (VolumePulsePlugin *vol, const char *name);
+extern void bluetooth_set_input (VolumePulsePlugin *vol, const char *name);
+extern void bluetooth_remove_output (VolumePulsePlugin *vol);
+extern gboolean bluetooth_remove_input (VolumePulsePlugin *vol);
 
-extern char *bluez_to_pa_name (const char *bluez_name, char *type, char *profile);
-extern char *bluez_from_pa_name (const char *pa_name);
-extern int pa_bt_sink_source_compare (char *sink, char *source);
 extern int pa_bluez_device_same (const char *padev, const char *btdev);
 

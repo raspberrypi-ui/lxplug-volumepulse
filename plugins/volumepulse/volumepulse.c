@@ -543,33 +543,15 @@ static void volumepulse_menu_build (VolumePulsePlugin *vol)
 
 static void volumepulse_set_alsa_output (GtkWidget *widget, VolumePulsePlugin *vol)
 {
-    if (strstr (vol->pa_default_sink, "bluez") && pa_bt_sink_source_compare (vol->pa_default_sink, vol->pa_default_source))
-    {
-        // if the current default sink is Bluetooth and not also the default source, disconnect it
-        char *bt_name = bluez_from_pa_name (vol->pa_default_sink);
-        bluetooth_disconnect_device (vol, bt_name);
-        g_free (bt_name);
-    }
-
+    bluetooth_remove_output (vol);
     pulse_change_sink (vol, gtk_widget_get_name (widget));
     volumepulse_update_display (vol);
 }
 
 static void volumepulse_set_alsa_input (GtkWidget *widget, VolumePulsePlugin *vol)
 {
-    if (strstr (vol->pa_default_source, "bluez") && !pa_bt_sink_source_compare (vol->pa_default_sink, vol->pa_default_source))
-    {
-        // if the current default source and sink are both Bluetooth, disconnect the input and force the output
-        // to reconnect as A2DP...
+    if (bluetooth_remove_input (vol))
         volumepulse_connect_dialog_show (vol, _("Reconnecting Bluetooth input device as output only..."));
-        vol->bt_oname = bluez_from_pa_name (vol->pa_default_sink);
-        bluetooth_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
-        bluetooth_add_operation (vol, vol->bt_oname, DISCONNECT, INPUT);
-        bluetooth_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
-
-        bluetooth_do_operation (vol);
-    }
-
     pulse_change_source (vol, gtk_widget_get_name (widget));
     volumepulse_update_display (vol);
 }
@@ -580,17 +562,7 @@ static void volumepulse_set_bluetooth_output (GtkWidget *widget, VolumePulsePlug
     volumepulse_connect_dialog_show (vol, buf);
     g_free (buf);
 
-    // to ensure an output device connects with the correct profile, disconnect
-    // any existing input device first and then reconnect the input after 
-    // connecting the output...
-    vol->bt_oname = bluez_from_pa_name (vol->pa_default_sink);
-    vol->bt_iname = bluez_from_pa_name (vol->pa_default_source);
-    if (vol->bt_oname) bluetooth_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
-    if (vol->bt_iname) bluetooth_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
-    bluetooth_add_operation (vol, widget->name, CONNECT, OUTPUT);
-    if (vol->bt_iname) bluetooth_add_operation (vol, vol->bt_iname, CONNECT, INPUT);
-
-    bluetooth_do_operation (vol);
+    bluetooth_set_output (vol, widget->name);
 }
 
 static void volumepulse_set_bluetooth_input (GtkWidget *widget, VolumePulsePlugin *vol)
@@ -599,16 +571,7 @@ static void volumepulse_set_bluetooth_input (GtkWidget *widget, VolumePulsePlugi
     volumepulse_connect_dialog_show (vol, buf);
     g_free (buf);
 
-    // profiles load correctly for inputs, but may need to change the profile of
-    // a device which is currently being used for output, so reload them both anyway...
-    vol->bt_oname = bluez_from_pa_name (vol->pa_default_sink);
-    vol->bt_iname = bluez_from_pa_name (vol->pa_default_source);
-    if (vol->bt_oname) bluetooth_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
-    if (vol->bt_iname) bluetooth_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
-    if (vol->bt_oname) bluetooth_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
-    bluetooth_add_operation (vol, widget->name, CONNECT, INPUT);
-
-    bluetooth_do_operation (vol);
+    bluetooth_set_input (vol, widget->name);
 }
 
 
