@@ -56,7 +56,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bluetooth.h"
 
 /* Helpers */
-static char *get_string (const char *fmt, ...);
+//char *get_string (const char *fmt, ...);
 static int get_value (const char *fmt, ...);
 static void hdmi_init (VolumePulsePlugin *vol);
 static const char *volumepulse_device_display_name (VolumePulsePlugin *vol, const char *name);
@@ -107,7 +107,7 @@ static void volumepulse_destructor (gpointer user_data);
 /* Generic helper functions                                                   */
 /*----------------------------------------------------------------------------*/
 
-static char *get_string (const char *fmt, ...)
+char *get_string (const char *fmt, ...)
 {
     char *cmdline, *line = NULL, *res = NULL;
     size_t len = 0;

@@ -70,7 +70,22 @@ static char *bluez_from_pa_name (const char *pa_name);
 static void bluetooth_connect_device (VolumePulsePlugin *vol, const char *device);
 static void bluetooth_disconnect_device (VolumePulsePlugin *vol, const char *device);
 
-//static gboolean bt_is_connected (VolumePulsePlugin *vol, const gchar *path);
+
+static int vsystem (const char *fmt, ...)
+{
+    char *cmdline;
+    int res;
+
+    va_list arg;
+    va_start (arg, fmt);
+    g_vasprintf (&cmdline, fmt, arg);
+    va_end (arg);
+    res = system (cmdline);
+    g_free (cmdline);
+    return res;
+}
+
+
 
 static void bluetooth_add_operation (VolumePulsePlugin *vol, const char *device, cd_t cd, dir_t dir)
 {
@@ -240,28 +255,9 @@ static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, co
         /* register callbacks for devices being added or removed */
         g_signal_connect (vol->objmanager, "object-added", G_CALLBACK (bt_cb_object_added), vol);
         g_signal_connect (vol->objmanager, "object-removed", G_CALLBACK (bt_cb_object_removed), vol);
-#if 0
-        /* Check whether a Bluetooth audio device is the current default output or input - connect to one or both if so */
-        pulse_get_default_sink_source (vol);
-        char *device = bluez_from_pa_name (vol->pa_default_sink);
-        char *idevice = bluez_from_pa_name (vol->pa_default_source);
-        if (device || idevice)
-        {
-            /* Reconnect the current Bluetooth audio device */
-            if (vol->bt_conname) g_free (vol->bt_conname);
-            if (vol->bt_reconname) g_free (vol->bt_reconname);
-            if (device) vol->bt_conname = g_strdup (device);
-            else if (idevice) vol->bt_conname = g_strdup (idevice);
 
-            if (device && idevice && g_strcmp0 (device, idevice)) vol->bt_reconname = idevice;
-            else vol->bt_reconname = NULL;
-
-            //DEBUG ("Reconnecting devices");
-            bt_reconnect_devices (vol);
-        }
-        if (device) g_free (device);
-        if (idevice) g_free (idevice);
-#endif
+        DEBUG ("Reconnecting devices");
+        bt_reconnect_devices (vol);
     }
 }
 
@@ -327,6 +323,7 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
         // set connected device as PulseAudio default
         if (btop->input)
         {
+            vsystem ("echo %s > ~/.btin", btop->device);
             paname = bluez_to_pa_name (btop->device, "source", "headset_head_unit");
             pulse_set_profile (vol, pacard, "headset_head_unit");
             DEBUG ("profile set to headset_head_unit");
@@ -334,6 +331,7 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
         }
         else
         {
+            vsystem ("echo %s > ~/.btout", btop->device);
             //paname = bluez_to_pa_name (btop->device, "sink", vol->pa_profile);
             const char *nextdev = NULL;
             if (vol->bt_ops->next)
@@ -431,73 +429,18 @@ static gboolean bt_has_service (VolumePulsePlugin *vol, const gchar *path, const
     return FALSE;
 }
 
-#if 0
 static void bt_reconnect_devices (VolumePulsePlugin *vol)
 {
-    while (vol->bt_conname)
-    {
-        GDBusInterface *interface = g_dbus_object_manager_get_interface (vol->objmanager, vol->bt_conname, "org.bluez.Device1");
-        DEBUG ("Reconnecting %s...", vol->bt_conname);
-        if (interface)
-        {
-            // trust and connect
-            g_dbus_proxy_call (G_DBUS_PROXY (interface), "org.freedesktop.DBus.Properties.Set",
-                g_variant_new ("(ssv)", g_dbus_proxy_get_interface_name (G_DBUS_PROXY (interface)), "Trusted", g_variant_new_boolean (TRUE)),
-                G_DBUS_CALL_FLAGS_NONE, -1, NULL, bt_cb_trusted, vol);
-            g_dbus_proxy_call (G_DBUS_PROXY (interface), "Connect", NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, bt_cb_reconnected, vol);
-            g_object_unref (interface);
-            break;
-        }
+    vol->bt_oname = get_string ("cat ~/.btout 2> /dev/null");
+    vol->bt_iname = get_string ("cat ~/.btin 2> /dev/null");
 
-        DEBUG ("Couldn't get device interface from object manager - device not available to reconnect");
-        g_free (vol->bt_conname);
+    if (vol->bt_oname) bluetooth_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
+    if (vol->bt_iname) bluetooth_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
+    if (vol->bt_oname) bluetooth_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
+    if (vol->bt_iname) bluetooth_add_operation (vol, vol->bt_iname, CONNECT, INPUT);
 
-        if (vol->bt_reconname)
-        {
-            vol->bt_conname = vol->bt_reconname;
-            vol->bt_reconname = NULL;
-        }
-        else vol->bt_conname = NULL;
-    }
+    bluetooth_do_operation (vol);
 }
-
-static void bt_cb_reconnected (GObject *source, GAsyncResult *res, gpointer user_data)
-{
-    VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
-    GError *error = NULL;
-
-    GVariant *var = g_dbus_proxy_call_finish (G_DBUS_PROXY (source), res, &error);
-    if (var) g_variant_unref (var);
-
-    if (error) DEBUG ("Connect error %s", error->message);
-    else DEBUG ("Connected OK");
-
-    // delete the connection information
-    g_free (vol->bt_conname);
-    vol->bt_conname = NULL;
-
-    // connect to second device if there is one...
-    if (vol->bt_reconname)
-    {
-        vol->bt_conname = vol->bt_reconname;
-        vol->bt_reconname = NULL;
-        DEBUG ("Connecting to second device %s...", vol->bt_conname);
-        bt_reconnect_devices (vol);
-    }
-    else volumepulse_update_display (vol);
-}
-#endif
-#if 0
-static gboolean bt_is_connected (VolumePulsePlugin *vol, const gchar *path)
-{
-    GDBusInterface *interface = g_dbus_object_manager_get_interface (vol->objmanager, path, "org.bluez.Device1");
-    GVariant *var = g_dbus_proxy_get_cached_property (G_DBUS_PROXY (interface), "Connected");
-    gboolean res = g_variant_get_boolean (var);
-    g_variant_unref (var);
-    g_object_unref (interface);
-    return res;
-}
-#endif
 
 void bluetooth_add_devices_to_profile_dialog (VolumePulsePlugin *vol)
 {
@@ -630,6 +573,7 @@ void bluetooth_set_input (VolumePulsePlugin *vol, const char *name)
 
 void bluetooth_remove_output (VolumePulsePlugin *vol)
 {
+    vsystem ("rm ~/.btout");
     pulse_get_default_sink_source (vol);
     if (strstr (vol->pa_default_sink, "bluez"))
     {
@@ -646,6 +590,7 @@ void bluetooth_remove_output (VolumePulsePlugin *vol)
 
 gboolean bluetooth_remove_input (VolumePulsePlugin *vol)
 {
+    vsystem ("rm ~/.btin");
     pulse_get_default_sink_source (vol);
     if (strstr (vol->pa_default_source, "bluez"))
     {

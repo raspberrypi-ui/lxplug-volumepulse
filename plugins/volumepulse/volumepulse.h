@@ -93,5 +93,7 @@ extern void volumepulse_connect_dialog_update (VolumePulsePlugin *vol, const cha
 extern void volumepulse_menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input);
 extern void volumepulse_profiles_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name);
 
+extern char *get_string (const char *fmt, ...);
+
 /* End of file */
 /*----------------------------------------------------------------------------*/
