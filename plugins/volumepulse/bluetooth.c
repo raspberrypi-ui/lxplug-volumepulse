@@ -47,18 +47,18 @@ typedef struct {
 typedef enum {
     CONNECT,
     DISCONNECT
-} cd_t;
+} bt_cd_t;
 
 typedef enum {
     INPUT,
     OUTPUT
-} dir_t;
+} bt_dir_t;
 
 /*----------------------------------------------------------------------------*/
 /* Static function prototypes                                                 */
 /*----------------------------------------------------------------------------*/
 
-static void bt_add_operation (VolumePulsePlugin *vol, const char *device, cd_t cd, dir_t dir);
+static void bt_add_operation (VolumePulsePlugin *vol, const char *device, bt_cd_t cd, bt_dir_t dir);
 static void bt_do_operation (VolumePulsePlugin *vol);
 static void bt_next_operation (VolumePulsePlugin *vol);
 static char *bt_to_pa_name (const char *bluez_name, char *type, char *profile);
@@ -81,7 +81,7 @@ static gboolean bt_has_service (VolumePulsePlugin *vol, const gchar *path, const
 
 /* Add an operation to the list */
 
-static void bt_add_operation (VolumePulsePlugin *vol, const char *device, cd_t cd, dir_t dir)
+static void bt_add_operation (VolumePulsePlugin *vol, const char *device, bt_cd_t cd, bt_dir_t dir)
 {
     bt_operation_t *newop = malloc (sizeof (bt_operation_t));
 
@@ -185,18 +185,18 @@ static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, co
 
     /* BlueZ exists - get an object manager for it */
     GError *error = NULL;
-    vol->objmanager = g_dbus_object_manager_client_new_for_bus_sync (G_BUS_TYPE_SYSTEM, 0, "org.bluez", "/", NULL, NULL, NULL, NULL, &error);
+    vol->bt_objmanager = g_dbus_object_manager_client_new_for_bus_sync (G_BUS_TYPE_SYSTEM, 0, "org.bluez", "/", NULL, NULL, NULL, NULL, &error);
     if (error)
     {
         DEBUG ("Error getting object manager - %s", error->message);
-        vol->objmanager = NULL;
+        vol->bt_objmanager = NULL;
         g_error_free (error);
     }
     else
     {
         /* register callbacks for devices being added or removed */
-        g_signal_connect (vol->objmanager, "object-added", G_CALLBACK (bt_cb_object_added), vol);
-        g_signal_connect (vol->objmanager, "object-removed", G_CALLBACK (bt_cb_object_removed), vol);
+        g_signal_connect (vol->bt_objmanager, "object-added", G_CALLBACK (bt_cb_object_added), vol);
+        g_signal_connect (vol->bt_objmanager, "object-removed", G_CALLBACK (bt_cb_object_removed), vol);
 
         DEBUG ("Reconnecting devices");
         vol->bt_oname = get_string ("cat ~/.btout 2> /dev/null");
@@ -218,13 +218,13 @@ static void bt_cb_name_unowned (GDBusConnection *connection, const gchar *name, 
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
     DEBUG ("Name %s unowned on D-Bus", name);
 
-    if (vol->objmanager)
+    if (vol->bt_objmanager)
     {
-        g_signal_handlers_disconnect_by_func (vol->objmanager, G_CALLBACK (bt_cb_object_added), vol);
-        g_signal_handlers_disconnect_by_func (vol->objmanager, G_CALLBACK (bt_cb_object_removed), vol);
-        g_object_unref (vol->objmanager);
+        g_signal_handlers_disconnect_by_func (vol->bt_objmanager, G_CALLBACK (bt_cb_object_added), vol);
+        g_signal_handlers_disconnect_by_func (vol->bt_objmanager, G_CALLBACK (bt_cb_object_removed), vol);
+        g_object_unref (vol->bt_objmanager);
     }
-    vol->objmanager = NULL;
+    vol->bt_objmanager = NULL;
 }
 
 /* Callback for BlueZ device connecting */
@@ -271,7 +271,7 @@ static void bt_cb_object_removed (GDBusObjectManager *manager, GDBusObject *obje
 
 static void bt_connect_device (VolumePulsePlugin *vol, const char *device)
 {
-    GDBusInterface *interface = g_dbus_object_manager_get_interface (vol->objmanager, device, "org.bluez.Device1");
+    GDBusInterface *interface = g_dbus_object_manager_get_interface (vol->bt_objmanager, device, "org.bluez.Device1");
     DEBUG ("Connecting device %s...", device);
     if (interface)
     {
@@ -403,7 +403,7 @@ static void bt_cb_trusted (GObject *source, GAsyncResult *res, gpointer user_dat
 
 static void bt_disconnect_device (VolumePulsePlugin *vol, const char *device)
 {
-    GDBusInterface *interface = g_dbus_object_manager_get_interface (vol->objmanager, device, "org.bluez.Device1");
+    GDBusInterface *interface = g_dbus_object_manager_get_interface (vol->bt_objmanager, device, "org.bluez.Device1");
     DEBUG ("Disconnecting device %s...", device);
     if (interface)
     {
@@ -441,7 +441,7 @@ static void bt_cb_disconnected (GObject *source, GAsyncResult *res, gpointer use
 
 static gboolean bt_has_service (VolumePulsePlugin *vol, const gchar *path, const gchar *service)
 {
-    GDBusInterface *interface = g_dbus_object_manager_get_interface (vol->objmanager, path, "org.bluez.Device1");
+    GDBusInterface *interface = g_dbus_object_manager_get_interface (vol->bt_objmanager, path, "org.bluez.Device1");
     GVariant *elem, *var = g_dbus_proxy_get_cached_property (G_DBUS_PROXY (interface), "UUIDs");
     GVariantIter iter;
     g_variant_iter_init (&iter, var);
@@ -470,7 +470,7 @@ void bluetooth_init (VolumePulsePlugin *vol)
     vol->bt_ops = NULL;
 
     /* Set up callbacks to see if BlueZ is on D-Bus */
-    vol->watcher_id = g_bus_watch_name (G_BUS_TYPE_SYSTEM, "org.bluez", 0, bt_cb_name_owned, bt_cb_name_unowned, vol, NULL);
+    vol->bt_watcher_id = g_bus_watch_name (G_BUS_TYPE_SYSTEM, "org.bluez", 0, bt_cb_name_owned, bt_cb_name_unowned, vol, NULL);
 }
 
 /* Teardown BlueZ interface */
@@ -478,16 +478,16 @@ void bluetooth_init (VolumePulsePlugin *vol)
 void bluetooth_terminate (VolumePulsePlugin *vol)
 {
     /* Remove signal handlers on D-Bus object manager */
-    if (vol->objmanager)
+    if (vol->bt_objmanager)
     {
-        g_signal_handlers_disconnect_by_func (vol->objmanager, G_CALLBACK (bt_cb_object_added), vol);
-        g_signal_handlers_disconnect_by_func (vol->objmanager, G_CALLBACK (bt_cb_object_removed), vol);
-        g_object_unref (vol->objmanager);
+        g_signal_handlers_disconnect_by_func (vol->bt_objmanager, G_CALLBACK (bt_cb_object_added), vol);
+        g_signal_handlers_disconnect_by_func (vol->bt_objmanager, G_CALLBACK (bt_cb_object_removed), vol);
+        g_object_unref (vol->bt_objmanager);
     }
-    vol->objmanager = NULL;
+    vol->bt_objmanager = NULL;
 
     /* Remove the watch on D-Bus */
-    g_bus_unwatch_name (vol->watcher_id);
+    g_bus_unwatch_name (vol->bt_watcher_id);
 }
 
 /* Set a BlueZ device as the default PulseAudio sink */
@@ -582,10 +582,10 @@ gboolean bluetooth_remove_input (VolumePulsePlugin *vol)
 
 void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input)
 {
-    if (vol->objmanager)
+    if (vol->bt_objmanager)
     {
         // iterate all the objects the manager knows about
-        GList *objects = g_dbus_object_manager_get_objects (vol->objmanager);
+        GList *objects = g_dbus_object_manager_get_objects (vol->bt_objmanager);
         while (objects != NULL)
         {
             GDBusObject *object = (GDBusObject *) objects->data;
@@ -608,7 +608,7 @@ void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input)
                             if (input)
                             {
                                 // create a menu if there isn't one already
-                                if (!vol->inputs) vol->inputs = gtk_menu_new ();
+                                if (!vol->menu_inputs) vol->menu_inputs = gtk_menu_new ();
                                 volumepulse_menu_add_item (vol, g_variant_get_string (name, NULL), objpath, TRUE);
                             }
                             else
@@ -632,10 +632,10 @@ void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input)
 
 void bluetooth_add_devices_to_profile_dialog (VolumePulsePlugin *vol)
 {
-    if (vol->objmanager)
+    if (vol->bt_objmanager)
     {
         // iterate all the objects the manager knows about
-        GList *objects = g_dbus_object_manager_get_objects (vol->objmanager);
+        GList *objects = g_dbus_object_manager_get_objects (vol->bt_objmanager);
         while (objects != NULL)
         {
             GDBusObject *object = (GDBusObject *) objects->data;
@@ -660,7 +660,7 @@ void bluetooth_add_devices_to_profile_dialog (VolumePulsePlugin *vol)
                             char *pacard = bt_to_pa_name ((char *) objpath, "card", NULL);
                             pulse_get_profile (vol, pacard);
                             if (vol->pa_profile == NULL)
-                                volumepulse_profiles_add_combo (vol, NULL, vol->btprofiles, 0, g_variant_get_string (name, NULL), NULL);
+                                volumepulse_profiles_add_combo (vol, NULL, vol->profiles_bt_box, 0, g_variant_get_string (name, NULL), NULL);
                         }
                         g_variant_unref (name);
                         g_variant_unref (icon);

@@ -170,21 +170,29 @@ static void hdmi_init (VolumePulsePlugin *vol)
     if (m < 0) m = 1; /* couldn't read, so assume 1... */
     if (m > 2) m = 2;
 
+    vol->hdmi_names[0] = NULL;
+    vol->hdmi_names[1] = NULL;
+
     /* get the names */
     if (m == 2)
     {
-        for (i = 0; i < m; i++)
+        for (i = 0; i < 2; i++)
         {
-            vol->mon_names[i] = get_string ("xrandr --listmonitors | grep %d: | cut -d ' ' -f 6", i);
+            vol->hdmi_names[i] = get_string ("xrandr --listmonitors | grep %d: | cut -d ' ' -f 6", i);
         }
 
         /* check both devices are HDMI */
-        if ((vol->mon_names[0] && strncmp (vol->mon_names[0], "HDMI", 4) != 0)
-            || (vol->mon_names[1] && strncmp (vol->mon_names[1], "HDMI", 4) != 0))
-                m = 1;
+        if (vol->hdmi_names[0] && !strncmp (vol->hdmi_names[0], "HDMI", 4)
+            && vol->hdmi_names[1] && !strncmp (vol->hdmi_names[1], "HDMI", 4))
+                return;
     }
 
-    vol->hdmis = m;
+    /* only one device, just name it "HDMI" */
+    for (i = 0; i < 2; i++)
+    {
+        if (vol->hdmi_names[i]) g_free (vol->hdmi_names[i]);
+        vol->hdmi_names[i] = g_strdup (_("HDMI"));
+    }
 }
 
 /* Remap internal to display names for BCM device */
@@ -192,9 +200,9 @@ static void hdmi_init (VolumePulsePlugin *vol)
 static const char *volumepulse_device_display_name (VolumePulsePlugin *vol, const char *name)
 {
     if (!g_strcmp0 (name, "bcm2835 HDMI 1"))
-        return vol->hdmis == 1 ? _("HDMI") : vol->mon_names[0];
+        return vol->hdmi_names[0];
     else if (!g_strcmp0 (name, "bcm2835 HDMI 2"))
-        return vol->hdmis == 1 ? _("HDMI") : vol->mon_names[1];
+        return vol->hdmi_names[1];
     else if (!g_strcmp0 (name, "bcm2835 Headphones"))
         return _("Analog");
     else return name;
@@ -238,18 +246,18 @@ void volumepulse_update_display (VolumePulsePlugin *vol)
     lxpanel_plugin_set_taskbar_icon (vol->panel, vol->tray_icon, icon);
 
     /* update popup window controls */
-    if (vol->mute_check)
+    if (vol->popup_mute_check)
     {
-        g_signal_handler_block (vol->mute_check, vol->mute_check_handler);
-        gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (vol->mute_check), mute);
-        g_signal_handler_unblock (vol->mute_check, vol->mute_check_handler);
+        g_signal_handler_block (vol->popup_mute_check, vol->mute_check_handler);
+        gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (vol->popup_mute_check), mute);
+        g_signal_handler_unblock (vol->popup_mute_check, vol->mute_check_handler);
     }
 
-    if (vol->volume_scale)
+    if (vol->popup_volume_scale)
     {
-        g_signal_handler_block (vol->volume_scale, vol->volume_scale_handler);
-        gtk_range_set_value (GTK_RANGE (vol->volume_scale), level);
-        g_signal_handler_unblock (vol->volume_scale, vol->volume_scale_handler);
+        g_signal_handler_block (vol->popup_volume_scale, vol->volume_scale_handler);
+        gtk_range_set_value (GTK_RANGE (vol->popup_volume_scale), level);
+        g_signal_handler_unblock (vol->popup_volume_scale, vol->volume_scale_handler);
     }
 
     /* update tooltip */
@@ -265,7 +273,7 @@ static void volumepulse_theme_change (GtkWidget *widget, VolumePulsePlugin *vol)
 
 static void volumepulse_open_profile_dialog (GtkWidget *widget, VolumePulsePlugin *vol)
 {
-    gtk_menu_popdown (GTK_MENU (vol->menu_popup));
+    gtk_menu_popdown (GTK_MENU (vol->menu_devices));
     volumepulse_profiles_show (vol);
 }
 
@@ -361,14 +369,14 @@ static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButto
     else if (event->button == 2)
     {
         /* middle-click - toggle mute */
-        gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (vol->mute_check), ! gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (vol->mute_check)));
+        gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (vol->popup_mute_check), ! gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (vol->popup_mute_check)));
     }
     else if (event->button == 3)
     {
         /* right-click - show device list */
         volumepulse_menu_build (vol);
-        gtk_widget_show_all (vol->menu_popup);
-        gtk_menu_popup (GTK_MENU (vol->menu_popup), NULL, NULL, (GtkMenuPositionFunc) volumepulse_popup_set_position, (gpointer) vol,
+        gtk_widget_show_all (vol->menu_devices);
+        gtk_menu_popup (GTK_MENU (vol->menu_devices), NULL, NULL, (GtkMenuPositionFunc) volumepulse_popup_set_position, (gpointer) vol,
             event->button, event->time);
     }
     return TRUE;
@@ -392,7 +400,7 @@ static void volumepulse_menu_add_separator (GtkWidget *menu)
 
 void volumepulse_menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input)
 {
-    GtkWidget *menu = input ? vol->inputs : vol->outputs;
+    GtkWidget *menu = input ? vol->menu_inputs : vol->menu_outputs;
     const char *disp_label = volumepulse_device_display_name (vol, label);
     GtkWidget *mi = gtk_image_menu_item_new_with_label (disp_label);
     gtk_image_menu_item_set_always_show_image (GTK_IMAGE_MENU_ITEM (mi), TRUE);
@@ -474,72 +482,72 @@ static void volumepulse_menu_build (VolumePulsePlugin *vol)
 {
     GtkWidget *mi;
 
-    vol->menu_popup = gtk_menu_new ();
+    vol->menu_devices = gtk_menu_new ();
 
     // create input selector
-    vol->inputs = NULL;
+    vol->menu_inputs = NULL;
 
     // add ALSA inputs
     pulse_add_devices_to_menu (vol, TRUE, FALSE);
-    volumepulse_menu_add_separator (vol->inputs);
+    volumepulse_menu_add_separator (vol->menu_inputs);
 
     // add Bluetooth inputs
     bluetooth_add_devices_to_menu (vol, TRUE);
 
-    if (vol->inputs)
+    if (vol->menu_inputs)
     {
-        volumepulse_menu_add_separator (vol->inputs);
+        volumepulse_menu_add_separator (vol->menu_inputs);
 
         mi = gtk_image_menu_item_new_with_label (_("Device Profiles..."));
         g_signal_connect (mi, "activate", G_CALLBACK (volumepulse_open_profile_dialog), (gpointer) vol);
-        gtk_menu_shell_append (GTK_MENU_SHELL (vol->inputs), mi);
+        gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_inputs), mi);
     }
 
     // create a submenu for the outputs if there is an input submenu
-    if (vol->inputs) vol->outputs = gtk_menu_new ();
-    else vol->outputs = vol->menu_popup;
+    if (vol->menu_inputs) vol->menu_outputs = gtk_menu_new ();
+    else vol->menu_outputs = vol->menu_devices;
 
     // add internal outputs
     pulse_add_devices_to_menu (vol, FALSE, TRUE);
-    volumepulse_menu_add_separator (vol->outputs);
+    volumepulse_menu_add_separator (vol->menu_outputs);
 
     // add external outputs
     pulse_add_devices_to_menu (vol, FALSE, FALSE);
-    volumepulse_menu_add_separator (vol->outputs);
+    volumepulse_menu_add_separator (vol->menu_outputs);
 
     // add Bluetooth devices
     bluetooth_add_devices_to_menu (vol, FALSE);
 
     // did we find any output devices? if not, the menu will be empty...
-    if (gtk_container_get_children (GTK_CONTAINER (vol->outputs)) != NULL)
+    if (gtk_container_get_children (GTK_CONTAINER (vol->menu_outputs)) != NULL)
     {
         // add the output options menu item to the output menu
-        volumepulse_menu_add_separator (vol->outputs);
+        volumepulse_menu_add_separator (vol->menu_outputs);
 
         mi = gtk_image_menu_item_new_with_label (_("Device Profiles..."));
         g_signal_connect (mi, "activate", G_CALLBACK (volumepulse_open_profile_dialog), (gpointer) vol);
-        gtk_menu_shell_append (GTK_MENU_SHELL (vol->outputs), mi);
+        gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_outputs), mi);
 
-        if (vol->inputs)
+        if (vol->menu_inputs)
         {
             // insert submenus
             mi = gtk_menu_item_new_with_label (_("Audio Outputs"));
-            gtk_menu_item_set_submenu (GTK_MENU_ITEM (mi), vol->outputs);
-            gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_popup), mi);
+            gtk_menu_item_set_submenu (GTK_MENU_ITEM (mi), vol->menu_outputs);
+            gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
 
             mi = gtk_separator_menu_item_new ();
-            gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_popup), mi);
+            gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
 
             mi = gtk_menu_item_new_with_label (_("Audio Inputs"));
-            gtk_menu_item_set_submenu (GTK_MENU_ITEM (mi), vol->inputs);
-            gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_popup), mi);
+            gtk_menu_item_set_submenu (GTK_MENU_ITEM (mi), vol->menu_inputs);
+            gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
         }
     }
     else
     {
         mi = gtk_image_menu_item_new_with_label (_("No audio devices found"));
         gtk_widget_set_sensitive (GTK_WIDGET (mi), FALSE);
-        gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_popup), mi);
+        gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
     }
 
     // update the menu item names, which are currently ALSA device names, to PulseAudio sink/source names
@@ -547,13 +555,13 @@ static void volumepulse_menu_build (VolumePulsePlugin *vol)
 
     // show the fallback sink and source in the menu
     pulse_get_default_sink_source (vol);
-    gtk_container_foreach (GTK_CONTAINER (vol->outputs), volumepulse_menu_show_default_sink, vol);
-    gtk_container_foreach (GTK_CONTAINER (vol->inputs), volumepulse_menu_show_default_source, vol);
+    gtk_container_foreach (GTK_CONTAINER (vol->menu_outputs), volumepulse_menu_show_default_sink, vol);
+    gtk_container_foreach (GTK_CONTAINER (vol->menu_inputs), volumepulse_menu_show_default_source, vol);
 
     // lock menu if a dialog is open
-    if (vol->conn_dialog || vol->options_dlg)
+    if (vol->conn_dialog || vol->profiles_dialog)
     {
-        GList *items = gtk_container_get_children (GTK_CONTAINER (vol->menu_popup));
+        GList *items = gtk_container_get_children (GTK_CONTAINER (vol->menu_devices));
         while (items)
         {
             gtk_widget_set_sensitive (GTK_WIDGET (items->data), FALSE);
@@ -640,23 +648,23 @@ static void volumepulse_popup_build (GtkWidget *p)
     gtk_container_add (GTK_CONTAINER (viewport), box);
 
     /* Create a vertical scale as the child of the vertical box. */
-    vol->volume_scale = gtk_vscale_new (GTK_ADJUSTMENT (gtk_adjustment_new (100, 0, 100, 0, 0, 0)));
-    gtk_widget_set_name (vol->volume_scale, "volscale");
-    g_object_set (vol->volume_scale, "height-request", 120, NULL);
-    gtk_scale_set_draw_value (GTK_SCALE (vol->volume_scale), FALSE);
-    gtk_range_set_inverted (GTK_RANGE (vol->volume_scale), TRUE);
-    gtk_box_pack_start (GTK_BOX (box), vol->volume_scale, TRUE, TRUE, 0);
-    gtk_widget_set_can_focus (vol->volume_scale, FALSE);
+    vol->popup_volume_scale = gtk_vscale_new (GTK_ADJUSTMENT (gtk_adjustment_new (100, 0, 100, 0, 0, 0)));
+    gtk_widget_set_name (vol->popup_volume_scale, "volscale");
+    g_object_set (vol->popup_volume_scale, "height-request", 120, NULL);
+    gtk_scale_set_draw_value (GTK_SCALE (vol->popup_volume_scale), FALSE);
+    gtk_range_set_inverted (GTK_RANGE (vol->popup_volume_scale), TRUE);
+    gtk_box_pack_start (GTK_BOX (box), vol->popup_volume_scale, TRUE, TRUE, 0);
+    gtk_widget_set_can_focus (vol->popup_volume_scale, FALSE);
 
     /* Value-changed and scroll-event signals. */
-    vol->volume_scale_handler = g_signal_connect (vol->volume_scale, "value-changed", G_CALLBACK (volumepulse_popup_scale_changed), vol);
-    g_signal_connect (vol->volume_scale, "scroll-event", G_CALLBACK (volumepulse_popup_scale_scrolled), vol);
+    vol->volume_scale_handler = g_signal_connect (vol->popup_volume_scale, "value-changed", G_CALLBACK (volumepulse_popup_scale_changed), vol);
+    g_signal_connect (vol->popup_volume_scale, "scroll-event", G_CALLBACK (volumepulse_popup_scale_scrolled), vol);
 
     /* Create a check button as the child of the vertical box. */
-    vol->mute_check = gtk_check_button_new_with_label (_("Mute"));
-    gtk_box_pack_end (GTK_BOX (box), vol->mute_check, FALSE, FALSE, 0);
-    vol->mute_check_handler = g_signal_connect (vol->mute_check, "toggled", G_CALLBACK (volumepulse_popup_mute_toggled), vol);
-    gtk_widget_set_can_focus (vol->mute_check, FALSE);
+    vol->popup_mute_check = gtk_check_button_new_with_label (_("Mute"));
+    gtk_box_pack_end (GTK_BOX (box), vol->popup_mute_check, FALSE, FALSE, 0);
+    vol->mute_check_handler = g_signal_connect (vol->popup_mute_check, "toggled", G_CALLBACK (volumepulse_popup_mute_toggled), vol);
+    gtk_widget_set_can_focus (vol->popup_mute_check, FALSE);
 }
 
 /* Handler for "value_changed" signal on popup window vertical scale. */
@@ -674,7 +682,7 @@ static void volumepulse_popup_scale_changed (GtkRange *range, VolumePulsePlugin 
 static void volumepulse_popup_scale_scrolled (GtkScale *scale, GdkEventScroll *evt, VolumePulsePlugin *vol)
 {
     /* Get the state of the vertical scale. */
-    gdouble val = gtk_range_get_value (GTK_RANGE (vol->volume_scale));
+    gdouble val = gtk_range_get_value (GTK_RANGE (vol->popup_volume_scale));
 
     /* Dispatch on scroll direction to update the value. */
     if ((evt->direction == GDK_SCROLL_UP) || (evt->direction == GDK_SCROLL_LEFT))
@@ -683,7 +691,7 @@ static void volumepulse_popup_scale_scrolled (GtkScale *scale, GdkEventScroll *e
         val -= 2;
 
     /* Reset the state of the vertical scale.  This provokes a "value_changed" event. */
-    gtk_range_set_value (GTK_RANGE (vol->volume_scale), CLAMP((int) val, 0, 100));
+    gtk_range_set_value (GTK_RANGE (vol->popup_volume_scale), CLAMP((int) val, 0, 100));
 }
 
 /* Handler for "toggled" signal on popup window mute checkbox. */
@@ -725,22 +733,22 @@ static void volumepulse_profiles_show (VolumePulsePlugin *vol)
     char *lbl;
 
     // create the window itself
-    vol->options_dlg = gtk_window_new (GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title (GTK_WINDOW (vol->options_dlg), _("Device Profiles"));
-    gtk_window_set_position (GTK_WINDOW (vol->options_dlg), GTK_WIN_POS_CENTER);
-    gtk_window_set_default_size (GTK_WINDOW (vol->options_dlg), 400, 300);
-    gtk_container_set_border_width (GTK_CONTAINER (vol->options_dlg), 10);
-    gtk_window_set_icon_name (GTK_WINDOW (vol->options_dlg), "multimedia-volume-control");
-    g_signal_connect (vol->options_dlg, "delete-event", G_CALLBACK (volumepulse_profiles_close_handler), vol);
+    vol->profiles_dialog = gtk_window_new (GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title (GTK_WINDOW (vol->profiles_dialog), _("Device Profiles"));
+    gtk_window_set_position (GTK_WINDOW (vol->profiles_dialog), GTK_WIN_POS_CENTER);
+    gtk_window_set_default_size (GTK_WINDOW (vol->profiles_dialog), 400, 300);
+    gtk_container_set_border_width (GTK_CONTAINER (vol->profiles_dialog), 10);
+    gtk_window_set_icon_name (GTK_WINDOW (vol->profiles_dialog), "multimedia-volume-control");
+    g_signal_connect (vol->profiles_dialog, "delete-event", G_CALLBACK (volumepulse_profiles_close_handler), vol);
 
     box = gtk_vbox_new (FALSE, 5);
-    vol->intprofiles = gtk_vbox_new (FALSE, 5);
-    vol->alsaprofiles = gtk_vbox_new (FALSE, 5);
-    vol->btprofiles = gtk_vbox_new (FALSE, 5);
-    gtk_container_add (GTK_CONTAINER (vol->options_dlg), box);
-    gtk_box_pack_start (GTK_BOX (box), vol->intprofiles, FALSE, FALSE, 0);
-    gtk_box_pack_start (GTK_BOX (box), vol->alsaprofiles, FALSE, FALSE, 0);
-    gtk_box_pack_start (GTK_BOX (box), vol->btprofiles, FALSE, FALSE, 0);
+    vol->profiles_int_box = gtk_vbox_new (FALSE, 5);
+    vol->profiles_ext_box = gtk_vbox_new (FALSE, 5);
+    vol->profiles_bt_box = gtk_vbox_new (FALSE, 5);
+    gtk_container_add (GTK_CONTAINER (vol->profiles_dialog), box);
+    gtk_box_pack_start (GTK_BOX (box), vol->profiles_int_box, FALSE, FALSE, 0);
+    gtk_box_pack_start (GTK_BOX (box), vol->profiles_ext_box, FALSE, FALSE, 0);
+    gtk_box_pack_start (GTK_BOX (box), vol->profiles_bt_box, FALSE, FALSE, 0);
 
     // first loop through cards
     pulse_add_devices_to_profile_dialog (vol);
@@ -756,13 +764,13 @@ static void volumepulse_profiles_show (VolumePulsePlugin *vol)
     g_signal_connect (btn, "clicked", G_CALLBACK (volumepulse_profiles_ok_handler), vol);
     gtk_box_pack_end (GTK_BOX (wid), btn, FALSE, FALSE, 5);
 
-    gtk_widget_show_all (vol->options_dlg);
+    gtk_widget_show_all (vol->profiles_dialog);
 }
 
 static void volumepulse_profiles_close (VolumePulsePlugin *vol)
 {
-    gtk_widget_destroy (vol->options_dlg);
-    vol->options_dlg = NULL;
+    gtk_widget_destroy (vol->profiles_dialog);
+    vol->profiles_dialog = NULL;
 }
 
 static void volumepulse_profiles_ok_handler (GtkButton *button, gpointer *user_data)
@@ -923,7 +931,7 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     textdomain (GETTEXT_PACKAGE);
 #endif
 
-    vol->options_dlg = NULL;
+    vol->profiles_dialog = NULL;
 
     /* Allocate top level widget and set into Plugin widget pointer. */
     vol->panel = panel;
@@ -973,7 +981,7 @@ static void volumepulse_destructor (gpointer user_data)
 
     /* If the dialog box is open, dismiss it. */
     if (vol->popup_window != NULL) gtk_widget_destroy (vol->popup_window);
-    if (vol->menu_popup != NULL) gtk_widget_destroy (vol->menu_popup);
+    if (vol->menu_devices != NULL) gtk_widget_destroy (vol->menu_devices);
 
     if (vol->panel) g_signal_handlers_disconnect_by_func (panel_get_icon_theme (vol->panel), volumepulse_theme_change, vol);
 

@@ -46,25 +46,24 @@ typedef struct {
     /* graphics */
     GtkWidget *tray_icon;               /* Displayed icon */
     GtkWidget *popup_window;            /* Top level window for popup */
-    GtkWidget *volume_scale;            /* Scale for volume */
-    GtkWidget *mute_check;              /* Checkbox for mute state */
-    GtkWidget *menu_popup;              /* Right-click menu */
-    GtkWidget *options_dlg;             /* Device options dialog */
-    GtkWidget *outputs;                 /* Output select menu */
-    GtkWidget *inputs;                  /* Input select menu */
-    GtkWidget *intprofiles;             /* Vbox for profile combos */
-    GtkWidget *alsaprofiles;            /* Vbox for profile combos */
-    GtkWidget *btprofiles;              /* Vbox for profile combos */
+    GtkWidget *popup_volume_scale;      /* Scale for volume */
+    GtkWidget *popup_mute_check;        /* Checkbox for mute state */
+    GtkWidget *menu_devices;            /* Right-click menu */
+    GtkWidget *menu_outputs;            /* Output select menu */
+    GtkWidget *menu_inputs;             /* Input select menu */
+    GtkWidget *profiles_dialog;         /* Device profiles dialog */
+    GtkWidget *profiles_int_box;        /* Vbox for profile combos */
+    GtkWidget *profiles_ext_box;        /* Vbox for profile combos */
+    GtkWidget *profiles_bt_box;         /* Vbox for profile combos */
     GtkWidget *conn_dialog;             /* Connection dialog box */
     GtkWidget *conn_label;              /* Dialog box text field */
     GtkWidget *conn_ok;                 /* Dialog box button */
     gboolean show_popup;                /* Toggle to show and hide the popup on left click */
-    guint volume_scale_handler;         /* Handler for vscale widget */
+    guint volume_scale_handler;         /* Handler for volume_scale widget */
     guint mute_check_handler;           /* Handler for mute_check widget */
 
     /* HDMI devices */
-    guint hdmis;                        /* Number of HDMI devices */
-    char *mon_names[2];                 /* Names of HDMI devices */
+    char *hdmi_names[2];                /* Display names of HDMI devices */
 
     /* PulseAudio interface */
     pa_threaded_mainloop *pa_mainloop;  /* Controller loop variable */
@@ -72,15 +71,15 @@ typedef struct {
     pa_context_state_t pa_state;        /* Current controller state */
     char *pa_default_sink;              /* Current default sink name */
     char *pa_default_source;            /* Current default source name */
+    char *pa_profile;                   /* Current profile for card */
     int pa_channels;                    /* Number of channels on default sink */
     int pa_volume;                      /* Volume setting on default sink */
     int pa_mute;                        /* Mute setting on default sink */
-    char *pa_profile;                   /* Current profile for card */
     GList *pa_indices;                  /* Indices for current streams */
 
     /* Bluetooth interface */
-    GDBusObjectManager *objmanager;     /* BlueZ object manager */
-    guint watcher_id;                   /* D-Bus watcher ID for BlueZ */
+    GDBusObjectManager *bt_objmanager;  /* D-Bus BlueZ object manager */
+    guint bt_watcher_id;                /* D-Bus BlueZ watcher ID */
     GList *bt_ops;                      /* List of Bluetooth connect and disconnect operations */
     char *bt_iname;                     /* Input device name for use in list */
     char *bt_oname;                     /* Output device name for use in list */

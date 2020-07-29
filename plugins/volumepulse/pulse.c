@@ -603,7 +603,7 @@ static void pa_cb_get_info_inputs (pa_context *c, const pa_card_info *i, int eol
             DEBUG ("pa_cb_get_info_inputs %s", nam);
             if (nam)
             {
-                if (!vol->inputs) vol->inputs = gtk_menu_new ();
+                if (!vol->menu_inputs) vol->menu_inputs = gtk_menu_new ();
                 volumepulse_menu_add_item (vol, nam, nam, TRUE);
             }
         }
@@ -700,7 +700,7 @@ static void pa_cb_replace_cards_with_sinks (pa_context *context, const pa_sink_i
         DEBUG ("pa_cb_replace_cards_with_sinks");
         const char *api = pa_proplist_gets (i->proplist, "device.api");
         if (!g_strcmp0 (api, "alsa"))
-            gtk_container_foreach (GTK_CONTAINER (vol->outputs), pa_replace_alsa_on_match, (void *) i);
+            gtk_container_foreach (GTK_CONTAINER (vol->menu_outputs), pa_replace_alsa_on_match, (void *) i);
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
@@ -727,7 +727,7 @@ static void pa_cb_replace_cards_with_sources (pa_context *context, const pa_sour
         DEBUG ("pa_cb_replace_cards_with_sources");
         const char *api = pa_proplist_gets (i->proplist, "device.api");
         if (!g_strcmp0 (api, "alsa"))
-            gtk_container_foreach (GTK_CONTAINER (vol->inputs), pa_replace_alsa_on_match, (void *) i);
+            gtk_container_foreach (GTK_CONTAINER (vol->menu_inputs), pa_replace_alsa_on_match, (void *) i);
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
@@ -784,13 +784,13 @@ static void pa_cb_add_devices_to_profile_dialog (pa_context *c, const pa_card_in
         }
 
         if (!g_strcmp0 (pa_proplist_gets (i->proplist, "device.api"), "bluez"))
-            volumepulse_profiles_add_combo (vol, ls, vol->btprofiles, sel, pa_proplist_gets (i->proplist, "device.description"), i->name);
+            volumepulse_profiles_add_combo (vol, ls, vol->profiles_bt_box, sel, pa_proplist_gets (i->proplist, "device.description"), i->name);
         else
         {
             if (g_strcmp0 (pa_proplist_gets (i->proplist, "device.description"), "Built-in Audio"))
-                volumepulse_profiles_add_combo (vol, ls, vol->alsaprofiles, sel, pa_proplist_gets (i->proplist, "alsa.card_name"), i->name);
+                volumepulse_profiles_add_combo (vol, ls, vol->profiles_ext_box, sel, pa_proplist_gets (i->proplist, "alsa.card_name"), i->name);
             else
-                volumepulse_profiles_add_combo (vol, ls, vol->intprofiles, sel, pa_proplist_gets (i->proplist, "alsa.card_name"), i->name);
+                volumepulse_profiles_add_combo (vol, ls, vol->profiles_int_box, sel, pa_proplist_gets (i->proplist, "alsa.card_name"), i->name);
         }
     }
 
