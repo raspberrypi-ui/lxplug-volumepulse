@@ -56,7 +56,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bluetooth.h"
 
 /* Helpers */
-//char *get_string (const char *fmt, ...);
 static int get_value (const char *fmt, ...);
 static void hdmi_init (VolumePulsePlugin *vol);
 static const char *volumepulse_device_display_name (VolumePulsePlugin *vol, const char *name);
@@ -146,6 +145,20 @@ static int get_value (const char *fmt, ...)
     else return m;
 }
 
+int vsystem (const char *fmt, ...)
+{
+    char *cmdline;
+    int res;
+
+    va_list arg;
+    va_start (arg, fmt);
+    g_vasprintf (&cmdline, fmt, arg);
+    va_end (arg);
+    res = system (cmdline);
+    g_free (cmdline);
+    return res;
+}
+
 /* Multiple HDMI support */
 
 static void hdmi_init (VolumePulsePlugin *vol)
@@ -185,6 +198,14 @@ static const char *volumepulse_device_display_name (VolumePulsePlugin *vol, cons
     else if (!g_strcmp0 (name, "bcm2835 Headphones"))
         return _("Analog");
     else return name;
+}
+
+/* Check to see if a PulseAudio sink / source is a particular BlueZ device */
+
+static int pa_bluez_device_same (const char *padev, const char *btdev)
+{
+    if (strstr (btdev, "bluez") && strstr (padev, btdev + 20)) return 1;
+    return 0;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -947,6 +968,7 @@ static void volumepulse_destructor (gpointer user_data)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
 
+    bluetooth_terminate (vol);
     pulse_terminate (vol);
 
     /* If the dialog box is open, dismiss it. */

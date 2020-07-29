@@ -55,18 +55,12 @@ typedef struct {
     GtkWidget *intprofiles;             /* Vbox for profile combos */
     GtkWidget *alsaprofiles;            /* Vbox for profile combos */
     GtkWidget *btprofiles;              /* Vbox for profile combos */
-    gboolean show_popup;                /* Toggle to show and hide the popup on left click */
-    guint volume_scale_handler;         /* Handler for vscale widget */
-    guint mute_check_handler;           /* Handler for mute_check widget */
-
-    /* Bluetooth interface */
-    GDBusObjectManager *objmanager;     /* BlueZ object manager */
     GtkWidget *conn_dialog;             /* Connection dialog box */
     GtkWidget *conn_label;              /* Dialog box text field */
     GtkWidget *conn_ok;                 /* Dialog box button */
-    GList *bt_ops;                      /* List of Bluetooth connect and disconnect operations */
-    char *bt_iname;                     /* Input device name for use in list */
-    char *bt_oname;                     /* Output device name for use in list */
+    gboolean show_popup;                /* Toggle to show and hide the popup on left click */
+    guint volume_scale_handler;         /* Handler for vscale widget */
+    guint mute_check_handler;           /* Handler for mute_check widget */
 
     /* HDMI devices */
     guint hdmis;                        /* Number of HDMI devices */
@@ -84,6 +78,13 @@ typedef struct {
     char *pa_profile;                   /* Current profile for card */
     GList *pa_indices;                  /* Indices for current streams */
 
+    /* Bluetooth interface */
+    GDBusObjectManager *objmanager;     /* BlueZ object manager */
+    guint watcher_id;                   /* D-Bus watcher ID for BlueZ */
+    GList *bt_ops;                      /* List of Bluetooth connect and disconnect operations */
+    char *bt_iname;                     /* Input device name for use in list */
+    char *bt_oname;                     /* Output device name for use in list */
+
 } VolumePulsePlugin;
 
 /* Functions in volumepulse.c needed in other modules */
@@ -94,6 +95,7 @@ extern void volumepulse_menu_add_item (VolumePulsePlugin *vol, const char *label
 extern void volumepulse_profiles_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name);
 
 extern char *get_string (const char *fmt, ...);
+extern int vsystem (const char *fmt, ...);
 
 /* End of file */
 /*----------------------------------------------------------------------------*/
