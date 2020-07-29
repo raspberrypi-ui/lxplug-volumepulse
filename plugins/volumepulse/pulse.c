@@ -385,7 +385,7 @@ void pulse_change_sink (VolumePulsePlugin *vol, const char *sinkname)
 
 static int pa_set_default_sink (VolumePulsePlugin *vol, const char *sinkname)
 {
-    DEBUG ("pulse_set_default_sink %s", sinkname);
+    DEBUG ("pa_set_default_sink %s", sinkname);
     START_PA_OPERATION
     op = pa_context_set_default_sink (vol->pa_context, sinkname, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_default_sink")
@@ -395,7 +395,7 @@ static int pa_set_default_sink (VolumePulsePlugin *vol, const char *sinkname)
 
 static int pa_get_output_streams (VolumePulsePlugin *vol)
 {
-    DEBUG ("pulse_get_output_streams");
+    DEBUG ("pa_get_output_streams");
     START_PA_OPERATION
     op = pa_context_get_sink_input_info_list (vol->pa_context, &pa_cb_get_output_streams, vol);
     END_PA_OPERATION ("get_sink_input_info_list")
@@ -429,7 +429,7 @@ static void pa_list_move_to_default_sink (gpointer data, gpointer userdata)
 
 static int pa_move_stream_to_default_sink (VolumePulsePlugin *vol, int index)
 {
-    DEBUG ("pulse_move_stream_to_default_sink %d", index);
+    DEBUG ("pa_move_stream_to_default_sink %d", index);
     START_PA_OPERATION
     op = pa_context_move_sink_input_by_name (vol->pa_context, index, vol->pa_default_sink, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("move_sink_input_by_name")
@@ -459,7 +459,7 @@ void pulse_change_source (VolumePulsePlugin *vol, const char *sourcename)
 
 static int pa_set_default_source (VolumePulsePlugin *vol, const char *sourcename)
 {
-    DEBUG ("pulse_set_default_source %s", sourcename);
+    DEBUG ("pa_set_default_source %s", sourcename);
     START_PA_OPERATION
     op = pa_context_set_default_source (vol->pa_context, sourcename, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_default_source")
@@ -469,7 +469,7 @@ static int pa_set_default_source (VolumePulsePlugin *vol, const char *sourcename
 
 static int pa_get_input_streams (VolumePulsePlugin *vol)
 {
-    DEBUG ("pulse_get_input_streams");
+    DEBUG ("pa_get_input_streams");
     START_PA_OPERATION
     op = pa_context_get_source_output_info_list (vol->pa_context, &pa_cb_get_input_streams, vol);
     END_PA_OPERATION ("get_sink_input_info_list")
@@ -503,7 +503,7 @@ static void pa_list_move_to_default_source (gpointer data, gpointer userdata)
 
 static int pa_move_stream_to_default_source (VolumePulsePlugin *vol, int index)
 {
-    DEBUG ("pulse_move_stream_to_default_source %d", index);
+    DEBUG ("pa_move_stream_to_default_source %d", index);
     START_PA_OPERATION
     op = pa_context_move_source_output_by_name (vol->pa_context, index, vol->pa_default_source, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("move_source_output_by_name")
@@ -541,7 +541,7 @@ static void pa_cb_get_profile (pa_context *c, const pa_card_info *i, int eol, vo
 
     if (!eol)
     {
-        DEBUG ("pulse get profile : %s", i->active_profile2->name);
+        DEBUG ("pa_cb_get_profile %s", i->active_profile2->name);
         if (vol->pa_profile) g_free (vol->pa_profile);
         vol->pa_profile = g_strdup (i->active_profile2->name);
     }
@@ -683,7 +683,7 @@ void pulse_update_devices_in_menu (VolumePulsePlugin *vol)
 
 static int pa_replace_cards_with_sinks (VolumePulsePlugin *vol)
 {
-    DEBUG ("pulse_replace_cards_with_sinks");
+    DEBUG ("pa_replace_cards_with_sinks");
     START_PA_OPERATION
     op = pa_context_get_sink_info_list (vol->pa_context, &pa_cb_replace_cards_with_sinks, vol);
     END_PA_OPERATION ("get_sink_info_list")
@@ -710,7 +710,7 @@ static void pa_cb_replace_cards_with_sinks (pa_context *context, const pa_sink_i
 
 static int pa_replace_cards_with_sources (VolumePulsePlugin *vol)
 {
-    DEBUG ("pulse_replace_cards_with_sources");
+    DEBUG ("pa_replace_cards_with_sources");
     START_PA_OPERATION
     op = pa_context_get_source_info_list (vol->pa_context, &pa_cb_replace_cards_with_sources, vol);
     END_PA_OPERATION ("get_source_info_list")
