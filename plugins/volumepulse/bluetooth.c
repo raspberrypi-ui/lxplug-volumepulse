@@ -473,6 +473,8 @@ void bluetooth_init (VolumePulsePlugin *vol)
     vol->watcher_id = g_bus_watch_name (G_BUS_TYPE_SYSTEM, "org.bluez", 0, bt_cb_name_owned, bt_cb_name_unowned, vol, NULL);
 }
 
+/* Teardown BlueZ interface */
+
 void bluetooth_terminate (VolumePulsePlugin *vol)
 {
     /* Remove signal handlers on D-Bus object manager */

@@ -543,7 +543,7 @@ static void volumepulse_menu_build (VolumePulsePlugin *vol)
     }
 
     // update the menu item names, which are currently ALSA device names, to PulseAudio sink/source names
-    pulse_update_devices (vol);
+    pulse_update_devices_in_menu (vol);
 
     // show the fallback sink and source in the menu
     pulse_get_default_sink_source (vol);
