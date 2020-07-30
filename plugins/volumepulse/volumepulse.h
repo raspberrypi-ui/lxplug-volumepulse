@@ -58,7 +58,6 @@ typedef struct {
     GtkWidget *conn_dialog;             /* Connection dialog box */
     GtkWidget *conn_label;              /* Dialog box text field */
     GtkWidget *conn_ok;                 /* Dialog box button */
-    gboolean show_popup;                /* Toggle to show and hide the popup on left click */
     guint volume_scale_handler;         /* Handler for volume_scale widget */
     guint mute_check_handler;           /* Handler for mute_check widget */
 
