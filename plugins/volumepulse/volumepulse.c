@@ -87,18 +87,18 @@ static void menu_open_profile_dialog (GtkWidget *widget, VolumePulsePlugin *vol)
 /* Profiles dialog */
 static void profiles_dialog_show (VolumePulsePlugin *vol);
 static void profiles_dialog_relocate_last_item (GtkWidget *box);
-static void profiles_dialog_combo_changed (GtkComboBox *combo, gpointer *userdata);
-static void profiles_dialog_ok (GtkButton *button, gpointer *user_data);
-static gboolean profiles_dialog_delete (GtkWidget *wid, GdkEvent *event, gpointer user_data);
+static void profiles_dialog_combo_changed (GtkComboBox *combo, VolumePulsePlugin *vol);
+static void profiles_dialog_ok (GtkButton *button, VolumePulsePlugin *vol);
+static gboolean profiles_dialog_delete (GtkWidget *wid, GdkEvent *event, VolumePulsePlugin *vol);
 
 /* Bluetooth connect dialog */
 static void connect_dialog_show (VolumePulsePlugin *vol, const gchar *msg);
-static void connect_dialog_ok (GtkButton *button, gpointer *user_data);
-static gboolean connect_dialog_delete (GtkWidget *widget, GdkEvent *event, gpointer user_data);
+static void connect_dialog_ok (GtkButton *button, VolumePulsePlugin *vol);
+static gboolean connect_dialog_delete (GtkWidget *widget, GdkEvent *event, VolumePulsePlugin *vol);
 
 /* Handlers and graphics */
 static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButton *event, LXPanel *panel);
-static void volumepulse_menu_set_position (GtkWidget *menu, gint *px, gint *py, gboolean *push_in, gpointer data);
+static void volumepulse_menu_set_position (GtkWidget *menu, gint *px, gint *py, gboolean *push_in, VolumePulsePlugin *vol);
 static void volumepulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *evt, VolumePulsePlugin *vol);
 static void volumepulse_theme_change (GtkWidget *widget, VolumePulsePlugin *vol);
 
@@ -687,10 +687,8 @@ static void profiles_dialog_relocate_last_item (GtkWidget *box)
 
 /* Handler for "changed" signal from a profile combo box */
 
-static void profiles_dialog_combo_changed (GtkComboBox *combo, gpointer *userdata)
+static void profiles_dialog_combo_changed (GtkComboBox *combo, VolumePulsePlugin *vol)
 {
-    VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
-
     const char *option;
     GtkTreeIter iter;
 
@@ -701,19 +699,15 @@ static void profiles_dialog_combo_changed (GtkComboBox *combo, gpointer *userdat
 
 /* Handler for 'OK' button on profiles dialog */
 
-static void profiles_dialog_ok (GtkButton *button, gpointer *user_data)
+static void profiles_dialog_ok (GtkButton *button, VolumePulsePlugin *vol)
 {
-    VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
-
     close_widget (&vol->profiles_dialog);
 }
 
 /* Handler for "delete-event" signal from profiles dialog */
 
-static gboolean profiles_dialog_delete (GtkWidget *wid, GdkEvent *event, gpointer user_data)
+static gboolean profiles_dialog_delete (GtkWidget *wid, GdkEvent *event, VolumePulsePlugin *vol)
 {
-    VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
-
     close_widget (&vol->profiles_dialog);
     return TRUE;
 }
@@ -760,19 +754,15 @@ void connect_dialog_update (VolumePulsePlugin *vol, const gchar *msg)
 
 /* Handler for 'OK' button on connection dialog */
 
-static void connect_dialog_ok (GtkButton *button, gpointer *user_data)
+static void connect_dialog_ok (GtkButton *button, VolumePulsePlugin *vol)
 {
-    VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
-
     close_widget (&vol->conn_dialog);
 }
 
 /* Handler for "delete-event" signal from connection dialog */
 
-static gboolean connect_dialog_delete (GtkWidget *widget, GdkEvent *event, gpointer user_data)
+static gboolean connect_dialog_delete (GtkWidget *widget, GdkEvent *event, VolumePulsePlugin *vol)
 {
-    VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
-    
     close_widget (&vol->conn_dialog);
     return TRUE;
 }
@@ -816,10 +806,8 @@ static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButto
 
 /* Determine popup position for menu */
 
-static void volumepulse_menu_set_position (GtkWidget *menu, gint *px, gint *py, gboolean *push_in, gpointer data)
+static void volumepulse_menu_set_position (GtkWidget *menu, gint *px, gint *py, gboolean *push_in, VolumePulsePlugin *vol)
 {
-    VolumePulsePlugin *vol = (VolumePulsePlugin *) data;
-
     /* Determine the coordinates. */
     lxpanel_plugin_popup_set_position_helper (vol->panel, vol->plugin, menu, px, py);
     *push_in = TRUE;
