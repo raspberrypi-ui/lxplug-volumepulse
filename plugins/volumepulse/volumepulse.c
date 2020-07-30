@@ -97,7 +97,7 @@ static void connect_dialog_ok (GtkButton *button, VolumePulsePlugin *vol);
 static gboolean connect_dialog_delete (GtkWidget *widget, GdkEvent *event, VolumePulsePlugin *vol);
 
 /* Handlers and graphics */
-static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButton *event, LXPanel *panel);
+static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
 static void volumepulse_menu_set_position (GtkWidget *menu, gint *px, gint *py, gboolean *push_in, VolumePulsePlugin *vol);
 static void volumepulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *evt, VolumePulsePlugin *vol);
 static void volumepulse_theme_change (GtkWidget *widget, VolumePulsePlugin *vol);
@@ -773,10 +773,8 @@ static gboolean connect_dialog_delete (GtkWidget *widget, GdkEvent *event, Volum
 
 /* Handler for "button-press-event" signal on main widget. */
 
-static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButton *event, LXPanel *panel)
+static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol)
 {
-    VolumePulsePlugin *vol = lxpanel_plugin_get_data (widget);
-
 #ifdef ENABLE_NLS
     textdomain (GETTEXT_PACKAGE);
 #endif
@@ -840,7 +838,6 @@ static void volumepulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *evt, Vo
 void volumepulse_update_display (VolumePulsePlugin *vol)
 {
 #ifdef ENABLE_NLS
-    // need to rebind here for tooltip update
     textdomain (GETTEXT_PACKAGE);
 #endif
 
@@ -984,7 +981,7 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     gtk_widget_set_tooltip_text (vol->plugin, _("Volume control"));
 
     /* Connect signals */
-    g_signal_connect (vol->plugin, "button-press-event", G_CALLBACK (volumepulse_button_press_event), vol->panel);
+    g_signal_connect (vol->plugin, "button-press-event", G_CALLBACK (volumepulse_button_press_event), vol);
     g_signal_connect (vol->plugin, "scroll-event", G_CALLBACK (volumepulse_mouse_scrolled), vol);
     g_signal_connect (panel_get_icon_theme (panel), "changed", G_CALLBACK (volumepulse_theme_change), vol);
 
