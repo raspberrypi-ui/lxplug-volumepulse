@@ -65,12 +65,12 @@ static int get_value (const char *fmt, ...);
 static void hdmi_init (VolumePulsePlugin *vol);
 static const char *device_display_name (VolumePulsePlugin *vol, const char *name);
 static int pa_bluez_device_same (const char *padev, const char *btdev);
+static void close_widget (GtkWidget **wid);
 
 /* Volume popup */
 static void popup_window_build (GtkWidget *p);
 static void popup_window_scale_changed (GtkRange *range, VolumePulsePlugin *vol);
 static void popup_window_mute_toggled (GtkWidget *widget, VolumePulsePlugin *vol);
-static void popup_window_close (VolumePulsePlugin *vol);
 
 /* Menu popup */
 static void menu_build (VolumePulsePlugin *vol);
@@ -89,13 +89,11 @@ static void profiles_dialog_relocate_last_item (GtkWidget *box);
 static void profiles_dialog_combo_changed (GtkComboBox *combo, gpointer *userdata);
 static void profiles_dialog_ok (GtkButton *button, gpointer *user_data);
 static gboolean profiles_dialog_delete (GtkWidget *wid, GdkEvent *event, gpointer user_data);
-static void profiles_dialog_close (VolumePulsePlugin *vol);
 
 /* Bluetooth connect dialog */
 static void connect_dialog_show (VolumePulsePlugin *vol, const gchar *msg);
 static void connect_dialog_ok (GtkButton *button, gpointer *user_data);
 static gboolean connect_dialog_delete (GtkWidget *widget, GdkEvent *event, gpointer user_data);
-static void connect_dialog_close (VolumePulsePlugin *vol);
 
 /* Handlers and graphics */
 static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButton *event, LXPanel *panel);
@@ -221,6 +219,17 @@ static int pa_bluez_device_same (const char *padev, const char *btdev)
     return 0;
 }
 
+/* Destroy a widget and null its pointer */
+
+static void close_widget (GtkWidget **wid)
+{
+    if (*wid)
+    {
+        gtk_widget_destroy (*wid);
+        *wid = NULL;
+    }
+}
+
 /*----------------------------------------------------------------------------*/
 /* Volume scale popup window                                                  */
 /*----------------------------------------------------------------------------*/
@@ -302,17 +311,6 @@ static void popup_window_mute_toggled (GtkWidget *widget, VolumePulsePlugin *vol
     pulse_set_mute (vol, gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (widget)));
 
     volumepulse_update_display (vol);
-}
-
-/* Destroy the popup window dialog */
-
-static void popup_window_close (VolumePulsePlugin *vol)
-{
-    if (vol->popup_window)
-    {
-        gtk_widget_destroy (vol->popup_window);
-        vol->popup_window = NULL;
-    }
 }
 
 /*----------------------------------------------------------------------------*/
@@ -681,7 +679,7 @@ static void profiles_dialog_ok (GtkButton *button, gpointer *user_data)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
 
-    profiles_dialog_close (vol);
+    close_widget (&vol->profiles_dialog);
 }
 
 /* Handler for "delete-event" signal from profiles dialog */
@@ -690,19 +688,8 @@ static gboolean profiles_dialog_delete (GtkWidget *wid, GdkEvent *event, gpointe
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
 
-    profiles_dialog_close (vol);
+    close_widget (&vol->profiles_dialog);
     return TRUE;
-}
-
-/* Destroy the profiles dialog */
-
-static void profiles_dialog_close (VolumePulsePlugin *vol)
-{
-    if (vol->profiles_dialog)
-    {
-        gtk_widget_destroy (vol->profiles_dialog);
-        vol->profiles_dialog = NULL;
-    }
 }
 
 /*----------------------------------------------------------------------------*/
@@ -742,7 +729,7 @@ void connect_dialog_update (VolumePulsePlugin *vol, const gchar *msg)
         g_signal_connect (vol->conn_ok, "clicked", G_CALLBACK (connect_dialog_ok), vol);
         gtk_widget_show (vol->conn_ok);
     }
-    else if (vol->conn_ok == NULL) connect_dialog_close (vol);
+    else if (vol->conn_ok == NULL) close_widget (&vol->conn_dialog);
 }
 
 /* Handler for 'OK' button on connection dialog */
@@ -751,7 +738,7 @@ static void connect_dialog_ok (GtkButton *button, gpointer *user_data)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
 
-    connect_dialog_close (vol);
+    close_widget (&vol->conn_dialog);
 }
 
 /* Handler for "delete-event" signal from connection dialog */
@@ -760,19 +747,8 @@ static gboolean connect_dialog_delete (GtkWidget *widget, GdkEvent *event, gpoin
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
     
-    connect_dialog_close (vol);
+    close_widget (&vol->conn_dialog);
     return TRUE;
-}
-
-/* Destroy the connection dialog */
-
-static void connect_dialog_close (VolumePulsePlugin *vol)
-{
-    if (vol->conn_dialog)
-    {
-        gtk_widget_destroy (vol->conn_dialog);
-        vol->conn_dialog = NULL;
-    }
 }
 
 /*----------------------------------------------------------------------------*/
@@ -792,7 +768,7 @@ static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButto
     if (event->button == 1)
     {
         /* left-click - show or hide volume popup */
-        if (vol->popup_window) popup_window_close (vol);
+        if (vol->popup_window) close_widget (&vol->popup_window);
         else
         {
             popup_window_build (vol->plugin);
@@ -819,7 +795,7 @@ static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButto
     else if (event->button == 3)
     {
         /* right-click - show device list */
-        popup_window_close (vol);
+        close_widget (&vol->popup_window);
         menu_build (vol);
         gtk_widget_show_all (vol->menu_devices);
         gtk_menu_popup (GTK_MENU (vol->menu_devices), NULL, NULL, (GtkMenuPositionFunc) volumepulse_menu_set_position, (gpointer) vol,
@@ -866,7 +842,7 @@ static void volumepulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *evt, Vo
 static gboolean volumepulse_mouse_out (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol)
 {
     /* Hide the widget. */
-    popup_window_close (vol);
+    close_widget (&vol->popup_window);
     gdk_pointer_ungrab (GDK_CURRENT_TIME);
     return FALSE;
 }
@@ -1045,9 +1021,9 @@ static void volumepulse_destructor (gpointer user_data)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
 
-    profiles_dialog_close (vol);
-    connect_dialog_close (vol);
-    popup_window_close (vol);
+    close_widget (&vol->profiles_dialog);
+    close_widget (&vol->conn_dialog);
+    close_widget (&vol->popup_window);
     if (vol->menu_devices != NULL) gtk_widget_destroy (vol->menu_devices);
 
     if (vol->panel) g_signal_handlers_disconnect_by_func (panel_get_icon_theme (vol->panel), volumepulse_theme_change, vol);
