@@ -991,7 +991,6 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
 {
     /* Allocate and initialize plugin context and set into plugin private data pointer */
     VolumePulsePlugin *vol = g_new0 (VolumePulsePlugin, 1);
-    GtkWidget *p;
 
 #ifdef ENABLE_NLS
     setlocale (LC_ALL, "");
@@ -1000,25 +999,29 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     textdomain (GETTEXT_PACKAGE);
 #endif
 
-    vol->profiles_dialog = NULL;
+    vol->menu_devices = NULL;
     vol->popup_window = NULL;
+    vol->profiles_dialog = NULL;
+    vol->conn_dialog = NULL;
 
     /* Allocate top level widget and set into plugin widget pointer */
     vol->panel = panel;
-    vol->plugin = p = gtk_button_new ();
-    gtk_button_set_relief (GTK_BUTTON (vol->plugin), GTK_RELIEF_NONE);
-    g_signal_connect (vol->plugin, "button-press-event", G_CALLBACK (volumepulse_button_press_event), vol->panel);
     vol->settings = settings;
-    lxpanel_plugin_set_data (p, vol, volumepulse_destructor);
-    gtk_widget_add_events (p, GDK_BUTTON_PRESS_MASK);
-    gtk_widget_set_tooltip_text (p, _("Volume control"));
+    vol->plugin = gtk_button_new ();
+    lxpanel_plugin_set_data (vol->plugin, vol, volumepulse_destructor);
 
     /* Allocate icon as a child of top level */
     vol->tray_icon = gtk_image_new ();
-    gtk_container_add (GTK_CONTAINER (p), vol->tray_icon);
+    gtk_container_add (GTK_CONTAINER (vol->plugin), vol->tray_icon);
+
+    /* Set up button */
+    gtk_button_set_relief (GTK_BUTTON (vol->plugin), GTK_RELIEF_NONE);
+    gtk_widget_add_events (vol->plugin, GDK_BUTTON_PRESS_MASK);
+    gtk_widget_set_tooltip_text (vol->plugin, _("Volume control"));
 
     /* Connect signals */
-    g_signal_connect (G_OBJECT (p), "scroll-event", G_CALLBACK (volumepulse_mouse_scrolled), vol);
+    g_signal_connect (vol->plugin, "button-press-event", G_CALLBACK (volumepulse_button_press_event), vol->panel);
+    g_signal_connect (vol->plugin, "scroll-event", G_CALLBACK (volumepulse_mouse_scrolled), vol);
     g_signal_connect (panel_get_icon_theme (panel), "changed", G_CALLBACK (volumepulse_theme_change), vol);
 
     /* Find HDMIs */
@@ -1030,11 +1033,10 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     /* Set up Bluez D-Bus interface */
     bluetooth_init (vol);
 
-    /* Update the display, show the widget, and return. */
+    /* Update the display, show the widget, and return */
     volumepulse_update_display (vol);
-    gtk_widget_show_all (p);
-
-    return p;
+    gtk_widget_show_all (vol->plugin);
+    return vol->plugin;
 }
 
 /* Plugin destructor */
@@ -1043,14 +1045,15 @@ static void volumepulse_destructor (gpointer user_data)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
 
-    bluetooth_terminate (vol);
-    pulse_terminate (vol);
-
-    /* If the dialog box is open, dismiss it. */
+    profiles_dialog_close (vol);
+    connect_dialog_close (vol);
     popup_window_close (vol);
     if (vol->menu_devices != NULL) gtk_widget_destroy (vol->menu_devices);
 
     if (vol->panel) g_signal_handlers_disconnect_by_func (panel_get_icon_theme (vol->panel), volumepulse_theme_change, vol);
+
+    bluetooth_terminate (vol);
+    pulse_terminate (vol);
 
     /* Deallocate all memory. */
     g_free (vol);
