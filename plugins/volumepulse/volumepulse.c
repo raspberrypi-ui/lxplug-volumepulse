@@ -92,7 +92,7 @@ static void profiles_dialog_ok (GtkButton *button, VolumePulsePlugin *vol);
 static gboolean profiles_dialog_delete (GtkWidget *wid, GdkEvent *event, VolumePulsePlugin *vol);
 
 /* Bluetooth connect dialog */
-static void connect_dialog_show (VolumePulsePlugin *vol, const gchar *msg);
+static void connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...);
 static void connect_dialog_ok (GtkButton *button, VolumePulsePlugin *vol);
 static gboolean connect_dialog_delete (GtkWidget *widget, GdkEvent *event, VolumePulsePlugin *vol);
 
@@ -551,9 +551,7 @@ static void menu_set_alsa_input (GtkWidget *widget, VolumePulsePlugin *vol)
 
 static void menu_set_bluetooth_output (GtkWidget *widget, VolumePulsePlugin *vol)
 {
-    char *buf = g_strdup_printf (_("Connecting Bluetooth device '%s' as output..."), gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
-    connect_dialog_show (vol, buf);
-    g_free (buf);
+    connect_dialog_show (vol, _("Connecting Bluetooth device '%s' as output..."), gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
 
     bluetooth_set_output (vol, widget->name);
 }
@@ -562,9 +560,7 @@ static void menu_set_bluetooth_output (GtkWidget *widget, VolumePulsePlugin *vol
 
 static void menu_set_bluetooth_input (GtkWidget *widget, VolumePulsePlugin *vol)
 {
-    char *buf = g_strdup_printf (_("Connecting Bluetooth device '%s' as input..."), gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
-    connect_dialog_show (vol, buf);
-    g_free (buf);
+    connect_dialog_show (vol, _("Connecting Bluetooth device '%s' as input..."), gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
 
     bluetooth_set_input (vol, widget->name);
 }
@@ -708,13 +704,20 @@ static gboolean profiles_dialog_delete (GtkWidget *wid, GdkEvent *event, VolumeP
 
 /* Show the Bluetooth connection dialog */
 
-static void connect_dialog_show (VolumePulsePlugin *vol, const gchar *param)
+static void connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...)
 {
+    char *msg;
+    va_list arg;
+
+    va_start (arg, fmt);
+    g_vasprintf (&msg, fmt, arg);
+    va_end (arg);
+
     vol->conn_dialog = gtk_dialog_new_with_buttons (_("Connecting Audio Device"), NULL, GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, NULL);
     gtk_window_set_icon_name (GTK_WINDOW (vol->conn_dialog), "preferences-system-bluetooth");
     gtk_window_set_position (GTK_WINDOW (vol->conn_dialog), GTK_WIN_POS_CENTER);
     gtk_container_set_border_width (GTK_CONTAINER (vol->conn_dialog), 10);
-    vol->conn_label = gtk_label_new (param);
+    vol->conn_label = gtk_label_new (msg);
     gtk_label_set_line_wrap (GTK_LABEL (vol->conn_label), TRUE);
     gtk_label_set_justify (GTK_LABEL (vol->conn_label), GTK_JUSTIFY_LEFT);
     gtk_misc_set_alignment (GTK_MISC (vol->conn_label), 0.0, 0.0);
@@ -722,6 +725,7 @@ static void connect_dialog_show (VolumePulsePlugin *vol, const gchar *param)
     g_signal_connect (GTK_OBJECT (vol->conn_dialog), "delete_event", G_CALLBACK (connect_dialog_delete), vol);
     vol->conn_ok = NULL;
     gtk_widget_show_all (vol->conn_dialog);
+    g_free (msg);
 }
 
 /* Either update the message on the connection dialog to show an error, or close the dialog */
