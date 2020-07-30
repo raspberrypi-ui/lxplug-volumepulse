@@ -285,7 +285,7 @@ static void bt_connect_device (VolumePulsePlugin *vol, const char *device)
     else
     {
         DEBUG ("Couldn't get device interface from object manager");
-        volumepulse_connect_dialog_update (vol, _("Could not get BlueZ interface for device"));
+        connect_dialog_update (vol, _("Could not get BlueZ interface for device"));
         bt_next_operation (vol);
     }
 }
@@ -307,7 +307,7 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
         DEBUG ("Connect error %s", error->message);
 
         // update dialog to show a warning
-        volumepulse_connect_dialog_update (vol, error->message);
+        connect_dialog_update (vol, error->message);
         g_error_free (error);
     }
     else
@@ -331,7 +331,7 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
             DEBUG ("No PulseAudio device");
 
             // update dialog to show a warning
-            volumepulse_connect_dialog_update (vol, _("Device not found by PulseAudio"));
+            connect_dialog_update (vol, _("Device not found by PulseAudio"));
         }
         else
         {
@@ -374,7 +374,7 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
             g_free (paname);
             g_free (pacard);
 
-            volumepulse_connect_dialog_update (vol, NULL);
+            connect_dialog_update (vol, NULL);
         }
     }
 
@@ -609,10 +609,10 @@ void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input)
                             {
                                 // create a menu if there isn't one already
                                 if (!vol->menu_inputs) vol->menu_inputs = gtk_menu_new ();
-                                volumepulse_menu_add_item (vol, g_variant_get_string (name, NULL), objpath, TRUE);
+                                menu_add_item (vol, g_variant_get_string (name, NULL), objpath, TRUE);
                             }
                             else
-                                volumepulse_menu_add_item (vol, g_variant_get_string (name, NULL), objpath, FALSE);
+                                menu_add_item (vol, g_variant_get_string (name, NULL), objpath, FALSE);
                         }
                         g_variant_unref (name);
                         g_variant_unref (icon);
@@ -660,7 +660,7 @@ void bluetooth_add_devices_to_profile_dialog (VolumePulsePlugin *vol)
                             char *pacard = bt_to_pa_name ((char *) objpath, "card", NULL);
                             pulse_get_profile (vol, pacard);
                             if (vol->pa_profile == NULL)
-                                volumepulse_profiles_add_combo (vol, NULL, vol->profiles_bt_box, 0, g_variant_get_string (name, NULL), NULL);
+                                profiles_dialog_add_combo (vol, NULL, vol->profiles_bt_box, 0, g_variant_get_string (name, NULL), NULL);
                         }
                         g_variant_unref (name);
                         g_variant_unref (icon);
