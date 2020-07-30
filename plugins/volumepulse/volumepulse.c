@@ -735,13 +735,16 @@ void connect_dialog_update (VolumePulsePlugin *vol, const gchar *msg)
     if (!vol->conn_dialog) return;
     if (msg)
     {
-        char buffer[256];
-
-        sprintf (buffer, _("Failed to connect to device - %s. Try to connect again."), msg);
+        char *buffer = g_strdup_printf (_("Failed to connect to device - %s. Try to connect again."), msg);
         gtk_label_set_text (GTK_LABEL (vol->conn_label), buffer);
-        vol->conn_ok = gtk_dialog_add_button (GTK_DIALOG (vol->conn_dialog), _("_OK"), 1);
-        g_signal_connect (vol->conn_ok, "clicked", G_CALLBACK (connect_dialog_ok), vol);
-        gtk_widget_show (vol->conn_ok);
+        g_free (buffer);
+
+        if (vol->conn_ok == NULL)
+        {
+            vol->conn_ok = gtk_dialog_add_button (GTK_DIALOG (vol->conn_dialog), _("_OK"), 1);
+            g_signal_connect (vol->conn_ok, "clicked", G_CALLBACK (connect_dialog_ok), vol);
+            gtk_widget_show (vol->conn_ok);
+        }
     }
     else if (vol->conn_ok == NULL) close_widget (&vol->conn_dialog);
 }
