@@ -979,7 +979,7 @@ static void volumepulse_destructor (gpointer user_data)
     close_widget (&vol->popup_window);
     close_widget (&vol->menu_devices);
 
-    if (vol->panel) g_signal_handlers_disconnect_by_func (panel_get_icon_theme (vol->panel), volumepulse_theme_change, vol);
+    g_signal_handlers_disconnect_by_func (panel_get_icon_theme (vol->panel), G_CALLBACK (volumepulse_theme_change), vol);
 
     bluetooth_terminate (vol);
     pulse_terminate (vol);
