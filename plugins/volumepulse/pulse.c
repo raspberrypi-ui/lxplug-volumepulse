@@ -575,6 +575,7 @@ int pulse_set_profile (VolumePulsePlugin *vol, const char *card, const char *pro
 
 int pulse_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input, gboolean internal)
 {
+    vol->separator = FALSE;
     DEBUG ("pulse_add_devices_to_menu %d %d", input, internal);
     START_PA_OPERATION
     if (input)
@@ -587,8 +588,8 @@ int pulse_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input, gboolean 
 }
 
 /*
- * Callbacks for card info query, each of which checks to see if the device is appropriate for the 
- * menu in question and adding it if so
+ * Callbacks for card info query, each of which checks to see if the device should
+ * be in the menu in question and adding it if so
  */
 
 static void pa_cb_get_info_inputs (pa_context *c, const pa_card_info *i, int eol, void *userdata)
@@ -649,6 +650,7 @@ static void pa_cb_get_info_external (pa_context *c, const pa_card_info *i, int e
                 if (nam)
                 {
                     DEBUG ("pa_cb_get_info_external %s", nam);
+                    menu_add_separator (vol, vol->menu_outputs);
                     menu_add_item (vol, nam, nam, FALSE);
                 }
             }

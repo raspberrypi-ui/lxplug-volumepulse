@@ -582,6 +582,7 @@ gboolean bluetooth_remove_input (VolumePulsePlugin *vol)
 
 void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input)
 {
+    vol->separator = FALSE;
     if (vol->bt_objmanager)
     {
         // iterate all the objects the manager knows about
@@ -605,14 +606,11 @@ void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input)
                         GVariant *trusted = g_dbus_proxy_get_cached_property (G_DBUS_PROXY (interface), "Trusted");
                         if (name && icon && paired && trusted && g_variant_get_boolean (paired) && g_variant_get_boolean (trusted))
                         {
-                            if (input)
-                            {
-                                // create a menu if there isn't one already
-                                if (!vol->menu_inputs) vol->menu_inputs = gtk_menu_new ();
-                                menu_add_item (vol, g_variant_get_string (name, NULL), objpath, TRUE);
-                            }
-                            else
-                                menu_add_item (vol, g_variant_get_string (name, NULL), objpath, FALSE);
+                            // create a menu if there isn't one already
+                            if (input && !!vol->menu_inputs) vol->menu_inputs = gtk_menu_new ();
+                            menu_add_separator (vol, input ? vol->menu_inputs : vol->menu_outputs);
+                            if (input) menu_add_item (vol, g_variant_get_string (name, NULL), objpath, TRUE);
+                            else menu_add_item (vol, g_variant_get_string (name, NULL), objpath, FALSE);
                         }
                         g_variant_unref (name);
                         g_variant_unref (icon);

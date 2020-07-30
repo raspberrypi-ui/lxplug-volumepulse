@@ -56,7 +56,6 @@ static gboolean popup_window_mouse_out (GtkWidget *widget, GdkEventButton *event
 
 /* Menu popup */
 static void menu_show (VolumePulsePlugin *vol);
-static void menu_add_separator (GtkWidget *menu);
 static void menu_mark_default (GtkWidget *widget, gpointer data);
 static void menu_set_alsa_output (GtkWidget *widget, VolumePulsePlugin *vol);
 static void menu_set_alsa_input (GtkWidget *widget, VolumePulsePlugin *vol);
@@ -330,7 +329,6 @@ static void menu_show (VolumePulsePlugin *vol)
 
     // add ALSA inputs
     pulse_add_devices_to_menu (vol, TRUE, FALSE);
-    menu_add_separator (vol->menu_inputs);
 
     // add Bluetooth inputs
     bluetooth_add_devices_to_menu (vol, TRUE);
@@ -341,11 +339,9 @@ static void menu_show (VolumePulsePlugin *vol)
 
     // add internal outputs
     pulse_add_devices_to_menu (vol, FALSE, TRUE);
-    menu_add_separator (vol->menu_outputs);
 
     // add external outputs
     pulse_add_devices_to_menu (vol, FALSE, FALSE);
-    menu_add_separator (vol->menu_outputs);
 
     // add Bluetooth devices
     bluetooth_add_devices_to_menu (vol, FALSE);
@@ -369,7 +365,8 @@ static void menu_show (VolumePulsePlugin *vol)
         }
 
         // add the profiles menu item to the top level menu
-        menu_add_separator (vol->menu_devices);
+        mi = gtk_separator_menu_item_new ();
+        gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
 
         mi = gtk_image_menu_item_new_with_label (_("Device Profiles..."));
         g_signal_connect (mi, "activate", G_CALLBACK (menu_open_profile_dialog), (gpointer) vol);
@@ -387,8 +384,8 @@ static void menu_show (VolumePulsePlugin *vol)
 
     // show the default sink and source in the menu
     pulse_get_default_sink_source (vol);
-    gtk_container_foreach (GTK_CONTAINER (vol->menu_outputs), menu_mark_default, vol);
-    gtk_container_foreach (GTK_CONTAINER (vol->menu_inputs), menu_mark_default, vol);
+    if (vol->menu_outputs) gtk_container_foreach (GTK_CONTAINER (vol->menu_outputs), menu_mark_default, vol);
+    if (vol->menu_inputs) gtk_container_foreach (GTK_CONTAINER (vol->menu_inputs), menu_mark_default, vol);
 
     // lock menu if a dialog is open
     if (vol->conn_dialog || vol->profiles_dialog)
@@ -464,11 +461,12 @@ void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name,
     gtk_menu_shell_insert (GTK_MENU_SHELL (menu), mi, count);
 }
 
-/* Add a separator to the menu */
+/* Add a separator to the menu (but only if there isn't already one there...) */
 
-static void menu_add_separator (GtkWidget *menu)
+void menu_add_separator (VolumePulsePlugin *vol, GtkWidget *menu)
 {
     if (menu == NULL) return;
+    if (vol->separator == TRUE) return;
 
     // find the end of the menu
     GList *l = g_list_last (gtk_container_get_children (GTK_CONTAINER (menu)));
@@ -476,6 +474,7 @@ static void menu_add_separator (GtkWidget *menu)
     if (G_OBJECT_TYPE (l->data) == GTK_TYPE_SEPARATOR_MENU_ITEM) return;
     GtkWidget *mi = gtk_separator_menu_item_new ();
     gtk_menu_shell_append (GTK_MENU_SHELL (menu), mi);
+    vol->separator = TRUE;
 }
 
 /* Add a tickmark to the supplied widget if it is the default item in its parent menu */

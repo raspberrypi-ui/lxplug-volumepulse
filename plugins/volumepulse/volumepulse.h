@@ -60,6 +60,7 @@ typedef struct {
     GtkWidget *conn_ok;                 /* Dialog box button */
     guint volume_scale_handler;         /* Handler for volume_scale widget */
     guint mute_check_handler;           /* Handler for mute_check widget */
+    gboolean separator;                 /* Flag to show whether a menu separator has been added */
 
     /* HDMI devices */
     char *hdmi_names[2];                /* Display names of HDMI devices */
@@ -89,6 +90,7 @@ typedef struct {
 
 extern void volumepulse_update_display (VolumePulsePlugin *vol);
 extern void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input);
+extern void menu_add_separator (VolumePulsePlugin *vol, GtkWidget *menu);
 extern void profiles_dialog_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name);
 extern void connect_dialog_update (VolumePulsePlugin *vol, const char *msg);
 
