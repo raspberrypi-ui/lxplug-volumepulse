@@ -68,12 +68,13 @@ static int pa_bluez_device_same (const char *padev, const char *btdev);
 static void close_widget (GtkWidget **wid);
 
 /* Volume popup */
-static void popup_window_build (GtkWidget *p);
+static void popup_window_show (GtkWidget *p);
 static void popup_window_scale_changed (GtkRange *range, VolumePulsePlugin *vol);
 static void popup_window_mute_toggled (GtkWidget *widget, VolumePulsePlugin *vol);
+static gboolean popup_window_mouse_out (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
 
 /* Menu popup */
-static void menu_build (VolumePulsePlugin *vol);
+static void menu_show (VolumePulsePlugin *vol);
 static void menu_add_separator (GtkWidget *menu);
 static void menu_show_default_sink (GtkWidget *widget, gpointer data);
 static void menu_show_default_source (GtkWidget *widget, gpointer data);
@@ -99,7 +100,6 @@ static gboolean connect_dialog_delete (GtkWidget *widget, GdkEvent *event, gpoin
 static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButton *event, LXPanel *panel);
 static void volumepulse_menu_set_position (GtkWidget *menu, gint *px, gint *py, gboolean *push_in, gpointer data);
 static void volumepulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *evt, VolumePulsePlugin *vol);
-static gboolean volumepulse_mouse_out (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
 static void volumepulse_theme_change (GtkWidget *widget, VolumePulsePlugin *vol);
 
 /* Plugin */
@@ -234,11 +234,12 @@ static void close_widget (GtkWidget **wid)
 /* Volume scale popup window                                                  */
 /*----------------------------------------------------------------------------*/
 
-/* Build the window that appears when the top level widget is clicked. */
+/* Create the pop-up volume window */
 
-static void popup_window_build (GtkWidget *p)
+static void popup_window_show (GtkWidget *p)
 {
     VolumePulsePlugin *vol = lxpanel_plugin_get_data (p);
+    gint x, y;
 
     /* Create a new window. */
     vol->popup_window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
@@ -289,6 +290,18 @@ static void popup_window_build (GtkWidget *p)
     gtk_box_pack_end (GTK_BOX (box), vol->popup_mute_check, FALSE, FALSE, 0);
     vol->mute_check_handler = g_signal_connect (vol->popup_mute_check, "toggled", G_CALLBACK (popup_window_mute_toggled), vol);
     gtk_widget_set_can_focus (vol->popup_mute_check, FALSE);
+
+    /* Show the window - need to draw the window in order to allow the plugin position helper to get its size */
+    gtk_window_set_position (GTK_WINDOW (vol->popup_window), GTK_WIN_POS_MOUSE);
+    gtk_widget_show_all (vol->popup_window);
+    gtk_widget_hide (vol->popup_window);
+    lxpanel_plugin_popup_set_position_helper (vol->panel, vol->plugin, vol->popup_window, &x, &y);
+    gdk_window_move (gtk_widget_get_window (vol->popup_window), x, y);
+    gtk_window_present (GTK_WINDOW (vol->popup_window));
+
+    /* Connect the function which hides the window when the mouse is clicked outside it */
+    gdk_pointer_grab (gtk_widget_get_window (vol->popup_window), TRUE, GDK_BUTTON_PRESS_MASK, NULL, NULL, GDK_CURRENT_TIME);
+    g_signal_connect (G_OBJECT (vol->popup_window), "focus-out-event", G_CALLBACK (popup_window_mouse_out), vol);
 }
 
 /* Handler for "value_changed" signal on popup window vertical scale */
@@ -313,13 +326,23 @@ static void popup_window_mute_toggled (GtkWidget *widget, VolumePulsePlugin *vol
     volumepulse_update_display (vol);
 }
 
+/* Handler for "focus-out" signal on popup window */
+
+static gboolean popup_window_mouse_out (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol)
+{
+    /* Hide the widget. */
+    close_widget (&vol->popup_window);
+    gdk_pointer_ungrab (GDK_CURRENT_TIME);
+    return FALSE;
+}
+
 /*----------------------------------------------------------------------------*/
 /* Device select menu                                                         */
 /*----------------------------------------------------------------------------*/
 
 /* Create the device select menu */
 
-static void menu_build (VolumePulsePlugin *vol)
+static void menu_show (VolumePulsePlugin *vol)
 {
     GtkWidget *mi;
 
@@ -410,6 +433,9 @@ static void menu_build (VolumePulsePlugin *vol)
         }
         g_list_free (items);
     }
+
+    // show the menu
+    gtk_widget_show_all (vol->menu_devices);
 }
 
 /* Add a device entry to the menu */
@@ -765,42 +791,26 @@ static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButto
     textdomain (GETTEXT_PACKAGE);
 #endif
 
-    if (event->button == 1)
+    switch (event->button)
     {
-        /* left-click - show or hide volume popup */
-        if (vol->popup_window) close_widget (&vol->popup_window);
-        else
-        {
-            popup_window_build (vol->plugin);
-            volumepulse_update_display (vol);
+        case 1: /* left-click - show or hide volume popup */
+                if (vol->popup_window) close_widget (&vol->popup_window);
+                else popup_window_show (vol->plugin);
+                break;
 
-            gint x, y;
-            gtk_window_set_position (GTK_WINDOW (vol->popup_window), GTK_WIN_POS_MOUSE);
-            // need to draw the window in order to allow the plugin position helper to get its size
-            gtk_widget_show_all (vol->popup_window);
-            gtk_widget_hide (vol->popup_window);
-            lxpanel_plugin_popup_set_position_helper (panel, widget, vol->popup_window, &x, &y);
-            gdk_window_move (gtk_widget_get_window (vol->popup_window), x, y);
-            gtk_window_present (GTK_WINDOW (vol->popup_window));
-            gdk_pointer_grab (gtk_widget_get_window (vol->popup_window), TRUE, GDK_BUTTON_PRESS_MASK, NULL, NULL, GDK_CURRENT_TIME);
-            g_signal_connect (G_OBJECT (vol->popup_window), "focus-out-event", G_CALLBACK (volumepulse_mouse_out), vol);
-        }
+        case 2: /* middle-click - toggle mute */
+                pulse_set_mute (vol, pulse_get_mute (vol) ? 0 : 1);
+                break;
+
+        case 3: /* right-click - show device list */
+                close_widget (&vol->popup_window);
+                menu_show (vol);
+                gtk_menu_popup (GTK_MENU (vol->menu_devices), NULL, NULL, (GtkMenuPositionFunc) volumepulse_menu_set_position,
+                    vol, event->button, event->time);
+                break;
     }
-    else if (event->button == 2)
-    {
-        /* middle-click - toggle mute */
-        pulse_set_mute (vol, pulse_get_mute (vol) ? 0 : 1);
-        volumepulse_update_display (vol);
-    }
-    else if (event->button == 3)
-    {
-        /* right-click - show device list */
-        close_widget (&vol->popup_window);
-        menu_build (vol);
-        gtk_widget_show_all (vol->menu_devices);
-        gtk_menu_popup (GTK_MENU (vol->menu_devices), NULL, NULL, (GtkMenuPositionFunc) volumepulse_menu_set_position, (gpointer) vol,
-            event->button, event->time);
-    }
+
+    volumepulse_update_display (vol);
     return TRUE;
 }
 
@@ -835,16 +845,6 @@ static void volumepulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *evt, Vo
     pulse_set_volume (vol, val);
 
     volumepulse_update_display (vol);
-}
-
-/* Handler for "focus-out" signal on popup window */
-
-static gboolean volumepulse_mouse_out (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol)
-{
-    /* Hide the widget. */
-    close_widget (&vol->popup_window);
-    gdk_pointer_ungrab (GDK_CURRENT_TIME);
-    return FALSE;
 }
 
 /* Update icon and tooltip */
@@ -1024,7 +1024,7 @@ static void volumepulse_destructor (gpointer user_data)
     close_widget (&vol->profiles_dialog);
     close_widget (&vol->conn_dialog);
     close_widget (&vol->popup_window);
-    if (vol->menu_devices != NULL) gtk_widget_destroy (vol->menu_devices);
+    close_widget (&vol->menu_devices);
 
     if (vol->panel) g_signal_handlers_disconnect_by_func (panel_get_icon_theme (vol->panel), volumepulse_theme_change, vol);
 
