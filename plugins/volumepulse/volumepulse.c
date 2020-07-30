@@ -346,9 +346,8 @@ static void menu_show (VolumePulsePlugin *vol)
 {
     GtkWidget *mi;
 
-    vol->menu_devices = gtk_menu_new ();
-
     // create input selector
+    vol->menu_devices = gtk_menu_new ();
     vol->menu_inputs = NULL;
 
     // add ALSA inputs
@@ -357,15 +356,6 @@ static void menu_show (VolumePulsePlugin *vol)
 
     // add Bluetooth inputs
     bluetooth_add_devices_to_menu (vol, TRUE);
-
-    if (vol->menu_inputs)
-    {
-        menu_add_separator (vol->menu_inputs);
-
-        mi = gtk_image_menu_item_new_with_label (_("Device Profiles..."));
-        g_signal_connect (mi, "activate", G_CALLBACK (menu_open_profile_dialog), (gpointer) vol);
-        gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_inputs), mi);
-    }
 
     // create a submenu for the outputs if there is an input submenu
     if (vol->menu_inputs) vol->menu_outputs = gtk_menu_new ();
@@ -385,13 +375,6 @@ static void menu_show (VolumePulsePlugin *vol)
     // did we find any output devices? if not, the menu will be empty...
     if (gtk_container_get_children (GTK_CONTAINER (vol->menu_outputs)) != NULL)
     {
-        // add the output options menu item to the output menu
-        menu_add_separator (vol->menu_outputs);
-
-        mi = gtk_image_menu_item_new_with_label (_("Device Profiles..."));
-        g_signal_connect (mi, "activate", G_CALLBACK (menu_open_profile_dialog), (gpointer) vol);
-        gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_outputs), mi);
-
         if (vol->menu_inputs)
         {
             // insert submenus
@@ -406,6 +389,13 @@ static void menu_show (VolumePulsePlugin *vol)
             gtk_menu_item_set_submenu (GTK_MENU_ITEM (mi), vol->menu_inputs);
             gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
         }
+
+        // add the profiles menu item to the top level menu
+        menu_add_separator (vol->menu_devices);
+
+        mi = gtk_image_menu_item_new_with_label (_("Device Profiles..."));
+        g_signal_connect (mi, "activate", G_CALLBACK (menu_open_profile_dialog), (gpointer) vol);
+        gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
     }
     else
     {
