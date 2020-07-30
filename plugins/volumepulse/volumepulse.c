@@ -25,24 +25,6 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-/*
- * Copyright (c) 2008-2014 LxDE Developers, see the file AUTHORS for details.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
- */
-
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -64,7 +46,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 static int get_value (const char *fmt, ...);
 static void hdmi_init (VolumePulsePlugin *vol);
 static const char *device_display_name (VolumePulsePlugin *vol, const char *name);
-static int pa_bluez_device_same (const char *padev, const char *btdev);
 static void close_widget (GtkWidget **wid);
 
 /* Volume popup */
@@ -76,8 +57,7 @@ static gboolean popup_window_mouse_out (GtkWidget *widget, GdkEventButton *event
 /* Menu popup */
 static void menu_show (VolumePulsePlugin *vol);
 static void menu_add_separator (GtkWidget *menu);
-static void menu_show_default_sink (GtkWidget *widget, gpointer data);
-static void menu_show_default_source (GtkWidget *widget, gpointer data);
+static void menu_mark_default (GtkWidget *widget, gpointer data);
 static void menu_set_alsa_output (GtkWidget *widget, VolumePulsePlugin *vol);
 static void menu_set_alsa_input (GtkWidget *widget, VolumePulsePlugin *vol);
 static void menu_set_bluetooth_output (GtkWidget *widget, VolumePulsePlugin *vol);
@@ -112,6 +92,8 @@ static void volumepulse_destructor (gpointer user_data);
 /* Generic helper functions                                                   */
 /*----------------------------------------------------------------------------*/
 
+/* System command accepting variable arguments */
+
 int vsystem (const char *fmt, ...)
 {
     char *cmdline;
@@ -125,6 +107,8 @@ int vsystem (const char *fmt, ...)
     g_free (cmdline);
     return res;
 }
+
+/* Call the supplied system command and return a new string with the first word of the result */
 
 char *get_string (const char *fmt, ...)
 {
@@ -151,6 +135,8 @@ char *get_string (const char *fmt, ...)
     g_free (cmdline);
     return res ? res : g_strdup ("");
 }
+
+/* Call the supplied system command and parse the result for an integer value */
 
 static int get_value (const char *fmt, ...)
 {
@@ -209,14 +195,6 @@ static const char *device_display_name (VolumePulsePlugin *vol, const char *name
     else if (!g_strcmp0 (name, "bcm2835 HDMI 2")) return vol->hdmi_names[1];
     else if (!g_strcmp0 (name, "bcm2835 Headphones")) return _("Analog");
     else return name;
-}
-
-/* Check to see if a PulseAudio sink / source is a particular BlueZ device */
-
-static int pa_bluez_device_same (const char *padev, const char *btdev)
-{
-    if (strstr (btdev, "bluez") && strstr (padev, btdev + 20)) return 1;
-    return 0;
 }
 
 /* Destroy a widget and null its pointer */
@@ -407,10 +385,10 @@ static void menu_show (VolumePulsePlugin *vol)
     // update the menu item names, which are currently ALSA device names, to PulseAudio sink/source names
     pulse_update_devices_in_menu (vol);
 
-    // show the fallback sink and source in the menu
+    // show the default sink and source in the menu
     pulse_get_default_sink_source (vol);
-    gtk_container_foreach (GTK_CONTAINER (vol->menu_outputs), menu_show_default_sink, vol);
-    gtk_container_foreach (GTK_CONTAINER (vol->menu_inputs), menu_show_default_source, vol);
+    gtk_container_foreach (GTK_CONTAINER (vol->menu_outputs), menu_mark_default, vol);
+    gtk_container_foreach (GTK_CONTAINER (vol->menu_inputs), menu_mark_default, vol);
 
     // lock menu if a dialog is open
     if (vol->conn_dialog || vol->profiles_dialog)
@@ -500,27 +478,21 @@ static void menu_add_separator (GtkWidget *menu)
     gtk_menu_shell_append (GTK_MENU_SHELL (menu), mi);
 }
 
-/* Add a tickmark to the supplied widget if it is the default sink */
+/* Add a tickmark to the supplied widget if it is the default item in its parent menu */
 
-static void menu_show_default_sink (GtkWidget *widget, gpointer data)
+static void menu_mark_default (GtkWidget *widget, gpointer data)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) data;
+    const char *def, *wid = gtk_widget_get_name (widget);
 
-    if (!g_strcmp0 (gtk_widget_get_name (widget), vol->pa_default_sink) || pa_bluez_device_same (vol->pa_default_sink, gtk_widget_get_name (widget)))
-    {
-        GtkWidget *image = gtk_image_new ();
-        lxpanel_plugin_set_menu_icon (vol->panel, image, "dialog-ok-apply");
-        gtk_image_menu_item_set_image (GTK_IMAGE_MENU_ITEM (widget), image);
-    }
-}
+    if (gtk_widget_get_parent (widget) == vol->menu_outputs) def = vol->pa_default_sink;
+    else if (gtk_widget_get_parent (widget) == vol->menu_inputs) def = vol->pa_default_source;
+    else return;
+    if (!def || !wid) return;
 
-/* Add a tickmark to the supplied widget if it is the default source */
-
-static void menu_show_default_source (GtkWidget *widget, gpointer data)
-{
-    VolumePulsePlugin *vol = (VolumePulsePlugin *) data;
-
-    if (!g_strcmp0 (gtk_widget_get_name (widget), vol->pa_default_source) || pa_bluez_device_same (vol->pa_default_source, gtk_widget_get_name (widget)))
+    // check to see if either the two names match (for an ALSA device),
+    // or if the BlueZ address from the widget is in the default name */
+    if (!g_strcmp0 (def, wid) || (strstr (wid, "bluez") && strstr (def, wid + 20)))
     {
         GtkWidget *image = gtk_image_new ();
         lxpanel_plugin_set_menu_icon (vol->panel, image, "dialog-ok-apply");
