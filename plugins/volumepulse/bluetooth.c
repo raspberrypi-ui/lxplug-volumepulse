@@ -290,8 +290,12 @@ static void bt_connect_device (VolumePulsePlugin *vol, const char *device)
     }
     else
     {
+        bt_operation_t *btop = (bt_operation_t *) vol->bt_ops->data;
+
         DEBUG ("Couldn't get device interface from object manager");
-        connect_dialog_update (vol, _("Could not get BlueZ interface for device"));
+        char *msg = g_strdup_printf (_("Bluetooth %s device not found"), btop->input ? "input" : "output");
+        connect_dialog_update (vol, msg);
+        g_free (msg);
         bt_next_operation (vol);
     }
 }
@@ -704,6 +708,7 @@ static void connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...)
     gtk_label_set_line_wrap (GTK_LABEL (vol->conn_label), TRUE);
     gtk_label_set_justify (GTK_LABEL (vol->conn_label), GTK_JUSTIFY_LEFT);
     gtk_misc_set_alignment (GTK_MISC (vol->conn_label), 0.0, 0.0);
+    gtk_widget_set_size_request (vol->conn_label, 350, -1);
     gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (vol->conn_dialog))), vol->conn_label, TRUE, TRUE, 0);
     g_signal_connect (GTK_OBJECT (vol->conn_dialog), "delete_event", G_CALLBACK (connect_dialog_delete), vol);
     vol->conn_ok = NULL;
