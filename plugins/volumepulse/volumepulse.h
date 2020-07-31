@@ -88,14 +88,14 @@ typedef struct {
 
 /* Functions in volumepulse.c needed in other modules */
 
+extern char *get_string (const char *fmt, ...);
+extern int vsystem (const char *fmt, ...);
+extern void close_widget (GtkWidget **wid);
+
 extern void volumepulse_update_display (VolumePulsePlugin *vol);
 extern void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input);
 extern void menu_add_separator (VolumePulsePlugin *vol, GtkWidget *menu);
 extern void profiles_dialog_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name);
-extern void connect_dialog_update (VolumePulsePlugin *vol, const char *msg);
-
-extern char *get_string (const char *fmt, ...);
-extern int vsystem (const char *fmt, ...);
 
 /* End of file */
 /*----------------------------------------------------------------------------*/

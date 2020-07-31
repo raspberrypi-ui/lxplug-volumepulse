@@ -28,11 +28,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern void bluetooth_init (VolumePulsePlugin *vol);
 extern void bluetooth_terminate (VolumePulsePlugin *vol);
 
-extern void bluetooth_set_output (VolumePulsePlugin *vol, const char *name);
-extern void bluetooth_set_input (VolumePulsePlugin *vol, const char *name);
+extern void bluetooth_set_output (VolumePulsePlugin *vol, const char *name, const char *label);
+extern void bluetooth_set_input (VolumePulsePlugin *vol, const char *name, const char *label);
 
 extern void bluetooth_remove_output (VolumePulsePlugin *vol);
-extern gboolean bluetooth_remove_input (VolumePulsePlugin *vol);
+extern void bluetooth_remove_input (VolumePulsePlugin *vol);
 
 extern void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input);
 extern void bluetooth_add_devices_to_profile_dialog (VolumePulsePlugin *vol);
