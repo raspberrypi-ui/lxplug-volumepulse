@@ -207,6 +207,7 @@ static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, co
         vol->bt_oname = get_string ("cat ~/.btout 2> /dev/null");
         vol->bt_iname = get_string ("cat ~/.btin 2> /dev/null");
 
+        if (vol->bt_oname || vol->bt_iname) connect_dialog_show (vol, _("Reconnecting Bluetooth devices..."));
         if (vol->bt_oname) bt_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
         if (vol->bt_iname) bt_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
         if (vol->bt_oname) bt_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);

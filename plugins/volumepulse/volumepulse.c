@@ -584,9 +584,13 @@ void profiles_dialog_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWid
 {
     GtkWidget *lbl, *comb;
     GtkCellRenderer *rend;
+    char *ltext;
 
-    lbl = gtk_label_new (device_display_name (vol, label));
+    ltext = g_strdup_printf ("%s:", device_display_name (vol, label));
+    lbl = gtk_label_new (ltext);
+    gtk_misc_set_alignment (GTK_MISC (lbl), 0.0, 0.5);
     gtk_box_pack_start (GTK_BOX (dest), lbl, FALSE, FALSE, 5);
+    g_free (ltext);
 
     if (ls)
     {
