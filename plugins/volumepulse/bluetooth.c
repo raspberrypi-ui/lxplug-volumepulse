@@ -74,11 +74,10 @@ static void bt_cb_trusted (GObject *source, GAsyncResult *res, gpointer user_dat
 static void bt_disconnect_device (VolumePulsePlugin *vol, const char *device);
 static void bt_cb_disconnected (GObject *source, GAsyncResult *res, gpointer user_data);
 static gboolean bt_has_service (VolumePulsePlugin *vol, const gchar *path, const gchar *service);
-static void connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...);
-static void connect_dialog_update (VolumePulsePlugin *vol, const char *msg);
-static void connect_dialog_ok (GtkButton *button, VolumePulsePlugin *vol);
-static gboolean connect_dialog_delete (GtkWidget *widget, GdkEvent *event, VolumePulsePlugin *vol);
-
+static void bt_connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...);
+static void bt_connect_dialog_update (VolumePulsePlugin *vol, const char *msg);
+static void bt_connect_dialog_ok (GtkButton *button, VolumePulsePlugin *vol);
+static gboolean bt_connect_dialog_delete (GtkWidget *widget, GdkEvent *event, VolumePulsePlugin *vol);
 
 /*----------------------------------------------------------------------------*/
 /* Bluetooth operation list management                                        */
@@ -207,7 +206,7 @@ static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, co
         vol->bt_oname = get_string ("cat ~/.btout 2> /dev/null");
         vol->bt_iname = get_string ("cat ~/.btin 2> /dev/null");
 
-        if (vol->bt_oname || vol->bt_iname) connect_dialog_show (vol, _("Reconnecting Bluetooth devices..."));
+        if (vol->bt_oname || vol->bt_iname) bt_connect_dialog_show (vol, _("Reconnecting Bluetooth devices..."));
         if (vol->bt_oname) bt_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
         if (vol->bt_iname) bt_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
         if (vol->bt_oname) bt_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
@@ -290,11 +289,12 @@ static void bt_connect_device (VolumePulsePlugin *vol, const char *device)
     }
     else
     {
+        // should only happen on a reconnect if the device has been un-paired
         bt_operation_t *btop = (bt_operation_t *) vol->bt_ops->data;
 
         DEBUG ("Couldn't get device interface from object manager");
         char *msg = g_strdup_printf (_("Bluetooth %s device not found"), btop->input ? "input" : "output");
-        connect_dialog_update (vol, msg);
+        bt_connect_dialog_update (vol, msg);
         g_free (msg);
         bt_next_operation (vol);
     }
@@ -317,7 +317,7 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
         DEBUG ("Connect error %s", error->message);
 
         // update dialog to show a warning
-        connect_dialog_update (vol, error->message);
+        bt_connect_dialog_update (vol, error->message);
         g_error_free (error);
     }
     else
@@ -341,7 +341,7 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
             DEBUG ("No PulseAudio device");
 
             // update dialog to show a warning
-            connect_dialog_update (vol, _("Device not found by PulseAudio"));
+            bt_connect_dialog_update (vol, _("Device not found by PulseAudio"));
         }
         else
         {
@@ -504,7 +504,7 @@ void bluetooth_terminate (VolumePulsePlugin *vol)
 
 void bluetooth_set_output (VolumePulsePlugin *vol, const char *name, const char *label)
 {
-    connect_dialog_show (vol, _("Connecting Bluetooth device '%s' as output..."), label);
+    bt_connect_dialog_show (vol, _("Connecting Bluetooth device '%s' as output..."), label);
 
     pulse_get_default_sink_source (vol);
     vol->bt_oname = bt_from_pa_name (vol->pa_default_sink);
@@ -525,7 +525,7 @@ void bluetooth_set_output (VolumePulsePlugin *vol, const char *name, const char 
 
 void bluetooth_set_input (VolumePulsePlugin *vol, const char *name, const char *label)
 {
-    connect_dialog_show (vol, _("Connecting Bluetooth device '%s' as input..."), label);
+    bt_connect_dialog_show (vol, _("Connecting Bluetooth device '%s' as input..."), label);
 
     pulse_get_default_sink_source (vol);
     vol->bt_oname = bt_from_pa_name (vol->pa_default_sink);
@@ -578,7 +578,7 @@ void bluetooth_remove_input (VolumePulsePlugin *vol)
         {
             // if the current default source and sink are both the same device, disconnect the input and force the output
             // to reconnect as A2DP...
-            connect_dialog_show (vol, _("Reconnecting Bluetooth input device as output only..."));
+            bt_connect_dialog_show (vol, _("Reconnecting Bluetooth input device as output only..."));
             vol->bt_oname = bt_from_pa_name (vol->pa_default_sink);
             bt_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
             bt_add_operation (vol, vol->bt_oname, DISCONNECT, INPUT);
@@ -691,7 +691,7 @@ void bluetooth_add_devices_to_profile_dialog (VolumePulsePlugin *vol)
 
 /* Show the Bluetooth connection dialog */
 
-static void connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...)
+static void bt_connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...)
 {
     char *msg;
     va_list arg;
@@ -710,7 +710,7 @@ static void connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...)
     gtk_misc_set_alignment (GTK_MISC (vol->conn_label), 0.0, 0.0);
     gtk_widget_set_size_request (vol->conn_label, 350, -1);
     gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (vol->conn_dialog))), vol->conn_label, TRUE, TRUE, 0);
-    g_signal_connect (GTK_OBJECT (vol->conn_dialog), "delete_event", G_CALLBACK (connect_dialog_delete), vol);
+    g_signal_connect (GTK_OBJECT (vol->conn_dialog), "delete_event", G_CALLBACK (bt_connect_dialog_delete), vol);
     vol->conn_ok = NULL;
     gtk_widget_show_all (vol->conn_dialog);
     g_free (msg);
@@ -718,7 +718,7 @@ static void connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...)
 
 /* Either update the message on the connection dialog to show an error, or close the dialog */
 
-static void connect_dialog_update (VolumePulsePlugin *vol, const gchar *msg)
+static void bt_connect_dialog_update (VolumePulsePlugin *vol, const gchar *msg)
 {
     if (!vol->conn_dialog) return;
 
@@ -729,21 +729,21 @@ static void connect_dialog_update (VolumePulsePlugin *vol, const gchar *msg)
     if (vol->conn_ok == NULL)
     {
         vol->conn_ok = gtk_dialog_add_button (GTK_DIALOG (vol->conn_dialog), _("_OK"), 1);
-        g_signal_connect (vol->conn_ok, "clicked", G_CALLBACK (connect_dialog_ok), vol);
+        g_signal_connect (vol->conn_ok, "clicked", G_CALLBACK (bt_connect_dialog_ok), vol);
         gtk_widget_show (vol->conn_ok);
     }
 }
 
 /* Handler for 'OK' button on connection dialog */
 
-static void connect_dialog_ok (GtkButton *button, VolumePulsePlugin *vol)
+static void bt_connect_dialog_ok (GtkButton *button, VolumePulsePlugin *vol)
 {
     close_widget (&vol->conn_dialog);
 }
 
 /* Handler for "delete-event" signal from connection dialog */
 
-static gboolean connect_dialog_delete (GtkWidget *widget, GdkEvent *event, VolumePulsePlugin *vol)
+static gboolean bt_connect_dialog_delete (GtkWidget *widget, GdkEvent *event, VolumePulsePlugin *vol)
 {
     close_widget (&vol->conn_dialog);
     return TRUE;
