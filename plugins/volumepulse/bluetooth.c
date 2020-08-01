@@ -38,21 +38,22 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BT_SERV_HSP             "00001108"
 #define BT_SERV_HFP             "0000111E"
 
-typedef struct {
-    const char *device;
-    gboolean disconnect;
-    gboolean input;
-} bt_operation_t;
-
 typedef enum {
     CONNECT,
-    DISCONNECT
+    DISCONNECT,
+    RECONNECT
 } bt_cd_t;
 
 typedef enum {
     INPUT,
     OUTPUT
 } bt_dir_t;
+
+typedef struct {
+    const char *device;
+    bt_cd_t conn_disc;
+    bt_dir_t direction;
+} bt_operation_t;
 
 /*----------------------------------------------------------------------------*/
 /* Static function prototypes                                                 */
@@ -90,8 +91,8 @@ static void bt_add_operation (VolumePulsePlugin *vol, const char *device, bt_cd_
     bt_operation_t *newop = malloc (sizeof (bt_operation_t));
 
     newop->device = device;
-    newop->disconnect = (cd == DISCONNECT);
-    newop->input = (dir == INPUT);
+    newop->conn_disc = cd;
+    newop->direction = dir;
 
     vol->bt_ops = g_list_append (vol->bt_ops, newop);
 }
@@ -103,7 +104,8 @@ static void bt_do_operation (VolumePulsePlugin *vol)
     if (vol->bt_ops)
     {
         bt_operation_t *btop = (bt_operation_t *) vol->bt_ops->data;
-        if (btop->disconnect)
+
+        if (btop->conn_disc == DISCONNECT)
         {
             bt_disconnect_device (vol, btop->device);
         }
@@ -209,8 +211,8 @@ static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, co
         if (vol->bt_oname || vol->bt_iname) bt_connect_dialog_show (vol, _("Reconnecting Bluetooth devices..."));
         if (vol->bt_oname) bt_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
         if (vol->bt_iname) bt_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
-        if (vol->bt_oname) bt_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
-        if (vol->bt_iname) bt_add_operation (vol, vol->bt_iname, CONNECT, INPUT);
+        if (vol->bt_oname) bt_add_operation (vol, vol->bt_oname, RECONNECT, OUTPUT);
+        if (vol->bt_iname) bt_add_operation (vol, vol->bt_iname, RECONNECT, INPUT);
 
         bt_do_operation (vol);
     }
@@ -293,9 +295,14 @@ static void bt_connect_device (VolumePulsePlugin *vol, const char *device)
         bt_operation_t *btop = (bt_operation_t *) vol->bt_ops->data;
 
         DEBUG ("Couldn't get device interface from object manager");
-        char *msg = g_strdup_printf (_("Bluetooth %s device not found"), btop->input ? "input" : "output");
+        char *msg = g_strdup_printf (_("Bluetooth %s device not found"), btop->direction == INPUT ? "input" : "output");
         bt_connect_dialog_update (vol, msg);
         g_free (msg);
+        if (btop->conn_disc == RECONNECT)
+        {
+            if (btop->direction == INPUT) vsystem ("rm ~/.btin");
+            else vsystem ("rm ~/.btout");
+        }
         bt_next_operation (vol);
     }
 }
@@ -312,6 +319,8 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
     GVariant *var = g_dbus_proxy_call_finish (G_DBUS_PROXY (source), res, &error);
     if (var) g_variant_unref (var);
 
+    bt_operation_t *btop = (bt_operation_t *) vol->bt_ops->data;
+
     if (error)
     {
         DEBUG ("Connect error %s", error->message);
@@ -319,12 +328,15 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
         // update dialog to show a warning
         bt_connect_dialog_update (vol, error->message);
         g_error_free (error);
+        if (btop->conn_disc == RECONNECT)
+        {
+            if (btop->direction == INPUT) vsystem ("rm ~/.btin");
+            else vsystem ("rm ~/.btout");
+        }
     }
     else
     {
         DEBUG ("Connected OK");
-
-        bt_operation_t *btop = (bt_operation_t *) vol->bt_ops->data;
 
         // some devices take a very long time to be valid PulseAudio cards after connection
         pacard = bt_to_pa_name (btop->device, "card", NULL);
@@ -348,7 +360,7 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
             DEBUG ("Current profile %s", vol->pa_profile);
 
             // set connected device as PulseAudio default
-            if (btop->input)
+            if (btop->direction == INPUT)
             {
                 vsystem ("echo %s > ~/.btin", btop->device);
 
