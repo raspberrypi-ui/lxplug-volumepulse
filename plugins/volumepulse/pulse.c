@@ -92,9 +92,10 @@ static void pa_cb_get_info_external (pa_context *c, const pa_card_info *i, int e
 static gboolean pa_card_has_port (const pa_card_info *i, pa_direction_t dir);
 static int pa_replace_cards_with_sinks (VolumePulsePlugin *vol);
 static void pa_cb_replace_cards_with_sinks (pa_context *context, const pa_sink_info *i, int eol, void *userdata);
+static void pa_replace_card_with_sink_on_match (GtkWidget *widget, gpointer data);
 static int pa_replace_cards_with_sources (VolumePulsePlugin *vol);
 static void pa_cb_replace_cards_with_sources (pa_context *context, const pa_source_info *i, int eol, void *userdata);
-static void pa_replace_alsa_on_match (GtkWidget *widget, gpointer data);
+static void pa_replace_card_with_source_on_match (GtkWidget *widget, gpointer data);
 static void pa_cb_add_devices_to_profile_dialog (pa_context *c, const pa_card_info *i, int eol, void *userdata);
 
 /*----------------------------------------------------------------------------*/
@@ -702,10 +703,25 @@ static void pa_cb_replace_cards_with_sinks (pa_context *context, const pa_sink_i
         DEBUG ("pa_cb_replace_cards_with_sinks");
         const char *api = pa_proplist_gets (i->proplist, "device.api");
         if (!g_strcmp0 (api, "alsa"))
-            gtk_container_foreach (GTK_CONTAINER (vol->menu_outputs), pa_replace_alsa_on_match, (void *) i);
+            gtk_container_foreach (GTK_CONTAINER (vol->menu_outputs), pa_replace_card_with_sink_on_match, (void *) i);
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
+/* Callback for per-menu-item operation which checks to see if each matches the card name and updates with sink data if so */
+
+static void pa_replace_card_with_sink_on_match (GtkWidget *widget, gpointer data)
+{
+    pa_sink_info *i = (pa_sink_info *) data;
+    const char *alsaname = pa_proplist_gets (i->proplist, "alsa.card_name");
+
+    if (!strcmp (alsaname, gtk_widget_get_name (widget)))
+    {
+        gtk_widget_set_name (widget, i->name);
+        gtk_widget_set_sensitive (widget, TRUE);
+        gtk_widget_set_tooltip_text (widget, NULL);
+    }
 }
 
 /* Query controller for list of sources */
@@ -729,17 +745,17 @@ static void pa_cb_replace_cards_with_sources (pa_context *context, const pa_sour
         DEBUG ("pa_cb_replace_cards_with_sources");
         const char *api = pa_proplist_gets (i->proplist, "device.api");
         if (!g_strcmp0 (api, "alsa"))
-            gtk_container_foreach (GTK_CONTAINER (vol->menu_inputs), pa_replace_alsa_on_match, (void *) i);
+            gtk_container_foreach (GTK_CONTAINER (vol->menu_inputs), pa_replace_card_with_source_on_match, (void *) i);
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
-/* Callback for per-menu-item operation which checks to see if each matches the card name and updates with sink / source data if so */
+/* Callback for per-menu-item operation which checks to see if each matches the card name and updates with source data if so */
 
-static void pa_replace_alsa_on_match (GtkWidget *widget, gpointer data)
+static void pa_replace_card_with_source_on_match (GtkWidget *widget, gpointer data)
 {
-    pa_sink_info *i = (pa_sink_info *) data;
+    pa_source_info *i = (pa_source_info *) data;
     const char *alsaname = pa_proplist_gets (i->proplist, "alsa.card_name");
 
     if (!strcmp (alsaname, gtk_widget_get_name (widget)))
