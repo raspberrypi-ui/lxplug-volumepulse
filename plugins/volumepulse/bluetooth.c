@@ -640,7 +640,7 @@ void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input)
                         if (name && icon && paired && trusted && g_variant_get_boolean (paired) && g_variant_get_boolean (trusted))
                         {
                             // create a menu if there isn't one already
-                            if (input && !!vol->menu_inputs) vol->menu_inputs = gtk_menu_new ();
+                            if (input && !vol->menu_inputs) vol->menu_inputs = gtk_menu_new ();
                             menu_add_separator (vol, input ? vol->menu_inputs : vol->menu_outputs);
                             if (input) menu_add_item (vol, g_variant_get_string (name, NULL), objpath, TRUE);
                             else menu_add_item (vol, g_variant_get_string (name, NULL), objpath, FALSE);
