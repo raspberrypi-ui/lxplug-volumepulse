@@ -407,6 +407,7 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
                     DEBUG ("Profile set to a2dp_sink");
                 }
                 pulse_change_sink (vol, paname);
+                pulse_unmute_all_streams (vol);
             }
             g_free (paname);
             g_free (pacard);
@@ -531,6 +532,7 @@ void bluetooth_terminate (VolumePulsePlugin *vol)
 
 void bluetooth_set_output (VolumePulsePlugin *vol, const char *name, const char *label)
 {
+    pulse_mute_all_streams (vol);
     bt_connect_dialog_show (vol, _("Connecting Bluetooth device '%s' as output..."), label);
 
     pulse_get_default_sink_source (vol);

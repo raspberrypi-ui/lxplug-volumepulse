@@ -85,6 +85,10 @@ static int pa_get_input_streams (VolumePulsePlugin *vol);
 static void pa_cb_get_input_streams (pa_context *context, const pa_source_output_info *i, int eol, void *userdata);
 static void pa_list_move_to_default_source (gpointer data, gpointer userdata);
 static int pa_move_stream_to_default_source (VolumePulsePlugin *vol, int index);
+static void pa_list_mute_stream (gpointer data, gpointer userdata);
+static int pa_mute_stream (VolumePulsePlugin *vol, int index);
+static void pa_list_unmute_stream (gpointer data, gpointer userdata);
+static int pa_unmute_stream (VolumePulsePlugin *vol, int index);
 static void pa_cb_get_profile (pa_context *c, const pa_card_info *i, int eol, void *userdata);
 static void pa_cb_get_info_inputs (pa_context *c, const pa_card_info *i, int eol, void *userdata);
 static void pa_cb_get_info_internal (pa_context *c, const pa_card_info *i, int eol, void *userdata);
@@ -529,6 +533,70 @@ static int pa_move_stream_to_default_source (VolumePulsePlugin *vol, int index)
     START_PA_OPERATION
     op = pa_context_move_source_output_by_name (vol->pa_context, index, vol->pa_default_source, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("move_source_output_by_name")
+}
+
+/*----------------------------------------------------------------------------*/
+/* Output control                                                             */
+/*----------------------------------------------------------------------------*/
+
+void pulse_mute_all_streams (VolumePulsePlugin *vol)
+{
+    DEBUG ("pulse_mute_all_streams");
+
+    vol->pa_indices = NULL;
+    pa_get_output_streams (vol);
+    g_list_foreach (vol->pa_indices, pa_list_mute_stream, vol);
+    g_list_free (vol->pa_indices);
+    DEBUG ("pulse_mute_all_streams done");
+}
+
+/* Callback for per-stream operation by looping through pa_indices, muting stream for each */
+
+static void pa_list_mute_stream (gpointer data, gpointer userdata)
+{
+    VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
+
+    pa_mute_stream (vol, (int) data);
+}
+
+/* Call the PulseAudio mute stream operation for the supplied index*/
+
+static int pa_mute_stream (VolumePulsePlugin *vol, int index)
+{
+    DEBUG ("pa_mute_stream %d", index);
+    START_PA_OPERATION
+    op = pa_context_set_sink_input_mute (vol->pa_context, index, 1, &pa_cb_generic_success, vol);
+    END_PA_OPERATION ("set_sink_input_mute")
+}
+
+void pulse_unmute_all_streams (VolumePulsePlugin *vol)
+{
+    DEBUG ("pulse_unmute_all_streams");
+
+    vol->pa_indices = NULL;
+    pa_get_output_streams (vol);
+    g_list_foreach (vol->pa_indices, pa_list_unmute_stream, vol);
+    g_list_free (vol->pa_indices);
+    DEBUG ("pulse_unmute_all_streams done");
+}
+
+/* Callback for per-stream operation by looping through pa_indices, unmuting stream for each */
+
+static void pa_list_unmute_stream (gpointer data, gpointer userdata)
+{
+    VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
+
+    pa_unmute_stream (vol, (int) data);
+}
+
+/* Call the PulseAudio unmute stream operation for the supplied index*/
+
+static int pa_unmute_stream (VolumePulsePlugin *vol, int index)
+{
+    DEBUG ("pa_unmute_stream %d", index);
+    START_PA_OPERATION
+    op = pa_context_set_sink_input_mute (vol->pa_context, index, 0, &pa_cb_generic_success, vol);
+    END_PA_OPERATION ("set_sink_input_mute")
 }
 
 /*----------------------------------------------------------------------------*/
