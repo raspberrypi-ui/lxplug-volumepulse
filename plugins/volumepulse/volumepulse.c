@@ -485,7 +485,7 @@ static void menu_mark_default (GtkWidget *widget, gpointer data)
 
     // check to see if either the two names match (for an ALSA device),
     // or if the BlueZ address from the widget is in the default name */
-    if (!g_strcmp0 (def, wid) || (strstr (wid, "bluez") && strstr (def, wid + 20)))
+    if (!g_strcmp0 (def, wid) || (strstr (wid, "bluez") && strstr (def, wid + 20) && !strstr (def, "monitor")))
     {
         GtkWidget *image = gtk_image_new ();
         lxpanel_plugin_set_menu_icon (vol->panel, image, "dialog-ok-apply");
