@@ -38,6 +38,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BT_SERV_HSP             "00001108"
 #define BT_SERV_HFP             "0000111E"
 
+#define BT_PULSE_RETRIES    100000
+
 typedef enum {
     CONNECT,
     DISCONNECT,
@@ -201,8 +203,8 @@ static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, co
     else
     {
         /* register callbacks for devices being added or removed */
-        g_signal_connect (vol->bt_objmanager, "object-added", G_CALLBACK (bt_cb_object_added), vol);
-        g_signal_connect (vol->bt_objmanager, "object-removed", G_CALLBACK (bt_cb_object_removed), vol);
+        //g_signal_connect (vol->bt_objmanager, "object-added", G_CALLBACK (bt_cb_object_added), vol);
+        //g_signal_connect (vol->bt_objmanager, "object-removed", G_CALLBACK (bt_cb_object_removed), vol);
 
         DEBUG ("Reconnecting devices");
         vol->bt_oname = get_string ("cat ~/.btout 2> /dev/null");
@@ -237,8 +239,8 @@ static void bt_cb_name_unowned (GDBusConnection *connection, const gchar *name, 
 
     if (vol->bt_objmanager)
     {
-        g_signal_handlers_disconnect_by_func (vol->bt_objmanager, G_CALLBACK (bt_cb_object_added), vol);
-        g_signal_handlers_disconnect_by_func (vol->bt_objmanager, G_CALLBACK (bt_cb_object_removed), vol);
+        //g_signal_handlers_disconnect_by_func (vol->bt_objmanager, G_CALLBACK (bt_cb_object_added), vol);
+        //g_signal_handlers_disconnect_by_func (vol->bt_objmanager, G_CALLBACK (bt_cb_object_removed), vol);
         g_object_unref (vol->bt_objmanager);
     }
     vol->bt_objmanager = NULL;
@@ -251,6 +253,7 @@ static void bt_cb_object_added (GDBusObjectManager *manager, GDBusObject *object
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
     const char *obj = g_dbus_object_get_object_path (object);
 
+    DEBUG ("Bluetooth object %s added", obj);
     pulse_get_default_sink_source (vol);
     char *device = bt_from_pa_name (vol->pa_default_sink);
     char *idevice = bt_from_pa_name (vol->pa_default_source);
@@ -271,6 +274,7 @@ static void bt_cb_object_removed (GDBusObjectManager *manager, GDBusObject *obje
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
     const char *obj = g_dbus_object_get_object_path (object);
 
+    DEBUG ("Bluetooth object %s removed", obj);
     pulse_get_default_sink_source (vol);
     char *device = bt_from_pa_name (vol->pa_default_sink);
     char *idevice = bt_from_pa_name (vol->pa_default_source);
@@ -356,18 +360,19 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
             pulse_get_profile (vol, pacard);
             count++;
         }
-        while (vol->pa_profile == NULL && count < 100);
+        while (vol->pa_profile == NULL && count < BT_PULSE_RETRIES);
+        DEBUG ("Profile polled %d times", count);
 
         if (vol->pa_profile == NULL)
         {
-            DEBUG ("No PulseAudio device");
+            DEBUG ("Bluetooth device not found by PulseAudio - profile not available");
 
             // update dialog to show a warning
             bt_connect_dialog_update (vol, _("Device not found by PulseAudio"));
         }
         else
         {
-            DEBUG ("Current profile %s", vol->pa_profile);
+            DEBUG ("Bluetooth device found by PulseAudio with profile %s", vol->pa_profile);
 
             // set connected device as PulseAudio default
             if (btop->direction == INPUT)
