@@ -498,6 +498,7 @@ static void menu_mark_default (GtkWidget *widget, gpointer data)
 static void menu_set_alsa_output (GtkWidget *widget, VolumePulsePlugin *vol)
 {
     bluetooth_remove_output (vol);
+    pulse_unmute_all_streams (vol);
     pulse_change_sink (vol, gtk_widget_get_name (widget));
     volumepulse_update_display (vol);
 }
@@ -507,6 +508,7 @@ static void menu_set_alsa_output (GtkWidget *widget, VolumePulsePlugin *vol)
 static void menu_set_alsa_input (GtkWidget *widget, VolumePulsePlugin *vol)
 {
     bluetooth_remove_input (vol);
+    pulse_unmute_all_streams (vol);
     pulse_change_source (vol, gtk_widget_get_name (widget));
     volumepulse_update_display (vol);
 }

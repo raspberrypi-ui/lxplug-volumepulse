@@ -407,7 +407,6 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
                     DEBUG ("Profile set to a2dp_sink");
                 }
                 pulse_change_sink (vol, paname);
-                pulse_unmute_all_streams (vol);
             }
             g_free (paname);
             g_free (pacard);
@@ -415,6 +414,7 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
             if (vol->conn_ok == NULL) close_widget (&vol->conn_dialog);
         }
     }
+    pulse_unmute_all_streams (vol);
 
     bt_next_operation (vol);
 
