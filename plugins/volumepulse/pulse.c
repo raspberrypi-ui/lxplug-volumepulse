@@ -623,9 +623,9 @@ static void pa_cb_get_info_inputs (pa_context *c, const pa_card_info *i, int eol
         if (pa_card_has_port (i, PA_DIRECTION_INPUT))
         {
             const char *nam = pa_proplist_gets (i->proplist, "alsa.card_name");
-            DEBUG ("pa_cb_get_info_inputs %s", nam);
             if (nam)
             {
+                DEBUG ("pa_cb_get_info_inputs %s", nam);
                 if (!vol->menu_inputs) vol->menu_inputs = gtk_menu_new ();
                 menu_add_item (vol, nam, nam, TRUE);
             }
