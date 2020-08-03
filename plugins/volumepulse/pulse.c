@@ -233,6 +233,27 @@ static int pa_set_subscription (VolumePulsePlugin *vol)
 static void pa_cb_subscription (pa_context *pacontext, pa_subscription_event_type_t event, uint32_t idx, void *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
+    const char *fac, *type;
+
+    switch (event & PA_SUBSCRIPTION_EVENT_FACILITY_MASK)
+    {
+        case PA_SUBSCRIPTION_EVENT_SINK : fac = "sink"; break;
+        case PA_SUBSCRIPTION_EVENT_SOURCE : fac = "source"; break;
+        case PA_SUBSCRIPTION_EVENT_SINK_INPUT : fac = "sink input"; break;
+        case PA_SUBSCRIPTION_EVENT_SOURCE_OUTPUT : fac = "source output"; break;
+        case PA_SUBSCRIPTION_EVENT_MODULE : fac = "module"; break;
+        case PA_SUBSCRIPTION_EVENT_CLIENT : fac = "client"; break;
+        case PA_SUBSCRIPTION_EVENT_SAMPLE_CACHE : fac = "sample cache"; break;
+        case PA_SUBSCRIPTION_EVENT_SERVER : fac = "server"; break;
+        case PA_SUBSCRIPTION_EVENT_CARD : fac = "card"; break;
+    }
+    switch (event & PA_SUBSCRIPTION_EVENT_TYPE_MASK)
+    {
+        case PA_SUBSCRIPTION_EVENT_NEW : type = "New"; break;
+        case PA_SUBSCRIPTION_EVENT_CHANGE : type = "Change"; break;
+        case PA_SUBSCRIPTION_EVENT_REMOVE : type = "Remove"; break;
+    }
+    DEBUG ("PulseAudio event : %s %s", type, fac);
 
     g_idle_add (pa_update_disp_cb, vol);
 
