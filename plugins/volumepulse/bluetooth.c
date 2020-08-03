@@ -532,12 +532,12 @@ void bluetooth_terminate (VolumePulsePlugin *vol)
 
 void bluetooth_set_output (VolumePulsePlugin *vol, const char *name, const char *label)
 {
-    pulse_mute_all_streams (vol);
     bt_connect_dialog_show (vol, _("Connecting Bluetooth device '%s' as output..."), label);
 
     pulse_get_default_sink_source (vol);
     vol->bt_oname = bt_from_pa_name (vol->pa_default_sink);
     vol->bt_iname = bt_from_pa_name (vol->pa_default_source);
+    if (vol->bt_oname) pulse_mute_all_streams (vol);
 
     // to ensure an output device connects with the correct profile, disconnect
     // any existing input device first and then reconnect the input after
@@ -545,7 +545,16 @@ void bluetooth_set_output (VolumePulsePlugin *vol, const char *name, const char 
     if (vol->bt_oname) bt_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
     if (vol->bt_iname) bt_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
     bt_add_operation (vol, name, CONNECT, OUTPUT);
-    if (vol->bt_iname) bt_add_operation (vol, vol->bt_iname, CONNECT, INPUT);
+
+    // if the user reconnects to a BT output which is already connected as both in and out,
+    // don't reconnect the input, because we can then switch it to A2DP
+    if (vol->bt_iname)
+    {
+        if (!g_strcmp0 (vol->bt_iname, name) && !g_strcmp0 (vol->bt_oname, name))
+            pulse_change_source (vol, NULL);
+        else
+            bt_add_operation (vol, vol->bt_iname, CONNECT, INPUT);
+    }
 
     bt_do_operation (vol);
 }
@@ -559,6 +568,7 @@ void bluetooth_set_input (VolumePulsePlugin *vol, const char *name, const char *
     pulse_get_default_sink_source (vol);
     vol->bt_oname = bt_from_pa_name (vol->pa_default_sink);
     vol->bt_iname = bt_from_pa_name (vol->pa_default_source);
+    if (vol->bt_oname) pulse_mute_all_streams (vol);
 
     // profiles load correctly for inputs, but may need to change the profile of
     // a device which is currently being used for output, so reload them both anyway...
