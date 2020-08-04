@@ -647,12 +647,16 @@ static void profiles_dialog_relocate_last_item (GtkWidget *box)
 
 static void profiles_dialog_combo_changed (GtkComboBox *combo, VolumePulsePlugin *vol)
 {
-    const char *option;
+    const char *name, *option;
     GtkTreeIter iter;
 
+    name = gtk_widget_get_name (GTK_WIDGET (combo));
     gtk_combo_box_get_active_iter (combo, &iter);
     gtk_tree_model_get (gtk_combo_box_get_model (combo), &iter, 0, &option, -1);
-    pulse_set_profile (vol, gtk_widget_get_name (GTK_WIDGET (combo)), option);
+    pulse_set_profile (vol, name, option);
+
+    // need to reconnect a Bluetooth device here to cause the profile to take effect...
+    bluetooth_reconnect (vol, name, option);
 }
 
 /* Handler for 'OK' button on profiles dialog */

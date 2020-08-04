@@ -640,6 +640,42 @@ void bluetooth_remove_input (VolumePulsePlugin *vol)
     }
 }
 
+/* Reconnect the current Bluetooth device if the user changes the profile */
+
+void bluetooth_reconnect (VolumePulsePlugin *vol, const char *name, const char *profile)
+{
+    char *btname = bt_from_pa_name (name);
+    if (btname == NULL) return;
+
+    pulse_get_default_sink_source (vol);
+    vol->bt_oname = bt_from_pa_name (vol->pa_default_sink);
+    if (g_strcmp0 (btname, vol->bt_oname))
+    {
+        g_free (vol->bt_oname);
+        vol->bt_oname = NULL;
+    }
+    vol->bt_iname = bt_from_pa_name (vol->pa_default_source);
+    if (g_strcmp0 (btname, vol->bt_iname))
+    {
+        g_free (vol->bt_iname);
+        vol->bt_iname = NULL;
+    }
+    g_free (btname);
+    if (vol->bt_oname == NULL && vol->bt_iname == NULL) return;
+
+    bt_connect_dialog_show (vol, _("Reconnecting Bluetooth device..."));
+    if (vol->bt_oname) pulse_mute_all_streams (vol);
+
+    if (vol->bt_oname) bt_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
+    if (vol->bt_iname) bt_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
+    if (vol->bt_oname && (!g_strcmp0 (profile, "a2dp_sink") || !g_strcmp0 (profile, "headset_head_unit")))
+        bt_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
+    if (vol->bt_iname && !g_strcmp0 (profile, "headset_head_unit"))
+        bt_add_operation (vol, vol->bt_iname, CONNECT, INPUT);
+
+    bt_do_operation (vol);
+}
+
 /* Loop through the devices BlueZ knows about, adding them to the device menu */
 
 void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input)
