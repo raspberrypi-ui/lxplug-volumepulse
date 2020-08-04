@@ -403,6 +403,7 @@ void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name,
 {
     GtkWidget *menu = input ? vol->menu_inputs : vol->menu_outputs;
     const char *disp_label = device_display_name (vol, label);
+    gboolean active = FALSE;
     GtkWidget *mi = gtk_image_menu_item_new_with_label (disp_label);
     gtk_image_menu_item_set_always_show_image (GTK_IMAGE_MENU_ITEM (mi), TRUE);
     gtk_widget_set_name (mi, name);
@@ -410,12 +411,17 @@ void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name,
     {
         if (input) g_signal_connect (mi, "activate", G_CALLBACK (menu_set_bluetooth_input), (gpointer) vol);
         else g_signal_connect (mi, "activate", G_CALLBACK (menu_set_bluetooth_output), (gpointer) vol);
+        if (!bluetooth_is_connected (vol, name)) active = TRUE;
     }
     else
     {
         if (input) g_signal_connect (mi, "activate", G_CALLBACK (menu_set_alsa_input), (gpointer) vol);
         else g_signal_connect (mi, "activate", G_CALLBACK (menu_set_alsa_output), (gpointer) vol);
-        gtk_widget_set_sensitive (mi, FALSE);
+    }
+
+    gtk_widget_set_sensitive (mi, active);
+    if (!active)
+    {
         if (input)
             gtk_widget_set_tooltip_text (mi, _("Input from this device not available in the current profile"));
         else

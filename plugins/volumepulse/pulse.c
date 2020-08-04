@@ -97,9 +97,11 @@ static gboolean pa_card_has_port (const pa_card_info *i, pa_direction_t dir);
 static int pa_replace_cards_with_sinks (VolumePulsePlugin *vol);
 static void pa_cb_replace_cards_with_sinks (pa_context *context, const pa_sink_info *i, int eol, void *userdata);
 static void pa_replace_card_with_sink_on_match (GtkWidget *widget, gpointer data);
+static void pa_card_check_bt_output_profile (GtkWidget *widget, gpointer data);
 static int pa_replace_cards_with_sources (VolumePulsePlugin *vol);
 static void pa_cb_replace_cards_with_sources (pa_context *context, const pa_source_info *i, int eol, void *userdata);
 static void pa_replace_card_with_source_on_match (GtkWidget *widget, gpointer data);
+static void pa_card_check_bt_input_profile (GtkWidget *widget, gpointer data);
 static void pa_cb_add_devices_to_profile_dialog (pa_context *c, const pa_card_info *i, int eol, void *userdata);
 
 /*----------------------------------------------------------------------------*/
@@ -793,6 +795,8 @@ static void pa_cb_replace_cards_with_sinks (pa_context *context, const pa_sink_i
         const char *api = pa_proplist_gets (i->proplist, "device.api");
         if (!g_strcmp0 (api, "alsa"))
             gtk_container_foreach (GTK_CONTAINER (vol->menu_outputs), pa_replace_card_with_sink_on_match, (void *) i);
+        else
+            gtk_container_foreach (GTK_CONTAINER (vol->menu_outputs), pa_card_check_bt_output_profile, (void *) i);
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
@@ -810,6 +814,24 @@ static void pa_replace_card_with_sink_on_match (GtkWidget *widget, gpointer data
         gtk_widget_set_name (widget, i->name);
         gtk_widget_set_sensitive (widget, TRUE);
         gtk_widget_set_tooltip_text (widget, NULL);
+    }
+}
+
+/* Callback for per-menu-item operation which checks to see if a Bluetooth device is in a profile with an output */
+
+static void pa_card_check_bt_output_profile (GtkWidget *widget, gpointer data)
+{
+    pa_sink_info *i = (pa_sink_info *) data;
+    const char *btpath = pa_proplist_gets (i->proplist, "bluez.path");
+
+    if (!g_strcmp0 (btpath, gtk_widget_get_name (widget)))
+    {
+        const char *profile = pa_proplist_gets (i->proplist, "bluetooth.protocol");
+        if (!g_strcmp0 (profile, "a2dp_sink") || !g_strcmp0 (profile, "headset_head_unit"))
+        {
+            gtk_widget_set_sensitive (widget, TRUE);
+            gtk_widget_set_tooltip_text (widget, NULL);
+        }
     }
 }
 
@@ -835,6 +857,8 @@ static void pa_cb_replace_cards_with_sources (pa_context *context, const pa_sour
         const char *api = pa_proplist_gets (i->proplist, "device.api");
         if (!g_strcmp0 (api, "alsa"))
             gtk_container_foreach (GTK_CONTAINER (vol->menu_inputs), pa_replace_card_with_source_on_match, (void *) i);
+        else
+            gtk_container_foreach (GTK_CONTAINER (vol->menu_inputs), pa_card_check_bt_input_profile, (void *) i);
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
@@ -852,6 +876,24 @@ static void pa_replace_card_with_source_on_match (GtkWidget *widget, gpointer da
         gtk_widget_set_name (widget, i->name);
         gtk_widget_set_sensitive (widget, TRUE);
         gtk_widget_set_tooltip_text (widget, NULL);
+    }
+}
+
+/* Callback for per-menu-item operation which checks to see if a Bluetooth device is in a profile with an input */
+
+static void pa_card_check_bt_input_profile (GtkWidget *widget, gpointer data)
+{
+    pa_source_info *i = (pa_source_info *) data;
+    const char *btpath = pa_proplist_gets (i->proplist, "bluez.path");
+
+    if (!g_strcmp0 (btpath, gtk_widget_get_name (widget)))
+    {
+        const char *profile = pa_proplist_gets (i->proplist, "bluetooth.protocol");
+        if (!g_strcmp0 (profile, "headset_head_unit"))
+        {
+            gtk_widget_set_sensitive (widget, TRUE);
+            gtk_widget_set_tooltip_text (widget, NULL);
+        }
     }
 }
 

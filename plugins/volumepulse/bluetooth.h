@@ -28,6 +28,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern void bluetooth_init (VolumePulsePlugin *vol);
 extern void bluetooth_terminate (VolumePulsePlugin *vol);
 
+extern gboolean bluetooth_is_connected (VolumePulsePlugin *vol, const char *path);
+
 extern void bluetooth_set_output (VolumePulsePlugin *vol, const char *name, const char *label);
 extern void bluetooth_set_input (VolumePulsePlugin *vol, const char *name, const char *label);
 

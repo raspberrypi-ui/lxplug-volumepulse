@@ -528,6 +528,18 @@ void bluetooth_terminate (VolumePulsePlugin *vol)
     g_bus_unwatch_name (vol->bt_watcher_id);
 }
 
+/* Check to see if a Bluetooth device is connected */
+
+gboolean bluetooth_is_connected (VolumePulsePlugin *vol, const char *path)
+{
+    GDBusInterface *interface = g_dbus_object_manager_get_interface (vol->bt_objmanager, path, "org.bluez.Device1");
+    GVariant *var = g_dbus_proxy_get_cached_property (G_DBUS_PROXY (interface), "Connected");
+    gboolean res = g_variant_get_boolean (var);
+    g_variant_unref (var);
+    g_object_unref (interface);
+    return res;
+}
+
 /* Set a BlueZ device as the default PulseAudio sink */
 
 void bluetooth_set_output (VolumePulsePlugin *vol, const char *name, const char *label)
