@@ -83,6 +83,7 @@ typedef struct {
     GList *bt_ops;                      /* List of Bluetooth connect and disconnect operations */
     char *bt_iname;                     /* Input device name for use in list */
     char *bt_oname;                     /* Output device name for use in list */
+    gboolean bt_input;                  /* Flag to show if current connect operation is for input or output */
 
 } VolumePulsePlugin;
 

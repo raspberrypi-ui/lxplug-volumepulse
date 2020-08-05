@@ -411,7 +411,8 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
             g_free (paname);
             g_free (pacard);
 
-            if (vol->conn_ok == NULL) close_widget (&vol->conn_dialog);
+            if ((vol->bt_input == FALSE || btop->direction == INPUT) && vol->conn_ok == NULL)
+                close_widget (&vol->conn_dialog);
         }
     }
     pulse_unmute_all_streams (vol);
@@ -609,6 +610,7 @@ gboolean bluetooth_is_connected (VolumePulsePlugin *vol, const char *path)
 void bluetooth_set_output (VolumePulsePlugin *vol, const char *name, const char *label)
 {
     bt_connect_dialog_show (vol, _("Connecting Bluetooth device '%s' as output..."), label);
+    vol->bt_input = FALSE;
 
     pulse_get_default_sink_source (vol);
     vol->bt_oname = bt_from_pa_name (vol->pa_default_sink);
@@ -640,6 +642,7 @@ void bluetooth_set_output (VolumePulsePlugin *vol, const char *name, const char 
 void bluetooth_set_input (VolumePulsePlugin *vol, const char *name, const char *label)
 {
     bt_connect_dialog_show (vol, _("Connecting Bluetooth device '%s' as input..."), label);
+    vol->bt_input = TRUE;
 
     pulse_get_default_sink_source (vol);
     vol->bt_oname = bt_from_pa_name (vol->pa_default_sink);
