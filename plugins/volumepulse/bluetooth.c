@@ -694,12 +694,11 @@ void bluetooth_remove_input (VolumePulsePlugin *vol)
         }
         else
         {
-            // if the current default source and sink are both the same device, disconnect the input and force the output
-            // to reconnect as A2DP...
+            // if the current default source and sink are both the same device, disconnect it and reconnect to
+            // put it into A2DP rather than HSP
             bt_connect_dialog_show (vol, _("Reconnecting Bluetooth input device as output only..."));
             vol->bt_oname = bt_from_pa_name (vol->pa_default_sink);
             bt_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
-            bt_add_operation (vol, vol->bt_oname, DISCONNECT, INPUT);
             bt_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
         }
 
@@ -730,17 +729,19 @@ void bluetooth_reconnect (VolumePulsePlugin *vol, const char *name, const char *
     g_free (btname);
     if (vol->bt_oname == NULL && vol->bt_iname == NULL) return;
 
-    if (vol->bt_oname) bt_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
-    if (vol->bt_iname) bt_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
+    // disconnect the device if it was connected as either input or output
+    bt_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
 
-    if (vol->bt_oname && (!g_strcmp0 (profile, "a2dp_sink") || !g_strcmp0 (profile, "headset_head_unit")))
+    // if it was an output, reconnect it if the new profile is anything but "off"
+    if (vol->bt_oname && g_strcmp0 (profile, "off"))
     {
         bt_connect_dialog_show (vol, _("Reconnecting Bluetooth device..."));
         vol->bt_input = FALSE;
         pulse_mute_all_streams (vol);
         bt_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
     }
-    // don't reconnect the input, as changing profile can only ever disconnect it...
+    // don't reconnect as input - it was either connected as headset, or not connected,
+    // so changing profile can only ever disconnect an input...
 
     bt_do_operation (vol);
 }
