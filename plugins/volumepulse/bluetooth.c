@@ -726,11 +726,15 @@ void bluetooth_reconnect (VolumePulsePlugin *vol, const char *name, const char *
         g_free (vol->bt_iname);
         vol->bt_iname = NULL;
     }
-    g_free (btname);
-    if (vol->bt_oname == NULL && vol->bt_iname == NULL) return;
+    if (vol->bt_oname == NULL && vol->bt_iname == NULL)
+    {
+        g_free (btname);
+        return;
+    }
 
     // disconnect the device if it was connected as either input or output
-    bt_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
+    bt_add_operation (vol, btname, DISCONNECT, OUTPUT);
+    g_free (btname);
 
     // if it was an output, reconnect it if the new profile is anything but "off"
     if (vol->bt_oname && g_strcmp0 (profile, "off"))
