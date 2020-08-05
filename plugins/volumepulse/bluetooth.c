@@ -736,11 +736,11 @@ void bluetooth_reconnect (VolumePulsePlugin *vol, const char *name, const char *
     if (vol->bt_oname && (!g_strcmp0 (profile, "a2dp_sink") || !g_strcmp0 (profile, "headset_head_unit")))
     {
         bt_connect_dialog_show (vol, _("Reconnecting Bluetooth device..."));
+        vol->bt_input = FALSE;
         pulse_mute_all_streams (vol);
         bt_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
     }
-    if (vol->bt_iname && !g_strcmp0 (profile, "headset_head_unit"))
-        bt_add_operation (vol, vol->bt_iname, CONNECT, INPUT);
+    // don't reconnect the input, as changing profile can only ever disconnect it...
 
     bt_do_operation (vol);
 }
