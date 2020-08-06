@@ -226,6 +226,7 @@ static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, co
         if (vol->bt_oname) bt_add_operation (vol, vol->bt_oname, RECONNECT, OUTPUT);
         if (vol->bt_iname) bt_add_operation (vol, vol->bt_iname, RECONNECT, INPUT);
         vol->bt_input = vol->bt_iname ? TRUE : FALSE;
+        vol->bt_force_hsp = FALSE;
 
         bt_do_operation (vol);
     }
@@ -612,8 +613,6 @@ gboolean bluetooth_is_connected (VolumePulsePlugin *vol, const char *path)
 void bluetooth_set_output (VolumePulsePlugin *vol, const char *name, const char *label)
 {
     bt_connect_dialog_show (vol, _("Connecting Bluetooth device '%s' as output..."), label);
-    vol->bt_input = FALSE;
-    vol->bt_force_hsp = FALSE;
 
     pulse_get_default_sink_source (vol);
     vol->bt_oname = bt_from_pa_name (vol->pa_default_sink);
@@ -632,10 +631,12 @@ void bluetooth_set_output (VolumePulsePlugin *vol, const char *name, const char 
     if (vol->bt_iname)
     {
         if (!g_strcmp0 (vol->bt_iname, name) && !g_strcmp0 (vol->bt_oname, name))
-            pulse_change_source (vol, NULL);
+            pulse_change_source (vol, NULL);    // not convinced this does anything... !!!!
         else
             bt_add_operation (vol, vol->bt_iname, CONNECT, INPUT);
     }
+    vol->bt_input = FALSE;
+    vol->bt_force_hsp = FALSE;
 
     bt_do_operation (vol);
 }
@@ -645,8 +646,6 @@ void bluetooth_set_output (VolumePulsePlugin *vol, const char *name, const char 
 void bluetooth_set_input (VolumePulsePlugin *vol, const char *name, const char *label)
 {
     bt_connect_dialog_show (vol, _("Connecting Bluetooth device '%s' as input..."), label);
-    vol->bt_input = TRUE;
-    vol->bt_force_hsp = TRUE;
 
     pulse_get_default_sink_source (vol);
     vol->bt_oname = bt_from_pa_name (vol->pa_default_sink);
@@ -659,6 +658,8 @@ void bluetooth_set_input (VolumePulsePlugin *vol, const char *name, const char *
     if (vol->bt_iname) bt_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
     if (vol->bt_oname) bt_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
     bt_add_operation (vol, name, CONNECT, INPUT);
+    vol->bt_input = TRUE;
+    vol->bt_force_hsp = TRUE;
 
     bt_do_operation (vol);
 }
@@ -676,7 +677,6 @@ void bluetooth_remove_output (VolumePulsePlugin *vol)
             // if the current default sink is Bluetooth and not also the default source, disconnect it
             vol->bt_oname = bt_from_pa_name (vol->pa_default_sink);
             bt_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
-
             bt_do_operation (vol);
         }
     }
@@ -704,6 +704,8 @@ void bluetooth_remove_input (VolumePulsePlugin *vol)
             vol->bt_oname = bt_from_pa_name (vol->pa_default_sink);
             bt_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
             bt_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
+            vol->bt_input = FALSE;
+            vol->bt_force_hsp = FALSE;
         }
 
         bt_do_operation (vol);
@@ -730,28 +732,27 @@ void bluetooth_reconnect (VolumePulsePlugin *vol, const char *name, const char *
         g_free (vol->bt_iname);
         vol->bt_iname = NULL;
     }
-    if (vol->bt_oname == NULL && vol->bt_iname == NULL)
-    {
-        g_free (btname);
-        return;
-    }
-
-    // disconnect the device if it was connected as either input or output
-    bt_add_operation (vol, btname, DISCONNECT, OUTPUT);
     g_free (btname);
+    if (vol->bt_oname == NULL && vol->bt_iname == NULL) return;
+
+    // disconnect the device if it was an input; don't reconnect, because it was either connected as 
+    // headset, or not connected, so changing profile can only ever disconnect an input...
+    if (vol->bt_iname)
+    {
+        bt_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
+        pulse_change_source (vol, NULL);    // not convinced this does anything... !!!!
+    }
 
     // if it was an output, reconnect it if the new profile is anything but "off"
     if (vol->bt_oname && g_strcmp0 (profile, "off"))
     {
         bt_connect_dialog_show (vol, _("Reconnecting Bluetooth device..."));
+        pulse_mute_all_streams (vol);
+        bt_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
         vol->bt_input = FALSE;
         if (!g_strcmp0 (profile, "headset_head_unit")) vol->bt_force_hsp = TRUE;
         else vol->bt_force_hsp = FALSE;
-        pulse_mute_all_streams (vol);
-        bt_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
     }
-    // don't reconnect as input - it was either connected as headset, or not connected,
-    // so changing profile can only ever disconnect an input...
 
     bt_do_operation (vol);
 }
