@@ -84,6 +84,7 @@ typedef struct {
     char *bt_iname;                     /* Input device name for use in list */
     char *bt_oname;                     /* Output device name for use in list */
     gboolean bt_input;                  /* Flag to show if current connect operation is for input or output */
+    gboolean bt_force_hsp;              /* Flag to override automatic profile selection */
 
 } VolumePulsePlugin;
 

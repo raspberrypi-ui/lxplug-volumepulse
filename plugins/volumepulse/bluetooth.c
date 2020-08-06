@@ -225,6 +225,7 @@ static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, co
         if (vol->bt_iname) bt_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
         if (vol->bt_oname) bt_add_operation (vol, vol->bt_oname, RECONNECT, OUTPUT);
         if (vol->bt_iname) bt_add_operation (vol, vol->bt_iname, RECONNECT, INPUT);
+        vol->bt_input = vol->bt_iname ? TRUE : FALSE;
 
         bt_do_operation (vol);
     }
@@ -394,7 +395,8 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
                     bt_operation_t *nop = (bt_operation_t *) vol->bt_ops->next->data;
                     nextdev = nop->device;
                 }
-                if (!g_strcmp0 (btop->device, nextdev))
+
+                if (!g_strcmp0 (btop->device, nextdev) || vol->bt_force_hsp == TRUE)
                 {
                     paname = bt_to_pa_name (btop->device, "sink", "headset_head_unit");
                     pulse_set_profile (vol, pacard, "headset_head_unit");
@@ -611,6 +613,7 @@ void bluetooth_set_output (VolumePulsePlugin *vol, const char *name, const char 
 {
     bt_connect_dialog_show (vol, _("Connecting Bluetooth device '%s' as output..."), label);
     vol->bt_input = FALSE;
+    vol->bt_force_hsp = FALSE;
 
     pulse_get_default_sink_source (vol);
     vol->bt_oname = bt_from_pa_name (vol->pa_default_sink);
@@ -643,6 +646,7 @@ void bluetooth_set_input (VolumePulsePlugin *vol, const char *name, const char *
 {
     bt_connect_dialog_show (vol, _("Connecting Bluetooth device '%s' as input..."), label);
     vol->bt_input = TRUE;
+    vol->bt_force_hsp = TRUE;
 
     pulse_get_default_sink_source (vol);
     vol->bt_oname = bt_from_pa_name (vol->pa_default_sink);
@@ -741,6 +745,8 @@ void bluetooth_reconnect (VolumePulsePlugin *vol, const char *name, const char *
     {
         bt_connect_dialog_show (vol, _("Reconnecting Bluetooth device..."));
         vol->bt_input = FALSE;
+        if (!g_strcmp0 (profile, "headset_head_unit")) vol->bt_force_hsp = TRUE;
+        else vol->bt_force_hsp = FALSE;
         pulse_mute_all_streams (vol);
         bt_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
     }
