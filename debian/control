@@ -1,19 +1,19 @@
-Source: lxplug-volume
+Source: lxplug-volumepulse
 Section: x11
 Priority: optional
-Maintainer: Simon Long <simon@raspberrypi.org>
+Maintainer: Simon Long <simon@raspberrypi.com>
 Build-Depends:
  debhelper (>= 9), dh-autoreconf, intltool, libgtk2.0-dev (>= 2.18), 
  libiw-dev [linux-any], libmenu-cache-dev | libmenu-cache1-dev,
  libwnck-dev, libfm-gtk-dev (>= 1.2.0), lxpanel-dev (>= 0.10.0-2+rpt8),
- libxml2-dev, libasound2-dev
+ libxml2-dev, libpulse-dev
 Standards-Version: 4.3.0
 Homepage: http://raspberrypi.org/
 
-Package: lxplug-volume
+Package: lxplug-volumepulse
 Architecture: any
 Depends: ${misc:Depends}, ${shlibs:Depends}, lxmenu-data,
  lxpanel (>= 0.10.0-2+rpt8), lxpanel-data (>= 0.10.0-2+rpt8), libfm-modules
-Recommends: bluealsa, pi-bluetooth
-Description: Volume plugin for lxpanel
- Plugin for lxpanel to control volume for ALSA and Bluetooth devices for Raspberry Pi.
+Recommends: pi-bluetooth
+Description: PulseAudio controller plugin for lxpanel
+ Plugin for lxpanel to use PulseAudio to control ALSA and Bluetooth devices.
