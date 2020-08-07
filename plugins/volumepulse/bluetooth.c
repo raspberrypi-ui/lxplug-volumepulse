@@ -630,10 +630,9 @@ void bluetooth_set_output (VolumePulsePlugin *vol, const char *name, const char 
     // don't reconnect the input, because we can then switch it to A2DP
     if (vol->bt_iname)
     {
-        if (!g_strcmp0 (vol->bt_iname, name) && !g_strcmp0 (vol->bt_oname, name))
-            pulse_change_source (vol, NULL);    // not convinced this does anything... !!!!
-        else
+        if (g_strcmp0 (vol->bt_iname, name) || g_strcmp0 (vol->bt_oname, name))
             bt_add_operation (vol, vol->bt_iname, CONNECT, INPUT);
+        // in an ideal world, if we didn't reconnect, we'd also remove the input device as the default Pulse source here, but that seems impossible...
     }
     vol->bt_input = FALSE;
     vol->bt_force_hsp = FALSE;
@@ -740,7 +739,7 @@ void bluetooth_reconnect (VolumePulsePlugin *vol, const char *name, const char *
     if (vol->bt_iname)
     {
         bt_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
-        pulse_change_source (vol, NULL);    // not convinced this does anything... !!!!
+        // in an ideal world, we'd remove the input device as the default Pulse source here, but that seems impossible...
     }
 
     // if it was an output, reconnect it if the new profile is anything but "off"
