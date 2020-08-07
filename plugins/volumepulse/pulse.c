@@ -74,6 +74,8 @@ static gboolean pa_update_disp_cb (gpointer userdata);
 static void pa_cb_generic_success (pa_context *context, int success, void *userdata);
 static int pa_get_current_vol_mute (VolumePulsePlugin *vol);
 static void pa_cb_get_current_vol_mute (pa_context *context, const pa_sink_info *i, int eol, void *userdata);
+static int pa_restore_volume (VolumePulsePlugin *vol);
+static int pa_restore_mute (VolumePulsePlugin *vol);
 static void pa_cb_get_default_sink_source (pa_context *context, const pa_server_info *i, void *userdata);
 static int pa_set_default_sink (VolumePulsePlugin *vol, const char *sinkname);
 static int pa_get_output_streams (VolumePulsePlugin *vol);
@@ -310,9 +312,10 @@ int pulse_get_volume (VolumePulsePlugin *vol)
 int pulse_set_volume (VolumePulsePlugin *vol, int volume)
 {
     pa_cvolume cvol;
+    vol->pa_volume = volume * PA_VOL_SCALE;
     cvol.channels = vol->pa_channels;
-    cvol.values[0] = volume * PA_VOL_SCALE;
-    cvol.values[1] = volume * PA_VOL_SCALE;
+    cvol.values[0] = vol->pa_volume;
+    cvol.values[1] = vol->pa_volume;
 
     DEBUG ("pulse_set_volume %d", volume);
     START_PA_OPERATION
@@ -328,9 +331,11 @@ int pulse_get_mute (VolumePulsePlugin *vol)
 
 int pulse_set_mute (VolumePulsePlugin *vol, int mute)
 {
+    vol->pa_mute = mute;
+
     DEBUG ("pulse_set_mute %d", mute);
     START_PA_OPERATION
-    op = pa_context_set_sink_mute_by_name (vol->pa_context, vol->pa_default_sink, mute, &pa_cb_generic_success, vol);
+    op = pa_context_set_sink_mute_by_name (vol->pa_context, vol->pa_default_sink, vol->pa_mute, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_sink_mute_by_name");
 }
 
@@ -357,6 +362,31 @@ static void pa_cb_get_current_vol_mute (pa_context *context, const pa_sink_info 
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
+/* Set volume for new sink to global value read from old sink */
+
+static int pa_restore_volume (VolumePulsePlugin *vol)
+{
+    pa_cvolume cvol;
+    cvol.channels = vol->pa_channels;
+    cvol.values[0] = vol->pa_volume;
+    cvol.values[1] = vol->pa_volume;
+
+    DEBUG ("pa_restore_volume");
+    START_PA_OPERATION
+    op = pa_context_set_sink_volume_by_name (vol->pa_context, vol->pa_default_sink, &cvol, &pa_cb_generic_success, vol);
+    END_PA_OPERATION ("set_sink_volume_by_name")
+}
+
+/* Set mute for new sink to global value read from old sink */
+
+static int pa_restore_mute (VolumePulsePlugin *vol)
+{
+    DEBUG ("pa_restore_mute");
+    START_PA_OPERATION
+    op = pa_context_set_sink_mute_by_name (vol->pa_context, vol->pa_default_sink, vol->pa_mute, &pa_cb_generic_success, vol);
+    END_PA_OPERATION ("set_sink_mute_by_name");
 }
 
 /*----------------------------------------------------------------------------*/
@@ -403,6 +433,9 @@ void pulse_change_sink (VolumePulsePlugin *vol, const char *sinkname)
 
     vol->pa_indices = NULL;
     pa_set_default_sink (vol, sinkname);
+    pa_restore_volume (vol);
+    pa_restore_mute (vol);
+
     pa_get_output_streams (vol);
     g_list_foreach (vol->pa_indices, pa_list_move_to_default_sink, vol);
     g_list_free (vol->pa_indices);
