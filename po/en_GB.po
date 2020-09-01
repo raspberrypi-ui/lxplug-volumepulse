@@ -1,11 +1,11 @@
-# English translations for lxplug_volumealsabt package.
-# Copyright (C) 2018 Raspberry Pi Ltd
-# This file is distributed under the same license as the lxplug_volumealsabt package.
-# Simon Long <simon@raspberrypi.org>, 2018.
+# English translations for lxplug_volumepulse package.
+# Copyright (C) 2020 Raspberry Pi Ltd
+# This file is distributed under the same license as the lxplug_volumepulse package.
+# Simon Long <simon@raspberrypi.com>, 2020.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: lxplug_volumealsabt 0.1\n"
+"Project-Id-Version: lxplug_volumepulse 0.1\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2019-11-25 11:13+0000\n"
 "PO-Revision-Date: 2018-04-12 08:15+0100\n"

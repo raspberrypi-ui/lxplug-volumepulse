@@ -297,7 +297,7 @@ do
     echo $lang >> $srcdir/po/LINGUAS
 done
 
-GETTEXT_PACKAGE=lxplug_volume
+GETTEXT_PACKAGE=lxplug_volumepulse
 AC_SUBST(GETTEXT_PACKAGE)
 AC_DEFINE_UNQUOTED(GETTEXT_PACKAGE,"$GETTEXT_PACKAGE", [Gettext package.])
 
