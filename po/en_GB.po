@@ -7,154 +7,119 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lxplug_volumepulse 0.1\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2019-11-25 11:13+0000\n"
-"PO-Revision-Date: 2018-04-12 08:15+0100\n"
-"Last-Translator: Simon Long <simon@raspberrypi.org>\n"
+"POT-Creation-Date: 2020-09-08 16:21+0100\n"
+"PO-Revision-Date: 2020-09-08 16:22+0100\n"
+"Last-Translator: Simon Long <simon@raspberrypi.com>\n"
 "Language-Team: English (British)\n"
 "Language: en_GB\n"
 "MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=ASCII\n"
+"Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: ../plugins/volumealsabt/volumealsabt.c:514
-msgid "Could not get BlueZ interface"
-msgstr "Could not get BlueZ interface"
-
-#: ../plugins/volumealsabt/volumealsabt.c:1632
-#: ../plugins/volumealsabt/volumealsabt.c:3025
-msgid "Volume control"
-msgstr "Volume control"
-
-#: ../plugins/volumealsabt/volumealsabt.c:1634
-#: ../plugins/volumealsabt/volumealsabt.c:1747
-#: ../plugins/volumealsabt/volumealsabt.c:2100
-#, c-format
-msgid "No volume control on this device"
-msgstr "No volume control on this device"
-
-#: ../plugins/volumealsabt/volumealsabt.c:1663
-msgid "Connecting Audio Device"
-msgstr "Connecting Audio Device"
-
-#: ../plugins/volumealsabt/volumealsabt.c:1669
-#, c-format
-msgid "Connecting to Bluetooth audio device '%s'..."
-msgstr "Connecting to Bluetooth audio device '%s'..."
-
-#: ../plugins/volumealsabt/volumealsabt.c:1680
-#, c-format
-msgid "Failed to connect to device - %s. Try to connect again."
-msgstr "Failed to connect to device - %s. Try to connect again."
-
-#: ../plugins/volumealsabt/volumealsabt.c:1682
-msgid "_OK"
-msgstr "_OK"
-
-#: ../plugins/volumealsabt/volumealsabt.c:1945
-msgid "Input Device Settings..."
-msgstr "Input Device Settings..."
-
-#: ../plugins/volumealsabt/volumealsabt.c:1987
-#: ../plugins/volumealsabt/volumealsabt.c:2015
-msgid "Analog"
-msgstr "AV Jack"
-
-#: ../plugins/volumealsabt/volumealsabt.c:1991
-#: ../plugins/volumealsabt/volumealsabt.c:2011
-#: ../plugins/volumealsabt/volumealsabt.c:2013
+#: ../plugins/volumepulse/volumepulse.c:179
 msgid "HDMI"
 msgstr "HDMI"
 
-#: ../plugins/volumealsabt/volumealsabt.c:2117
-msgid "Output Device Settings..."
-msgstr "Output Device Settings..."
-
-#. insert submenus
-#: ../plugins/volumealsabt/volumealsabt.c:2126
-msgid "Audio Outputs"
-msgstr "Audio Outputs"
-
-#: ../plugins/volumealsabt/volumealsabt.c:2133
-msgid "Audio Inputs"
-msgstr "Audio Inputs"
-
-#: ../plugins/volumealsabt/volumealsabt.c:2140
-msgid "No audio devices found"
-msgstr "No audio devices found"
+#: ../plugins/volumepulse/volumepulse.c:189
+msgid "Analog"
+msgstr "Analog"
 
 #. Create a check button as the child of the vertical box.
-#: ../plugins/volumealsabt/volumealsabt.c:2399
+#: ../plugins/volumepulse/volumepulse.c:260
 msgid "Mute"
 msgstr "Mute"
 
-#: ../plugins/volumealsabt/volumealsabt.c:2500
-#: ../plugins/volumealsabt/volumealsabt.c:2542
-msgid "Enable"
-msgstr "Enable"
+#. insert submenus
+#: ../plugins/volumepulse/volumepulse.c:349
+msgid "Audio Outputs"
+msgstr "Audio Outputs"
 
-#: ../plugins/volumealsabt/volumealsabt.c:2522
-#: ../plugins/volumealsabt/volumealsabt.c:2581
+#: ../plugins/volumepulse/volumepulse.c:356
+msgid "Audio Inputs"
+msgstr "Audio Inputs"
+
+#: ../plugins/volumepulse/volumepulse.c:365
+msgid "Device Profiles..."
+msgstr "Device Profiles..."
+
+#: ../plugins/volumepulse/volumepulse.c:371
+msgid "No audio devices found"
+msgstr "No audio devices found"
+
+#: ../plugins/volumepulse/volumepulse.c:420
+msgid "Input from this device not available in the current profile"
+msgstr "Input from this device not available in the current profile"
+
+#: ../plugins/volumepulse/volumepulse.c:422
+msgid "Output to this device not available in the current profile"
+msgstr "Output to this device not available in the current profile"
+
+#: ../plugins/volumepulse/volumepulse.c:550
+msgid "Device Profiles"
+msgstr "Device Profiles"
+
+#: ../plugins/volumepulse/volumepulse.c:608
+msgid "Device not connected"
+msgstr "Device not connected"
+
+#. update tooltip
+#: ../plugins/volumepulse/volumepulse.c:773
+#: ../plugins/volumepulse/volumepulse.c:882
+msgid "Volume control"
+msgstr "Volume control"
+
+#: ../plugins/volumepulse/volumepulse.c:930
+msgid "Volume Control (PulseAudio)"
+msgstr "Volume Control (PulseAudio)"
+
+#: ../plugins/volumepulse/volumepulse.c:931
+msgid "Display and control volume for PulseAudio"
+msgstr "Display and control volume for PulseAudio"
+
+#: ../plugins/volumepulse/bluetooth.c:223
+msgid "Reconnecting Bluetooth devices..."
+msgstr "Reconnecting Bluetooth devices..."
+
+#: ../plugins/volumepulse/bluetooth.c:314
 #, c-format
-msgid "%s (Playback)"
-msgstr "%s (Playback)"
+msgid "Bluetooth %s device not found"
+msgstr "Bluetooth %s device not found"
 
-#: ../plugins/volumealsabt/volumealsabt.c:2564
-#: ../plugins/volumealsabt/volumealsabt.c:2583
+#. update dialog to show a warning
+#: ../plugins/volumepulse/bluetooth.c:373
+msgid "Device not found by PulseAudio"
+msgstr "Device not found by PulseAudio"
+
+#: ../plugins/volumepulse/bluetooth.c:516
+msgid "Connecting Audio Device"
+msgstr "Connecting Audio Device"
+
+#: ../plugins/volumepulse/bluetooth.c:538
 #, c-format
-msgid "%s (Capture)"
-msgstr "%s (Capture)"
+msgid "Failed to connect to Bluetooth device - %s"
+msgstr "Failed to connect to Bluetooth device - %s"
 
-#: ../plugins/volumealsabt/volumealsabt.c:2608
-msgid "Input Device Options"
-msgstr "Input Device Options"
+#: ../plugins/volumepulse/bluetooth.c:544
+msgid "_OK"
+msgstr "_OK"
 
-#: ../plugins/volumealsabt/volumealsabt.c:2608
-msgid "Output Device Options"
-msgstr "Output Device Options"
-
-#: ../plugins/volumealsabt/volumealsabt.c:2620
+#: ../plugins/volumepulse/bluetooth.c:615
 #, c-format
-msgid "%s Device : %s"
-msgstr "%s Device : %s"
+msgid "Connecting Bluetooth device '%s' as output..."
+msgstr "Connecting Bluetooth device '%s' as output..."
 
-#: ../plugins/volumealsabt/volumealsabt.c:2620
-msgid "Input"
-msgstr "Input"
+#: ../plugins/volumepulse/bluetooth.c:647
+#, c-format
+msgid "Connecting Bluetooth device '%s' as input..."
+msgstr "Connecting Bluetooth device '%s' as input..."
 
-#: ../plugins/volumealsabt/volumealsabt.c:2620
-msgid "Output"
-msgstr "Output"
+#. if the current default source and sink are both the same device, disconnect it and reconnect to
+#. put it into A2DP rather than HSP
+#: ../plugins/volumepulse/bluetooth.c:702
+msgid "Reconnecting Bluetooth input device as output only..."
+msgstr "Reconnecting Bluetooth input device as output only..."
 
-#: ../plugins/volumealsabt/volumealsabt.c:2628
-#, fuzzy
-msgid "No controls available on this device"
-msgstr "No controls available on this device"
-
-#: ../plugins/volumealsabt/volumealsabt.c:2638
-msgid "Playback"
-msgstr "Playback"
-
-#: ../plugins/volumealsabt/volumealsabt.c:2645
-msgid "Capture"
-msgstr "Capture"
-
-#: ../plugins/volumealsabt/volumealsabt.c:2652
-msgid "Options"
-msgstr "Options"
-
-#: ../plugins/volumealsabt/volumealsabt.c:2884
-msgid ""
-"Error, you need to install an application to configure the sound "
-"(pavucontrol, alsamixer ...)"
-msgstr ""
-"Error, you need to install an application to configure the sound "
-"(pavucontrol, alsamixer ...)"
-
-#: ../plugins/volumealsabt/volumealsabt.c:3082
-msgid "Volume Control (ALSA/BT)"
-msgstr "Volume Control (ALSA/BT)"
-
-#: ../plugins/volumealsabt/volumealsabt.c:3083
-msgid "Display and control volume for ALSA and Bluetooth devices"
-msgstr "Display and control volume for ALSA and Bluetooth devices"
+#: ../plugins/volumepulse/bluetooth.c:748
+msgid "Reconnecting Bluetooth device..."
+msgstr "Reconnecting Bluetooth device..."

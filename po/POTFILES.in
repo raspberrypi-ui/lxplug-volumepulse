@@ -1,2 +1,4 @@
 [encoding: UTF-8]
-plugins/volumealsabt/volumealsabt.c
+plugins/volumepulse/volumepulse.c
+plugins/volumepulse/pulse.c
+plugins/volumepulse/bluetooth.c
