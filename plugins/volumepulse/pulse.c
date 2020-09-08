@@ -409,7 +409,6 @@ static void pa_cb_get_channels (pa_context *context, const pa_sink_info *i, int 
     if (!eol)
     {
         vol->pa_channels = i->volume.channels;
-        printf ("get channels %d\n", vol->pa_channels);
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
