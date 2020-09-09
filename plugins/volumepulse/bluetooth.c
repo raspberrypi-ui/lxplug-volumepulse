@@ -163,10 +163,13 @@ static char *bt_to_pa_name (const char *bluez_name, char *type, char *profile)
 static char *bt_from_pa_name (const char *pa_name)
 {
     unsigned int b1, b2, b3, b4, b5, b6;
+    char *adrs;
 
     if (pa_name == NULL) return NULL;
     if (strstr (pa_name, "bluez") == NULL) return NULL;
-    if (sscanf (strstr (pa_name, ".") + 1, "%x_%x_%x_%x_%x_%x", &b1, &b2, &b3, &b4, &b5, &b6) != 6) return NULL;
+    adrs = strstr (pa_name, ".");
+    if (adrs == NULL) return NULL;
+    if (sscanf (adrs + 1, "%x_%x_%x_%x_%x_%x", &b1, &b2, &b3, &b4, &b5, &b6) != 6) return NULL;
     return g_strdup_printf ("/org/bluez/hci0/dev_%02X_%02X_%02X_%02X_%02X_%02X", b1, b2, b3, b4, b5, b6);
 }
 
