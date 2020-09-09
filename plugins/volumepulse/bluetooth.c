@@ -48,7 +48,8 @@ typedef enum {
 
 typedef enum {
     INPUT,
-    OUTPUT
+    OUTPUT,
+    BOTH
 } bt_dir_t;
 
 typedef struct {
@@ -226,8 +227,12 @@ static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, co
         if (vol->bt_oname || vol->bt_iname) bt_connect_dialog_show (vol, _("Reconnecting Bluetooth devices..."));
         if (vol->bt_oname) bt_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
         if (vol->bt_iname) bt_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
-        if (vol->bt_oname) bt_add_operation (vol, vol->bt_oname, RECONNECT, OUTPUT);
-        if (vol->bt_iname) bt_add_operation (vol, vol->bt_iname, RECONNECT, INPUT);
+        if (vol->bt_oname)
+        {
+            if (!g_strcmp0 (vol->bt_oname, vol->bt_iname)) bt_add_operation (vol, vol->bt_oname, RECONNECT, BOTH);
+            else bt_add_operation (vol, vol->bt_oname, RECONNECT, OUTPUT);
+        }
+        if (vol->bt_iname && g_strcmp0 (vol->bt_oname, vol->bt_iname)) bt_add_operation (vol, vol->bt_iname, RECONNECT, INPUT);
         vol->bt_input = vol->bt_iname ? TRUE : FALSE;
         vol->bt_force_hsp = FALSE;
 
@@ -349,8 +354,8 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
         g_error_free (error);
         if (btop->conn_disc == RECONNECT)
         {
-            if (btop->direction == INPUT) vsystem ("rm ~/.btin");
-            else vsystem ("rm ~/.btout");
+            if (btop->direction != OUTPUT) vsystem ("rm ~/.btin");
+            if (btop->direction != INPUT) vsystem ("rm ~/.btout");
         }
     }
     else
@@ -380,27 +385,11 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
             DEBUG ("Bluetooth device found by PulseAudio with profile %s", vol->pa_profile);
 
             // set connected device as PulseAudio default
-            if (btop->direction == INPUT)
-            {
-                vsystem ("echo %s > ~/.btin", btop->device);
-
-                paname = bt_to_pa_name (btop->device, "source", "headset_head_unit");
-                pulse_set_profile (vol, pacard, "headset_head_unit");
-                DEBUG ("Profile set to headset_head_unit");
-                pulse_change_source (vol, paname);
-            }
-            else
+            if (btop->direction == OUTPUT)
             {
                 vsystem ("echo %s > ~/.btout", btop->device);
 
-                const char *nextdev = NULL;
-                if (vol->bt_ops->next)
-                {
-                    bt_operation_t *nop = (bt_operation_t *) vol->bt_ops->next->data;
-                    nextdev = nop->device;
-                }
-
-                if (!g_strcmp0 (btop->device, nextdev) || vol->bt_force_hsp == TRUE)
+                if (vol->bt_force_hsp == TRUE)
                 {
                     paname = bt_to_pa_name (btop->device, "sink", "headset_head_unit");
                     pulse_set_profile (vol, pacard, "headset_head_unit");
@@ -414,10 +403,28 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
                 }
                 pulse_change_sink (vol, paname);
             }
+            else
+            {
+                vsystem ("echo %s > ~/.btin", btop->device);
+                if (btop->direction == BOTH) vsystem ("echo %s > ~/.btout", btop->device);
+
+                pulse_set_profile (vol, pacard, "headset_head_unit");
+                DEBUG ("Profile set to headset_head_unit");
+
+                paname = bt_to_pa_name (btop->device, "source", "headset_head_unit");
+                pulse_change_source (vol, paname);
+
+                if (btop->direction == BOTH)
+                {
+                    g_free (paname);
+                    paname = bt_to_pa_name (btop->device, "sink", "headset_head_unit");
+                    pulse_change_sink (vol, paname);
+                }
+            }
             g_free (paname);
             g_free (pacard);
 
-            if ((vol->bt_input == FALSE || btop->direction == INPUT) && vol->conn_ok == NULL)
+            if ((vol->bt_input == FALSE || btop->direction != OUTPUT) && vol->conn_ok == NULL)
                 close_widget (&vol->conn_dialog);
         }
     }
@@ -622,21 +629,30 @@ void bluetooth_set_output (VolumePulsePlugin *vol, const char *name, const char 
     vol->bt_iname = bt_from_pa_name (vol->pa_default_source);
     if (vol->bt_oname) pulse_mute_all_streams (vol);
 
-    // to ensure an output device connects with the correct profile, disconnect
+    // To ensure an output device connects with the correct profile, disconnect
     // any existing input device first and then reconnect the input after
     // connecting the output...
-    if (vol->bt_oname) bt_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
     if (vol->bt_iname) bt_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
-    bt_add_operation (vol, name, CONNECT, OUTPUT);
 
-    // if the user reconnects to a BT output which is already connected as both in and out,
-    // don't reconnect the input, because we can then switch it to A2DP
+    // The logic below is complicated by adding the ability to use the option of re-selecting an existing output
+    // to force its reconnection as an output only, disconnecting it as an input and forcing it to the A2DP profile.
+
+    // If the new output is different from the existing input or the same as the existing output, connect it as the output only
+    if (g_strcmp0 (vol->bt_iname, name) || !g_strcmp0 (vol->bt_oname, name))
+        bt_add_operation (vol, name, CONNECT, OUTPUT);
+
+    // If there was an existing input...
     if (vol->bt_iname)
     {
-        if (g_strcmp0 (vol->bt_iname, name) || g_strcmp0 (vol->bt_oname, name))
+        // ...and it is the same as the new output but different from the existing output, connect the new output as both in and out
+        if (!g_strcmp0 (vol->bt_iname, name) && g_strcmp0 (vol->bt_oname, name))
+            bt_add_operation (vol, name, CONNECT, BOTH);
+
+        // ...and it is different from the new output, reconnect it as the input
+        if (g_strcmp0 (vol->bt_iname, name))
             bt_add_operation (vol, vol->bt_iname, CONNECT, INPUT);
-        // in an ideal world, if we didn't reconnect, we'd also remove the input device as the default Pulse source here, but that seems impossible...
     }
+
     vol->bt_input = FALSE;
     vol->bt_force_hsp = FALSE;
 
@@ -654,12 +670,15 @@ void bluetooth_set_input (VolumePulsePlugin *vol, const char *name, const char *
     vol->bt_iname = bt_from_pa_name (vol->pa_default_source);
     if (vol->bt_oname) pulse_mute_all_streams (vol);
 
-    // profiles load correctly for inputs, but may need to change the profile of
-    // a device which is currently being used for output, so reload them both anyway...
-    if (vol->bt_oname) bt_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
-    if (vol->bt_iname) bt_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
-    if (vol->bt_oname) bt_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
-    bt_add_operation (vol, name, CONNECT, INPUT);
+    // Reconnect an existing output if it is not also the new input to force it back to A2DP
+    if (vol->bt_oname && g_strcmp0 (vol->bt_oname, name))
+        bt_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
+
+    if (vol->bt_oname && !g_strcmp0 (vol->bt_oname, name))
+        bt_add_operation (vol, name, CONNECT, BOTH);
+    else
+        bt_add_operation (vol, name, CONNECT, INPUT);
+
     vol->bt_input = TRUE;
     vol->bt_force_hsp = TRUE;
 
@@ -704,7 +723,6 @@ void bluetooth_remove_input (VolumePulsePlugin *vol)
             // put it into A2DP rather than HSP
             bt_connect_dialog_show (vol, _("Reconnecting Bluetooth input device as output only..."));
             vol->bt_oname = bt_from_pa_name (vol->pa_default_sink);
-            bt_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
             bt_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
             vol->bt_input = FALSE;
             vol->bt_force_hsp = FALSE;
