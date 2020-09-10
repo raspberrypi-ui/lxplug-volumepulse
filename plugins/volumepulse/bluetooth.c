@@ -324,8 +324,8 @@ static void bt_connect_device (VolumePulsePlugin *vol, const char *device)
         g_free (msg);
         if (btop->conn_disc == RECONNECT)
         {
-            if (btop->direction == INPUT) vsystem ("rm ~/.btin");
-            else vsystem ("rm ~/.btout");
+            if (btop->direction != OUTPUT) vsystem ("rm ~/.btin");
+            if (btop->direction != INPUT) vsystem ("rm ~/.btout");
         }
         bt_next_operation (vol);
     }
