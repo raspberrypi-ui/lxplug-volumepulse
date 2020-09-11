@@ -629,37 +629,37 @@ void bluetooth_set_output (VolumePulsePlugin *vol, const char *name, const char 
     vol->bt_iname = bt_from_pa_name (vol->pa_default_source);
     if (vol->bt_oname) pulse_mute_all_streams (vol);
 
-    // To ensure an output device connects with the correct profile, disconnect
-    // any existing input device first and then reconnect the input after
-    // connecting the output...
-    if (vol->bt_iname) bt_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
-
     // The logic below is complicated by adding the ability to use the option of re-selecting an existing output
     // to force its reconnection as an output only, disconnecting it as an input and forcing it to the A2DP profile.
     if (!vol->bt_iname)
     {
-        // Current input : none => connect new device as output
+        // No current input device, so just connect new device as output
         bt_add_operation (vol, name, CONNECT, OUTPUT);
     }
     else
     {
+        // Need to disconnect existing input device to allow an output device to connect
+        bt_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
+
         if (g_strcmp0 (vol->bt_iname, name))
         {
-            // Current input : not new device => connect new device as output; then reconnect input
+            // New output device is not the same as current input device, so connect new output and then reconnect existing input
             bt_add_operation (vol, name, CONNECT, OUTPUT);
             bt_add_operation (vol, vol->bt_iname, CONNECT, INPUT);
         }
         else
         {
-            if (!vol->bt_oname || g_strcmp0 (vol->bt_oname, name))
+            // New output device is the same as current input device
+
+            if (vol->bt_oname && !g_strcmp0 (vol->bt_oname, name))
             {
-                // Current input : new device; Current output : not new device => connect new device as both
-                bt_add_operation (vol, name, CONNECT, BOTH); 
+                // Current output device exists and is the same as new output device, so connect new device as output only to force A2DP when reconnecting
+                bt_add_operation (vol, name, CONNECT, OUTPUT);
             }
             else
             {
-                // Current input : new device; Current output : new device => connect new device as output only (to force A2DP)
-                bt_add_operation (vol, name, CONNECT, OUTPUT);
+                // No current output device, or current output device is not the same as new output device, so connect new device as both input and output
+                bt_add_operation (vol, name, CONNECT, BOTH); 
             }
         }
     }
@@ -681,14 +681,29 @@ void bluetooth_set_input (VolumePulsePlugin *vol, const char *name, const char *
     vol->bt_iname = bt_from_pa_name (vol->pa_default_source);
     if (vol->bt_oname) pulse_mute_all_streams (vol);
 
-    // Reconnect an existing output if it is not also the new input to force it back to A2DP
-    if (vol->bt_oname && g_strcmp0 (vol->bt_oname, name))
-        bt_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
+    // If there is a current input device, disconnect it
+    if (vol->bt_iname) bt_add_operation (vol, vol->bt_iname, DISCONNECT, INPUT);
 
     if (vol->bt_oname && !g_strcmp0 (vol->bt_oname, name))
+    {
+        // Current output device exists and is the same as new input device
+
+        // If current output device was not the same as current input device (and hence not already disconnected), disconnect the current output device
+        if (g_strcmp0 (vol->bt_oname, vol->bt_iname)) bt_add_operation (vol, vol->bt_oname, DISCONNECT, OUTPUT);
+
+        // Connect the new device as both input and output
         bt_add_operation (vol, name, CONNECT, BOTH);
+    }
     else
+    {
+        // No current output device, or current output device is not the same as new input device
+
+        // If current output device was the same as current input device (and hence has been disconnected), reconnect the current output device
+        if (vol->bt_oname && !g_strcmp0 (vol->bt_oname, vol->bt_iname)) bt_add_operation (vol, vol->bt_oname, CONNECT, OUTPUT);
+
+        // Connect the new device as input
         bt_add_operation (vol, name, CONNECT, INPUT);
+    }
 
     vol->bt_input = TRUE;
     vol->bt_force_hsp = TRUE;
