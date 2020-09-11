@@ -636,21 +636,32 @@ void bluetooth_set_output (VolumePulsePlugin *vol, const char *name, const char 
 
     // The logic below is complicated by adding the ability to use the option of re-selecting an existing output
     // to force its reconnection as an output only, disconnecting it as an input and forcing it to the A2DP profile.
-
-    // If the new output is different from the existing input or the same as the existing output, connect it as the output only
-    if (g_strcmp0 (vol->bt_iname, name) || !g_strcmp0 (vol->bt_oname, name))
-        bt_add_operation (vol, name, CONNECT, OUTPUT);
-
-    // If there was an existing input...
-    if (vol->bt_iname)
+    if (!vol->bt_iname)
     {
-        // ...and it is the same as the new output but different from the existing output, connect the new output as both in and out
-        if (!g_strcmp0 (vol->bt_iname, name) && g_strcmp0 (vol->bt_oname, name))
-            bt_add_operation (vol, name, CONNECT, BOTH);
-
-        // ...and it is different from the new output, reconnect it as the input
+        // Current input : none => connect new device as output
+        bt_add_operation (vol, name, CONNECT, OUTPUT);
+    }
+    else
+    {
         if (g_strcmp0 (vol->bt_iname, name))
+        {
+            // Current input : not new device => connect new device as output; then reconnect input
+            bt_add_operation (vol, name, CONNECT, OUTPUT);
             bt_add_operation (vol, vol->bt_iname, CONNECT, INPUT);
+        }
+        else
+        {
+            if (!vol->bt_oname || g_strcmp0 (vol->bt_oname, name))
+            {
+                // Current input : new device; Current output : not new device => connect new device as both
+                bt_add_operation (vol, name, CONNECT, BOTH); 
+            }
+            else
+            {
+                // Current input : new device; Current output : new device => connect new device as output only (to force A2DP)
+                bt_add_operation (vol, name, CONNECT, OUTPUT);
+            }
+        }
     }
 
     vol->bt_input = FALSE;
