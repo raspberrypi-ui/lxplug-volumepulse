@@ -856,7 +856,6 @@ static void pa_cb_replace_cards_with_sinks (pa_context *context, const pa_sink_i
 
     if (!eol)
     {
-        DEBUG ("pa_cb_replace_cards_with_sinks");
         const char *api = pa_proplist_gets (i->proplist, "device.api");
         if (!g_strcmp0 (api, "alsa"))
             gtk_container_foreach (GTK_CONTAINER (vol->menu_outputs), pa_replace_card_with_sink_on_match, (void *) i);
@@ -918,7 +917,6 @@ static void pa_cb_replace_cards_with_sources (pa_context *context, const pa_sour
 
     if (!eol)
     {
-        DEBUG ("pa_cb_replace_cards_with_sources");
         const char *api = pa_proplist_gets (i->proplist, "device.api");
         if (!g_strcmp0 (api, "alsa"))
             gtk_container_foreach (GTK_CONTAINER (vol->menu_inputs), pa_replace_card_with_source_on_match, (void *) i);
