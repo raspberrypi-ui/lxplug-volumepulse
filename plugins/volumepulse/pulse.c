@@ -85,11 +85,13 @@ static void pa_cb_get_channels (pa_context *context, const pa_sink_info *i, int 
 static int pa_restore_volume (VolumePulsePlugin *vol);
 static int pa_restore_mute (VolumePulsePlugin *vol);
 static void pa_cb_get_default_sink_source (pa_context *context, const pa_server_info *i, void *userdata);
+static void pa_move_output_streams_to_default_sink (VolumePulsePlugin *vol);
 static int pa_set_default_sink (VolumePulsePlugin *vol, const char *sinkname);
 static int pa_get_output_streams (VolumePulsePlugin *vol);
 static void pa_cb_get_output_streams (pa_context *context, const pa_sink_input_info *i, int eol, void *userdata);
 static void pa_list_move_to_default_sink (gpointer data, gpointer userdata);
 static int pa_move_stream_to_default_sink (VolumePulsePlugin *vol, int index);
+static void pa_move_input_streams_to_default_source (VolumePulsePlugin *vol);
 static int pa_set_default_source (VolumePulsePlugin *vol, const char *sourcename);
 static int pa_get_input_streams (VolumePulsePlugin *vol);
 static void pa_cb_get_input_streams (pa_context *context, const pa_source_output_info *i, int eol, void *userdata);
@@ -463,16 +465,24 @@ void pulse_change_sink (VolumePulsePlugin *vol, const char *sinkname)
     if (vol->pa_default_sink) g_free (vol->pa_default_sink);
     vol->pa_default_sink = g_strdup (sinkname);
 
-    vol->pa_indices = NULL;
     pa_set_default_sink (vol, sinkname);
     pa_get_channels (vol);
     pa_restore_volume (vol);
     pa_restore_mute (vol);
 
+    pa_move_output_streams_to_default_sink (vol);
+
+    DEBUG ("pulse_change_sink done");
+}
+
+/* Create a list of current output streams and move each to the default sink */
+
+static void pa_move_output_streams_to_default_sink (VolumePulsePlugin *vol)
+{
+    vol->pa_indices = NULL;
     pa_get_output_streams (vol);
     g_list_foreach (vol->pa_indices, pa_list_move_to_default_sink, vol);
     g_list_free (vol->pa_indices);
-    DEBUG ("pulse_change_sink done");
 }
 
 /* Call the PulseAudio set default sink operation */
@@ -541,11 +551,10 @@ void pulse_change_source (VolumePulsePlugin *vol, const char *sourcename)
     if (vol->pa_default_source) g_free (vol->pa_default_source);
     vol->pa_default_source = g_strdup (sourcename);
 
-    vol->pa_indices = NULL;
     pa_set_default_source (vol, sourcename);
-    pa_get_input_streams (vol);
-    g_list_foreach (vol->pa_indices, pa_list_move_to_default_source, vol);
-    g_list_free (vol->pa_indices);
+
+    pa_move_input_streams_to_default_source (vol);
+
     DEBUG ("pulse_change_source done");
 }
 
@@ -557,6 +566,16 @@ static int pa_set_default_source (VolumePulsePlugin *vol, const char *sourcename
     START_PA_OPERATION
     op = pa_context_set_default_source (vol->pa_context, sourcename, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_default_source")
+}
+
+/* Create a list of current input streams and move each to the default source */
+
+static void pa_move_input_streams_to_default_source (VolumePulsePlugin *vol)
+{
+    vol->pa_indices = NULL;
+    pa_get_input_streams (vol);
+    g_list_foreach (vol->pa_indices, pa_list_move_to_default_source, vol);
+    g_list_free (vol->pa_indices);
 }
 
 /* Query the controller for a list of current output streams */
