@@ -43,6 +43,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define START_PA_OPERATION \
     pa_operation *op; \
+    if (vol->pa_error_msg) \
+    { \
+        g_free (vol->pa_error_msg); \
+        vol->pa_error_msg = NULL; \
+    } \
     pa_threaded_mainloop_lock (vol->pa_mainloop);
 
 #define END_PA_OPERATION(name) \
@@ -58,7 +63,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     } \
     pa_operation_unref (op); \
     pa_threaded_mainloop_unlock (vol->pa_mainloop); \
-    return 1;
+    if (vol->pa_error_msg) return 0; \
+    else return 1;
     
 #define PA_VOL_SCALE 655    /* GTK volume scale is 0-100; PA scale is 0-65535 */
 
@@ -289,6 +295,7 @@ static void pa_cb_generic_success (pa_context *context, int success, void *userd
     if (!success)
     {
         DEBUG ("pulse success callback failed : %s", pa_strerror (pa_context_errno (context)));
+        vol->pa_error_msg = g_strdup (pa_strerror (pa_context_errno (context)));
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
@@ -678,7 +685,6 @@ int pulse_get_profile (VolumePulsePlugin *vol, const char *card)
         vol->pa_profile = NULL;
     }
 
-    DEBUG ("pulse_get_profile %s", card);
     START_PA_OPERATION
     op = pa_context_get_card_info_by_name (vol->pa_context, card, &pa_cb_get_profile, vol);
     END_PA_OPERATION ("get_card_info_by_name")
