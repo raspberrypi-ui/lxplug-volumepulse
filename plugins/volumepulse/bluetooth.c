@@ -135,6 +135,11 @@ static void bt_next_operation (VolumePulsePlugin *vol)
         if (vol->bt_iname) g_free (vol->bt_iname);
         vol->bt_oname = NULL;
         vol->bt_iname = NULL;
+
+        // operations now all finished - move all streams to default devices
+        pulse_get_default_sink_source (vol);
+        pulse_move_output_streams (vol);
+        pulse_move_input_streams (vol);
     }
     else bt_do_operation (vol);
 }

@@ -41,6 +41,9 @@ extern void pulse_change_source (VolumePulsePlugin *vol, const char *sourcename)
 extern void pulse_mute_all_streams (VolumePulsePlugin *vol);
 extern void pulse_unmute_all_streams (VolumePulsePlugin *vol);
 
+extern void pulse_move_input_streams (VolumePulsePlugin *vol);
+extern void pulse_move_output_streams (VolumePulsePlugin *vol);
+
 extern int pulse_get_profile (VolumePulsePlugin *vol, const char *card);
 extern int pulse_set_profile (VolumePulsePlugin *vol, const char *card, const char *profile);
 
