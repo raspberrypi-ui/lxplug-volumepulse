@@ -551,7 +551,7 @@ static void profiles_dialog_show (VolumePulsePlugin *vol)
     vol->profiles_dialog = gtk_window_new (GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title (GTK_WINDOW (vol->profiles_dialog), _("Device Profiles"));
     gtk_window_set_position (GTK_WINDOW (vol->profiles_dialog), GTK_WIN_POS_CENTER);
-    gtk_window_set_default_size (GTK_WINDOW (vol->profiles_dialog), 400, 300);
+    gtk_window_set_default_size (GTK_WINDOW (vol->profiles_dialog), 400, -1);
     gtk_container_set_border_width (GTK_CONTAINER (vol->profiles_dialog), 10);
     gtk_window_set_icon_name (GTK_WINDOW (vol->profiles_dialog), "multimedia-volume-control");
     g_signal_connect (vol->profiles_dialog, "delete-event", G_CALLBACK (profiles_dialog_delete), vol);
