@@ -22,8 +22,8 @@ msgid "HDMI"
 msgstr "HDMI"
 
 #: ../plugins/volumepulse/volumepulse.c:189
-msgid "Analog"
-msgstr "Analog"
+msgid "AV Jack"
+msgstr "AV Jack"
 
 #. Create a check button as the child of the vertical box.
 #: ../plugins/volumepulse/volumepulse.c:260

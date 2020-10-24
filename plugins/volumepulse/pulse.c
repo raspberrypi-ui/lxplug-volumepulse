@@ -800,6 +800,7 @@ static void pa_cb_get_info_internal (pa_context *c, const pa_card_info *i, int e
                 const char *nam = pa_proplist_gets (i->proplist, "alsa.card_name");
                 if (nam)
                 {
+                    if (!strcmp (nam, "bcm2835 Headphones") && vsystem ("raspi-config nonint has_analog")) return;
                     DEBUG ("pa_cb_get_info_internal %s", nam);
                     menu_add_item (vol, nam, nam, FALSE);
                 }
