@@ -381,7 +381,6 @@ static int pa_restore_volume (VolumePulsePlugin *vol)
     pa_cvolume cvol;
     int i;
 
-    vol->pa_volume = volume * PA_VOL_SCALE;
     cvol.channels = vol->pa_channels;
     for (i = 0; i < cvol.channels; i++) cvol.values[i] = vol->pa_volume;
 
