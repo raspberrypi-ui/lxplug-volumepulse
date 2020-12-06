@@ -329,8 +329,8 @@ static void bt_connect_device (VolumePulsePlugin *vol, const char *device)
         g_free (msg);
         if (btop->conn_disc == RECONNECT)
         {
-            if (btop->direction != OUTPUT) vsystem ("rm ~/.btin");
-            if (btop->direction != INPUT) vsystem ("rm ~/.btout");
+            if (btop->direction != OUTPUT) vsystem ("rm -f ~/.btin");
+            if (btop->direction != INPUT) vsystem ("rm -f ~/.btout");
         }
         bt_next_operation (vol);
     }
@@ -359,8 +359,8 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
         g_error_free (error);
         if (btop->conn_disc == RECONNECT)
         {
-            if (btop->direction != OUTPUT) vsystem ("rm ~/.btin");
-            if (btop->direction != INPUT) vsystem ("rm ~/.btout");
+            if (btop->direction != OUTPUT) vsystem ("rm -f ~/.btin");
+            if (btop->direction != INPUT) vsystem ("rm -f ~/.btout");
         }
     }
     else
@@ -713,7 +713,7 @@ void bluetooth_set_input (VolumePulsePlugin *vol, const char *name, const char *
 
 void bluetooth_remove_output (VolumePulsePlugin *vol)
 {
-    vsystem ("rm ~/.btout");
+    vsystem ("rm -f ~/.btout");
     pulse_get_default_sink_source (vol);
     if (strstr (vol->pa_default_sink, "bluez"))
     {
@@ -731,7 +731,7 @@ void bluetooth_remove_output (VolumePulsePlugin *vol)
 
 void bluetooth_remove_input (VolumePulsePlugin *vol)
 {
-    vsystem ("rm ~/.btin");
+    vsystem ("rm -f ~/.btin");
     pulse_get_default_sink_source (vol);
     if (strstr (vol->pa_default_source, "bluez"))
     {

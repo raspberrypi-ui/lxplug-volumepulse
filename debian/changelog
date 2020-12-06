@@ -1,3 +1,9 @@
+lxplug-volumepulse (0.2) buster; urgency=medium
+
+  * Delete old ALSA config; fix multichannel volume bug; fix file remove warnings
+
+ -- Simon Long <simon@raspberrypi.com>  Sun, 06 Dec 2020 11:36:32 +0000
+
 lxplug-volumepulse (0.1) buster; urgency=medium
 
   * Initial release.

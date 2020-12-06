@@ -888,6 +888,9 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     g_signal_connect (vol->plugin, "scroll-event", G_CALLBACK (volumepulse_mouse_scrolled), vol);
     g_signal_connect (panel_get_icon_theme (panel), "changed", G_CALLBACK (volumepulse_theme_change), vol);
 
+    /* Delete any old ALSA config */
+    vsystem ("rm -f ~/.asoundrc");
+
     /* Find HDMIs */
     hdmi_init (vol);
 

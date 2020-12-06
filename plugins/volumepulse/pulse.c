@@ -321,10 +321,11 @@ int pulse_get_volume (VolumePulsePlugin *vol)
 int pulse_set_volume (VolumePulsePlugin *vol, int volume)
 {
     pa_cvolume cvol;
+    int i;
+
     vol->pa_volume = volume * PA_VOL_SCALE;
     cvol.channels = vol->pa_channels;
-    cvol.values[0] = vol->pa_volume;
-    cvol.values[1] = vol->pa_volume;
+    for (i = 0; i < cvol.channels; i++) cvol.values[i] = vol->pa_volume;
 
     DEBUG ("pulse_set_volume %d", volume);
     START_PA_OPERATION
@@ -378,9 +379,11 @@ static void pa_cb_get_current_vol_mute (pa_context *context, const pa_sink_info 
 static int pa_restore_volume (VolumePulsePlugin *vol)
 {
     pa_cvolume cvol;
+    int i;
+
+    vol->pa_volume = volume * PA_VOL_SCALE;
     cvol.channels = vol->pa_channels;
-    cvol.values[0] = vol->pa_volume;
-    cvol.values[1] = vol->pa_volume;
+    for (i = 0; i < cvol.channels; i++) cvol.values[i] = vol->pa_volume;
 
     DEBUG ("pa_restore_volume");
     START_PA_OPERATION
