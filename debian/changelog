@@ -1,3 +1,9 @@
+lxplug-volumepulse (0.3) buster; urgency=medium
+
+  * Add Slovak translation
+
+ -- Simon Long <simon@raspberrypi.com>  Sun, 03 Jan 2021 21:47:28 +0000
+
 lxplug-volumepulse (0.2) buster; urgency=medium
 
   * Delete old ALSA config; fix multichannel volume bug; fix file remove warnings
