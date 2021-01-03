@@ -1,0 +1,125 @@
+# Slovak translations for lxplug_volumepulse package.
+# Copyright (C) 2020 Raspberry Pi Ltd
+# This file is distributed under the same license as the lxplug_volumepulse package.
+# Jose Riha <jose1711 gmail com>, 2020.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: lxplug_volumepulse 0.1\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2020-09-08 16:21+0100\n"
+"PO-Revision-Date: 2020-12-20 18:29+0100\n"
+"Last-Translator: Simon Long <simon@raspberrypi.com>\n"
+"Language-Team: Slovak\n"
+"Language: sk\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: ../plugins/volumepulse/volumepulse.c:179
+msgid "HDMI"
+msgstr "HDMI"
+
+#: ../plugins/volumepulse/volumepulse.c:189
+msgid "AV Jack"
+msgstr "AV konektor (jack)"
+
+#. Create a check button as the child of the vertical box.
+#: ../plugins/volumepulse/volumepulse.c:260
+msgid "Mute"
+msgstr "Stíšiť"
+
+#. insert submenus
+#: ../plugins/volumepulse/volumepulse.c:349
+msgid "Audio Outputs"
+msgstr "Zvukové výstupy"
+
+#: ../plugins/volumepulse/volumepulse.c:356
+msgid "Audio Inputs"
+msgstr "Zvukové vstupy"
+
+#: ../plugins/volumepulse/volumepulse.c:365
+msgid "Device Profiles..."
+msgstr "Profily zariadení..."
+
+#: ../plugins/volumepulse/volumepulse.c:371
+msgid "No audio devices found"
+msgstr "Neboli nájdené zvukové zariadenia"
+
+#: ../plugins/volumepulse/volumepulse.c:420
+msgid "Input from this device not available in the current profile"
+msgstr "V aktuálnom profile zariadenia nie je dostupný zvukový vstup"
+
+#: ../plugins/volumepulse/volumepulse.c:422
+msgid "Output to this device not available in the current profile"
+msgstr "V aktuálnom profile zariadenia nie je dostupný zvukový výstup"
+
+#: ../plugins/volumepulse/volumepulse.c:550
+msgid "Device Profiles"
+msgstr "Profily zariadení"
+
+#: ../plugins/volumepulse/volumepulse.c:608
+msgid "Device not connected"
+msgstr "Zariadenie nie je pripojené"
+
+#. update tooltip
+#: ../plugins/volumepulse/volumepulse.c:773
+#: ../plugins/volumepulse/volumepulse.c:882
+msgid "Volume control"
+msgstr "Ovládanie hlasitosti"
+
+#: ../plugins/volumepulse/volumepulse.c:930
+msgid "Volume Control (PulseAudio)"
+msgstr "Ovládanie hlasitosti (PulseAudio)"
+
+#: ../plugins/volumepulse/volumepulse.c:931
+msgid "Display and control volume for PulseAudio"
+msgstr "Zobraziť a ovládať hlasitosť pomocou PulseAudio"
+
+#: ../plugins/volumepulse/bluetooth.c:223
+msgid "Reconnecting Bluetooth devices..."
+msgstr "Pripájanie sa k zariadeniam Bluetooth..."
+
+#: ../plugins/volumepulse/bluetooth.c:314
+#, c-format
+msgid "Bluetooth %s device not found"
+msgstr "Bluetooth zariadenie %s nebolo nájdené"
+
+#. update dialog to show a warning
+#: ../plugins/volumepulse/bluetooth.c:373
+msgid "Device not found by PulseAudio"
+msgstr "PulseAudio nenašiel zariadenie"
+
+#: ../plugins/volumepulse/bluetooth.c:516
+msgid "Connecting Audio Device"
+msgstr "Prebieha pripájanie ku zvukovému zariadeniu"
+
+#: ../plugins/volumepulse/bluetooth.c:538
+#, c-format
+msgid "Failed to connect to Bluetooth device - %s"
+msgstr "Nepodarilo sa pripojiť k Bluetooth zariadeniu - %s"
+
+#: ../plugins/volumepulse/bluetooth.c:544
+msgid "_OK"
+msgstr "_OK"
+
+#: ../plugins/volumepulse/bluetooth.c:615
+#, c-format
+msgid "Connecting Bluetooth device '%s' as output..."
+msgstr "Pripájanie Bluetooth zariadenia '%s' ako výstup..."
+
+#: ../plugins/volumepulse/bluetooth.c:647
+#, c-format
+msgid "Connecting Bluetooth device '%s' as input..."
+msgstr "Pripájanie Bluetooth zariadenia '%s' ako vstup..."
+
+#. if the current default source and sink are both the same device, disconnect it and reconnect to
+#. put it into A2DP rather than HSP
+#: ../plugins/volumepulse/bluetooth.c:702
+msgid "Reconnecting Bluetooth input device as output only..."
+msgstr "Pripájanie vstupného zariadenia Bluetooth iba v režime výstupu..."
+
+#: ../plugins/volumepulse/bluetooth.c:748
+msgid "Reconnecting Bluetooth device..."
+msgstr "Pripájanie Bluetooth zariadenia..."
