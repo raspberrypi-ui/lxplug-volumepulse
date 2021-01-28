@@ -1,0 +1,130 @@
+# Italian translations for lxplug_volumepulse package.
+# Copyright (C) 2020 Raspberry Pi Ltd
+# This file is distributed under the same license as the lxplug_volumepulse package.
+# Emanuele Goldoni <emanuele.goldoni@gmail.com>, 2021.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: lxplug_volumepulse 0.1\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2021-01-28 09:50+0100\n"
+"PO-Revision-Date: 2021-01-28 10:03+0100\n"
+"Last-Translator: Emanuele Goldoni <emanuele.goldoni@gmail.com>\n"
+"Language-Team: Italiano\n"
+"Language: it\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 2.4.1\n"
+
+#: ../plugins/volumepulse/volumepulse.c:179
+msgid "HDMI"
+msgstr "HDMI"
+
+#: ../plugins/volumepulse/volumepulse.c:189
+msgid "AV Jack"
+msgstr "Jack analogico AV"
+
+#. Create a check button as the child of the vertical box.
+#: ../plugins/volumepulse/volumepulse.c:260
+msgid "Mute"
+msgstr "Muto"
+
+#. insert submenus
+#: ../plugins/volumepulse/volumepulse.c:349
+msgid "Audio Outputs"
+msgstr "Uscite audio"
+
+#: ../plugins/volumepulse/volumepulse.c:356
+msgid "Audio Inputs"
+msgstr "Ingressi audio"
+
+#: ../plugins/volumepulse/volumepulse.c:365
+msgid "Device Profiles..."
+msgstr "Profili dispositivo..."
+
+#: ../plugins/volumepulse/volumepulse.c:371
+msgid "No audio devices found"
+msgstr "Nessun dispositivo audio rilevato"
+
+#: ../plugins/volumepulse/volumepulse.c:420
+msgid "Input from this device not available in the current profile"
+msgstr "L'ingresso da questo dispositivo non è disponibile nel profilo corrente"
+
+#: ../plugins/volumepulse/volumepulse.c:422
+msgid "Output to this device not available in the current profile"
+msgstr "L'uscita da questo dispositivo non è disponibile nel profilo corrente"
+
+#: ../plugins/volumepulse/volumepulse.c:552
+msgid "Device Profiles"
+msgstr "Profili dispositivo"
+
+#: ../plugins/volumepulse/volumepulse.c:610
+msgid "Device not connected"
+msgstr "Dispositivo non collegato"
+
+#. update tooltip
+#: ../plugins/volumepulse/volumepulse.c:775
+#: ../plugins/volumepulse/volumepulse.c:884
+msgid "Volume control"
+msgstr "Regolazione del volume"
+
+#: ../plugins/volumepulse/volumepulse.c:935
+msgid "Volume Control (PulseAudio)"
+msgstr "Regolazione del volume (PulseAudio)"
+
+#: ../plugins/volumepulse/volumepulse.c:936
+msgid "Display and control volume for PulseAudio"
+msgstr "Mostra e regola il volume per PulseAudio"
+
+#: ../plugins/volumepulse/bluetooth.c:232
+msgid "Reconnecting Bluetooth devices..."
+msgstr "Riconnessione ai dispositivi Bluetooth..."
+
+#: ../plugins/volumepulse/bluetooth.c:327
+#, c-format
+msgid "Bluetooth %s device not found"
+msgstr "Dispositivo Bluetooth di %s non trovato"
+
+#. update dialog to show a warning
+#: ../plugins/volumepulse/bluetooth.c:386
+msgid "Device not found by PulseAudio"
+msgstr "Dispositivo non trovato da PulseAudio"
+
+#: ../plugins/volumepulse/bluetooth.c:394
+#, c-format
+msgid "Could not set profile for device : %s"
+msgstr "Impossibile impostare il profilo per il dispositivo : %s"
+
+#: ../plugins/volumepulse/bluetooth.c:520
+msgid "Connecting Audio Device"
+msgstr "Connessione al dispositivo audio"
+
+#: ../plugins/volumepulse/bluetooth.c:542
+#, c-format
+msgid "Failed to connect to Bluetooth device - %s"
+msgstr "Impossile connettersi al dispositivo Bluetooth: %s"
+
+#: ../plugins/volumepulse/bluetooth.c:548
+msgid "_OK"
+msgstr "_OK"
+
+#: ../plugins/volumepulse/bluetooth.c:619
+#, c-format
+msgid "Connecting Bluetooth device '%s' as output..."
+msgstr "Connessione al dispositivo Bluetooth «%s» come uscita..."
+
+#: ../plugins/volumepulse/bluetooth.c:675
+#, c-format
+msgid "Connecting Bluetooth device '%s' as input..."
+msgstr "Connessione al dispositivo Bluetooth «%s» come ingresso..."
+
+#. if the current default source and sink are both the same device, disconnect it and reconnect to
+#. put it into A2DP rather than HSP
+#: ../plugins/volumepulse/bluetooth.c:748
+msgid "Reconnecting Bluetooth input device as output only..."
+msgstr "Riconnessione al dispositivo Bluetooth di ingresso come sola uscita..."
+
+#: ../plugins/volumepulse/bluetooth.c:793
+msgid "Reconnecting Bluetooth device..."
+msgstr "Riconnessione al dispositivo Bluetooth..."
