@@ -1,3 +1,9 @@
+lxplug-volumepulse (0.4) buster; urgency=medium
+
+  * Constrain volume to valid values
+
+ -- Simon Long <simon@raspberrypi.com>  Sat, 30 Jan 2021 16:31:19 +0000
+
 lxplug-volumepulse (0.3) buster; urgency=medium
 
   * Add Slovak translation

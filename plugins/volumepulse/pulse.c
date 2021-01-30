@@ -324,6 +324,8 @@ int pulse_set_volume (VolumePulsePlugin *vol, int volume)
     int i;
 
     vol->pa_volume = volume * PA_VOL_SCALE;
+    if (vol->pa_volume < 0) vol->pa_volume = 0;
+    if (vol->pa_volume > 65535) vol->pa_volume = 65535;
     cvol.channels = vol->pa_channels;
     for (i = 0; i < cvol.channels; i++) cvol.values[i] = vol->pa_volume;
 
