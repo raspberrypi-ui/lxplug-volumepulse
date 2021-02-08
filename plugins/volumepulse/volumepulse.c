@@ -519,14 +519,14 @@ static void menu_set_alsa_input (GtkWidget *widget, VolumePulsePlugin *vol)
 
 static void menu_set_bluetooth_output (GtkWidget *widget, VolumePulsePlugin *vol)
 {
-    bluetooth_set_output (vol, widget->name, gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
+    bluetooth_set_output (vol, gtk_widget_get_name (widget), gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
 }
 
 /* Handler for menu click to set a Bluetooth device as input */
 
 static void menu_set_bluetooth_input (GtkWidget *widget, VolumePulsePlugin *vol)
 {
-    bluetooth_set_input (vol, widget->name, gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
+    bluetooth_set_input (vol, gtk_widget_get_name (widget), gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
 }
 
 /* Handler for menu click to open the profiles dialog */

@@ -527,7 +527,7 @@ static void bt_connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...
     gtk_misc_set_alignment (GTK_MISC (vol->conn_label), 0.0, 0.0);
     gtk_widget_set_size_request (vol->conn_label, 350, -1);
     gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (vol->conn_dialog))), vol->conn_label, TRUE, TRUE, 0);
-    g_signal_connect (GTK_OBJECT (vol->conn_dialog), "delete_event", G_CALLBACK (bt_connect_dialog_delete), vol);
+    g_signal_connect (vol->conn_dialog, "delete_event", G_CALLBACK (bt_connect_dialog_delete), vol);
     vol->conn_ok = NULL;
     gtk_widget_show_all (vol->conn_dialog);
     g_free (msg);
