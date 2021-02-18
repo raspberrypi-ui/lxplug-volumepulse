@@ -240,11 +240,19 @@ static void popup_window_show (GtkWidget *p)
     gtk_container_set_border_width (GTK_CONTAINER (vol->popup_window), 0);
     gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (scrolledwindow), GTK_SHADOW_IN);
     /* Create a vertical box as the child of the viewport. */
+#if GTK_CHECK_VERSION(3, 0, 0)
+    GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+#else
     GtkWidget *box = gtk_vbox_new (FALSE, 0);
+#endif
     gtk_container_add (GTK_CONTAINER (viewport), box);
 
     /* Create a vertical scale as the child of the vertical box. */
+#if GTK_CHECK_VERSION(3, 0, 0)
+    vol->popup_volume_scale = gtk_scale_new (GTK_ORIENTATION_VERTICAL, GTK_ADJUSTMENT (gtk_adjustment_new (100, 0, 100, 0, 0, 0)));
+#else
     vol->popup_volume_scale = gtk_vscale_new (GTK_ADJUSTMENT (gtk_adjustment_new (100, 0, 100, 0, 0, 0)));
+#endif
     gtk_widget_set_name (vol->popup_volume_scale, "volscale");
     g_object_set (vol->popup_volume_scale, "height-request", 120, NULL);
     gtk_scale_set_draw_value (GTK_SCALE (vol->popup_volume_scale), FALSE);
@@ -271,7 +279,11 @@ static void popup_window_show (GtkWidget *p)
     gtk_window_present (GTK_WINDOW (vol->popup_window));
 
     /* Connect the function which hides the window when the mouse is clicked outside it */
+#if GTK_CHECK_VERSION(3, 0, 0)
+    gdk_seat_grab (gdk_display_get_default_seat (gdk_display_get_default ()), gtk_widget_get_window (vol->popup_window), GDK_SEAT_CAPABILITY_ALL_POINTING, TRUE, NULL, NULL, NULL, NULL);
+#else
     gdk_pointer_grab (gtk_widget_get_window (vol->popup_window), TRUE, GDK_BUTTON_PRESS_MASK, NULL, NULL, GDK_CURRENT_TIME);
+#endif
     g_signal_connect (G_OBJECT (vol->popup_window), "focus-out-event", G_CALLBACK (popup_window_mouse_out), vol);
 }
 
@@ -303,7 +315,11 @@ static gboolean popup_window_mouse_out (GtkWidget *widget, GdkEventButton *event
 {
     /* Hide the widget. */
     close_widget (&vol->popup_window);
+#if GTK_CHECK_VERSION(3, 0, 0)
+    gdk_seat_ungrab (gdk_display_get_default_seat (gdk_display_get_default ()));
+#else
     gdk_pointer_ungrab (GDK_CURRENT_TIME);
+#endif
     return FALSE;
 }
 
@@ -319,6 +335,9 @@ static void menu_show (VolumePulsePlugin *vol)
 
     // create input selector
     vol->menu_devices = gtk_menu_new ();
+#if GTK_CHECK_VERSION(3, 0, 0)
+    gtk_menu_set_reserve_toggle_size (GTK_MENU (vol->menu_devices), FALSE);
+#endif
     vol->menu_inputs = NULL;
 
     // add ALSA inputs
@@ -328,7 +347,13 @@ static void menu_show (VolumePulsePlugin *vol)
     bluetooth_add_devices_to_menu (vol, TRUE);
 
     // create a submenu for the outputs if there is an input submenu
-    if (vol->menu_inputs) vol->menu_outputs = gtk_menu_new ();
+    if (vol->menu_inputs)
+    {
+        vol->menu_outputs = gtk_menu_new ();
+#if GTK_CHECK_VERSION(3, 0, 0)
+        gtk_menu_set_reserve_toggle_size (GTK_MENU (vol->menu_outputs), FALSE);
+#endif
+    }
     else vol->menu_outputs = vol->menu_devices;
 
     // add internal outputs
@@ -362,13 +387,13 @@ static void menu_show (VolumePulsePlugin *vol)
         mi = gtk_separator_menu_item_new ();
         gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
 
-        mi = gtk_image_menu_item_new_with_label (_("Device Profiles..."));
+        mi = gtk_menu_item_new_with_label (_("Device Profiles..."));
         g_signal_connect (mi, "activate", G_CALLBACK (menu_open_profile_dialog), (gpointer) vol);
         gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
     }
     else
     {
-        mi = gtk_image_menu_item_new_with_label (_("No audio devices found"));
+        mi = gtk_menu_item_new_with_label (_("No audio devices found"));
         gtk_widget_set_sensitive (GTK_WIDGET (mi), FALSE);
         gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
     }
@@ -403,8 +428,18 @@ void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name,
 {
     GtkWidget *menu = input ? vol->menu_inputs : vol->menu_outputs;
     const char *disp_label = device_display_name (vol, label);
+#if GTK_CHECK_VERSION(3, 0, 0)
+    GtkWidget *mi = gtk_menu_item_new ();
+    GtkWidget *box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_container_add (GTK_CONTAINER (mi), box);
+    GtkWidget *img = gtk_image_new ();
+    GtkWidget *lbl = gtk_label_new (disp_label);
+    gtk_container_add (GTK_CONTAINER (box), img);
+    gtk_container_add (GTK_CONTAINER (box), lbl);
+#else
     GtkWidget *mi = gtk_image_menu_item_new_with_label (disp_label);
     gtk_image_menu_item_set_always_show_image (GTK_IMAGE_MENU_ITEM (mi), TRUE);
+#endif
     gtk_widget_set_name (mi, name);
     if (strstr (name, "bluez"))
     {
@@ -489,7 +524,16 @@ static void menu_mark_default (GtkWidget *widget, gpointer data)
     {
         GtkWidget *image = gtk_image_new ();
         lxpanel_plugin_set_menu_icon (vol->panel, image, "dialog-ok-apply");
+#if GTK_CHECK_VERSION(3, 0, 0)
+        GtkWidget *box = gtk_bin_get_child (GTK_BIN (widget));
+        GList *children = gtk_container_get_children (GTK_CONTAINER (box));
+        GtkWidget *img = (GtkWidget *) children->data;
+        gtk_container_remove (GTK_CONTAINER (box), img);
+        gtk_box_pack_start (GTK_BOX (box), image, FALSE, FALSE, 0);
+        gtk_box_reorder_child (GTK_BOX (box), image, 0);
+#else
         gtk_image_menu_item_set_image (GTK_IMAGE_MENU_ITEM (widget), image);
+#endif
     }
 }
 
@@ -556,10 +600,17 @@ static void profiles_dialog_show (VolumePulsePlugin *vol)
     gtk_window_set_icon_name (GTK_WINDOW (vol->profiles_dialog), "multimedia-volume-control");
     g_signal_connect (vol->profiles_dialog, "delete-event", G_CALLBACK (profiles_dialog_delete), vol);
 
+#if GTK_CHECK_VERSION(3, 0, 0)
+    box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
+    vol->profiles_int_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
+    vol->profiles_ext_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
+    vol->profiles_bt_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
+#else
     box = gtk_vbox_new (FALSE, 5);
     vol->profiles_int_box = gtk_vbox_new (FALSE, 5);
     vol->profiles_ext_box = gtk_vbox_new (FALSE, 5);
     vol->profiles_bt_box = gtk_vbox_new (FALSE, 5);
+#endif
     gtk_container_add (GTK_CONTAINER (vol->profiles_dialog), box);
     gtk_box_pack_start (GTK_BOX (box), vol->profiles_int_box, FALSE, FALSE, 0);
     gtk_box_pack_start (GTK_BOX (box), vol->profiles_ext_box, FALSE, FALSE, 0);
@@ -571,11 +622,19 @@ static void profiles_dialog_show (VolumePulsePlugin *vol)
     // then loop through Bluetooth devices
     bluetooth_add_devices_to_profile_dialog (vol);
 
+#if GTK_CHECK_VERSION(3, 0, 0)
+    wid = gtk_button_box_new (GTK_ORIENTATION_HORIZONTAL);
+#else
     wid = gtk_hbutton_box_new ();
+#endif
     gtk_button_box_set_layout (GTK_BUTTON_BOX (wid), GTK_BUTTONBOX_END);
     gtk_box_pack_start (GTK_BOX (box), wid, FALSE, FALSE, 5);
 
+#if GTK_CHECK_VERSION(3, 0, 0)
+    btn = gtk_button_new_with_mnemonic (_("_OK"));
+#else
     btn = gtk_button_new_from_stock (GTK_STOCK_OK);
+#endif
     g_signal_connect (btn, "clicked", G_CALLBACK (profiles_dialog_ok), vol);
     gtk_box_pack_end (GTK_BOX (wid), btn, FALSE, FALSE, 5);
 
@@ -592,7 +651,9 @@ void profiles_dialog_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWid
 
     ltext = g_strdup_printf ("%s:", device_display_name (vol, label));
     lbl = gtk_label_new (ltext);
+#if !GTK_CHECK_VERSION(3, 0, 0)
     gtk_misc_set_alignment (GTK_MISC (lbl), 0.0, 0.5);
+#endif
     gtk_box_pack_start (GTK_BOX (dest), lbl, FALSE, FALSE, 5);
     g_free (ltext);
 
@@ -696,8 +757,12 @@ static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButto
         case 3: /* right-click - show device list */
                 close_widget (&vol->popup_window);
                 menu_show (vol);
+#if GTK_CHECK_VERSION(3, 0, 0)
+                gtk_menu_popup_at_widget (GTK_MENU (vol->menu_devices), vol->plugin, GDK_GRAVITY_NORTH_WEST, GDK_GRAVITY_NORTH_WEST, (GdkEvent *) event);
+#else
                 gtk_menu_popup (GTK_MENU (vol->menu_devices), NULL, NULL, (GtkMenuPositionFunc) volumepulse_menu_set_position,
                     vol, event->button, event->time);
+#endif
                 break;
     }
 
