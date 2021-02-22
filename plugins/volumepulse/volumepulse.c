@@ -223,7 +223,11 @@ static void popup_window_show (GtkWidget *p)
 
     /* Create a scrolled window as the child of the top level window. */
     GtkWidget *scrolledwindow = gtk_scrolled_window_new (NULL, NULL);
+#if GTK_CHECK_VERSION(3, 0, 0)
+    gtk_widget_set_name (scrolledwindow, "volpopup");
+#else
     gtk_widget_set_name (scrolledwindow, "whitewd");
+#endif
     gtk_container_set_border_width (GTK_CONTAINER (scrolledwindow), 0);
     gtk_widget_show (scrolledwindow);
     gtk_container_add (GTK_CONTAINER (vol->popup_window), scrolledwindow);
