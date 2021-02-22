@@ -51,7 +51,12 @@ static const char *device_display_name (VolumePulsePlugin *vol, const char *name
 static void popup_window_show (GtkWidget *p);
 static void popup_window_scale_changed (GtkRange *range, VolumePulsePlugin *vol);
 static void popup_window_mute_toggled (GtkWidget *widget, VolumePulsePlugin *vol);
+#if GTK_CHECK_VERSION(3, 0, 0)
+static gboolean popup_mapped (GtkWidget *widget, GdkEvent *event, VolumePulsePlugin *vol);
+static gboolean popup_button_press (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
+#else
 static gboolean popup_window_mouse_out (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
+#endif
 
 /* Menu popup */
 static void menu_show (VolumePulsePlugin *vol);
@@ -216,6 +221,7 @@ static void popup_window_show (GtkWidget *p)
     vol->popup_window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
     gtk_widget_set_name (vol->popup_window, "volals");
     gtk_window_set_decorated (GTK_WINDOW (vol->popup_window), FALSE);
+
     gtk_container_set_border_width (GTK_CONTAINER (vol->popup_window), 5);
     gtk_window_set_skip_taskbar_hint (GTK_WINDOW (vol->popup_window), TRUE);
     gtk_window_set_skip_pager_hint (GTK_WINDOW (vol->popup_window), TRUE);
@@ -284,11 +290,12 @@ static void popup_window_show (GtkWidget *p)
 
     /* Connect the function which hides the window when the mouse is clicked outside it */
 #if GTK_CHECK_VERSION(3, 0, 0)
-    gdk_seat_grab (gdk_display_get_default_seat (gdk_display_get_default ()), gtk_widget_get_window (vol->popup_window), GDK_SEAT_CAPABILITY_ALL_POINTING, TRUE, NULL, NULL, NULL, NULL);
+    g_signal_connect (G_OBJECT (vol->popup_window), "map-event", G_CALLBACK (popup_mapped), vol);
+    g_signal_connect (G_OBJECT (vol->popup_window), "button-press-event", G_CALLBACK (popup_button_press), vol);
 #else
     gdk_pointer_grab (gtk_widget_get_window (vol->popup_window), TRUE, GDK_BUTTON_PRESS_MASK, NULL, NULL, GDK_CURRENT_TIME);
-#endif
     g_signal_connect (G_OBJECT (vol->popup_window), "focus-out-event", G_CALLBACK (popup_window_mouse_out), vol);
+#endif
 }
 
 /* Handler for "value_changed" signal on popup window vertical scale */
@@ -315,17 +322,33 @@ static void popup_window_mute_toggled (GtkWidget *widget, VolumePulsePlugin *vol
 
 /* Handler for "focus-out" signal on popup window */
 
+#if GTK_CHECK_VERSION(3, 0, 0)
+static gboolean popup_mapped (GtkWidget *widget, GdkEvent *event, VolumePulsePlugin *vol)
+{
+    gdk_seat_grab (gdk_display_get_default_seat (gdk_display_get_default ()), gtk_widget_get_window (widget), GDK_SEAT_CAPABILITY_ALL_POINTING, TRUE, NULL, NULL, NULL, NULL);
+    return FALSE;
+}
+
+static gboolean popup_button_press (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol)
+{
+    int x, y;
+    gtk_window_get_size (GTK_WINDOW (widget), &x, &y);
+    if (event->x < 0 || event->y < 0 || event->x > x || event->y > y)
+    {
+        close_widget (&vol->popup_window);
+        gdk_seat_ungrab (gdk_display_get_default_seat (gdk_display_get_default ()));
+    }
+    return FALSE;
+}
+#else
 static gboolean popup_window_mouse_out (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol)
 {
     /* Hide the widget. */
     close_widget (&vol->popup_window);
-#if GTK_CHECK_VERSION(3, 0, 0)
-    gdk_seat_ungrab (gdk_display_get_default_seat (gdk_display_get_default ()));
-#else
     gdk_pointer_ungrab (GDK_CURRENT_TIME);
-#endif
     return FALSE;
 }
+#endif
 
 /*----------------------------------------------------------------------------*/
 /* Device select menu                                                         */
