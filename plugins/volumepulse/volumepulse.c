@@ -457,7 +457,7 @@ void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name,
     const char *disp_label = device_display_name (vol, label);
 #if GTK_CHECK_VERSION(3, 0, 0)
     GtkWidget *mi = gtk_menu_item_new ();
-    GtkWidget *box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+    GtkWidget *box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, MENU_ICON_SPACE);
     gtk_container_add (GTK_CONTAINER (mi), box);
     GtkWidget *img = gtk_image_new ();
     GtkWidget *lbl = gtk_label_new (disp_label);
