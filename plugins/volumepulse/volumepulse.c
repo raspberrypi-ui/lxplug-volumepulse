@@ -363,6 +363,7 @@ static void menu_show (VolumePulsePlugin *vol)
     // create input selector
     vol->menu_devices = gtk_menu_new ();
 #if GTK_CHECK_VERSION(3, 0, 0)
+    gtk_widget_set_name (vol->menu_devices, "panelmenu");
     gtk_menu_set_reserve_toggle_size (GTK_MENU (vol->menu_devices), FALSE);
 #endif
     vol->menu_inputs = NULL;
@@ -378,6 +379,7 @@ static void menu_show (VolumePulsePlugin *vol)
     {
         vol->menu_outputs = gtk_menu_new ();
 #if GTK_CHECK_VERSION(3, 0, 0)
+        gtk_widget_set_name (vol->menu_devices, "panelmenu");
         gtk_menu_set_reserve_toggle_size (GTK_MENU (vol->menu_outputs), FALSE);
 #endif
     }
@@ -398,14 +400,22 @@ static void menu_show (VolumePulsePlugin *vol)
         if (vol->menu_inputs)
         {
             // insert submenus
+#if GTK_CHECK_VERSION(3, 0, 0)
+            mi = lxpanel_plugin_new_menu_item (vol->panel, _("Audio Outputs"), 0, NULL);
+#else
             mi = gtk_menu_item_new_with_label (_("Audio Outputs"));
+#endif
             gtk_menu_item_set_submenu (GTK_MENU_ITEM (mi), vol->menu_outputs);
             gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
 
             mi = gtk_separator_menu_item_new ();
             gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
 
+#if GTK_CHECK_VERSION(3, 0, 0)
+            mi = lxpanel_plugin_new_menu_item (vol->panel, _("Audio Inputs"), 0, NULL);
+#else
             mi = gtk_menu_item_new_with_label (_("Audio Inputs"));
+#endif
             gtk_menu_item_set_submenu (GTK_MENU_ITEM (mi), vol->menu_inputs);
             gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
         }
@@ -414,13 +424,21 @@ static void menu_show (VolumePulsePlugin *vol)
         mi = gtk_separator_menu_item_new ();
         gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
 
+#if GTK_CHECK_VERSION(3, 0, 0)
+        mi = lxpanel_plugin_new_menu_item (vol->panel, _("Device Profiles..."), 0, NULL);
+#else
         mi = gtk_menu_item_new_with_label (_("Device Profiles..."));
+#endif
         g_signal_connect (mi, "activate", G_CALLBACK (menu_open_profile_dialog), (gpointer) vol);
         gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
     }
     else
     {
+#if GTK_CHECK_VERSION(3, 0, 0)
+        mi = lxpanel_plugin_new_menu_item (vol->panel, _("No audio devices found"), 0, NULL);
+#else
         mi = gtk_menu_item_new_with_label (_("No audio devices found"));
+#endif
         gtk_widget_set_sensitive (GTK_WIDGET (mi), FALSE);
         gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
     }
@@ -456,13 +474,7 @@ void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name,
     GtkWidget *menu = input ? vol->menu_inputs : vol->menu_outputs;
     const char *disp_label = device_display_name (vol, label);
 #if GTK_CHECK_VERSION(3, 0, 0)
-    GtkWidget *mi = gtk_menu_item_new ();
-    GtkWidget *box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, MENU_ICON_SPACE);
-    gtk_container_add (GTK_CONTAINER (mi), box);
-    GtkWidget *img = gtk_image_new ();
-    GtkWidget *lbl = gtk_label_new (disp_label);
-    gtk_container_add (GTK_CONTAINER (box), img);
-    gtk_container_add (GTK_CONTAINER (box), lbl);
+    GtkWidget *mi = lxpanel_plugin_new_menu_item (vol->panel, disp_label, 0, NULL);
 #else
     GtkWidget *mi = gtk_image_menu_item_new_with_label (disp_label);
     gtk_image_menu_item_set_always_show_image (GTK_IMAGE_MENU_ITEM (mi), TRUE);
@@ -552,12 +564,7 @@ static void menu_mark_default (GtkWidget *widget, gpointer data)
         GtkWidget *image = gtk_image_new ();
         lxpanel_plugin_set_menu_icon (vol->panel, image, "dialog-ok-apply");
 #if GTK_CHECK_VERSION(3, 0, 0)
-        GtkWidget *box = gtk_bin_get_child (GTK_BIN (widget));
-        GList *children = gtk_container_get_children (GTK_CONTAINER (box));
-        GtkWidget *img = (GtkWidget *) children->data;
-        gtk_container_remove (GTK_CONTAINER (box), img);
-        gtk_box_pack_start (GTK_BOX (box), image, FALSE, FALSE, 0);
-        gtk_box_reorder_child (GTK_BOX (box), image, 0);
+        lxpanel_plugin_update_menu_icon (widget, image);
 #else
         gtk_image_menu_item_set_image (GTK_IMAGE_MENU_ITEM (widget), image);
 #endif
