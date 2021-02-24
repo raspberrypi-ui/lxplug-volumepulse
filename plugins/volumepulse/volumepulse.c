@@ -822,11 +822,13 @@ static void volumepulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *evt, Vo
     /* Update the PulseAudio volume by a step */
     int val = pulse_get_volume (vol);
 
-    if (evt->direction == GDK_SCROLL_UP || evt->direction == GDK_SCROLL_LEFT)
+    if (evt->direction == GDK_SCROLL_UP || evt->direction == GDK_SCROLL_LEFT
+        || (evt->direction == GDK_SCROLL_SMOOTH && (evt->delta_x < 0 || evt->delta_y < 0)))
     {
         if (val < 100) val += 2;
     }
-    else
+    else if (evt->direction == GDK_SCROLL_DOWN || evt->direction == GDK_SCROLL_RIGHT
+        || (evt->direction == GDK_SCROLL_SMOOTH && (evt->delta_x > 0 || evt->delta_y > 0)))
     {
         if (val > 0) val -= 2;
     }
@@ -979,7 +981,7 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
 
     /* Set up button */
     gtk_button_set_relief (GTK_BUTTON (vol->plugin), GTK_RELIEF_NONE);
-    gtk_widget_add_events (vol->plugin, GDK_BUTTON_PRESS_MASK);
+    gtk_widget_add_events (vol->plugin, GDK_BUTTON_PRESS_MASK | GDK_SCROLL_MASK);
     gtk_widget_set_tooltip_text (vol->plugin, _("Volume control"));
 
     /* Connect signals */
