@@ -524,7 +524,10 @@ static void bt_connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...
     vol->conn_label = gtk_label_new (msg);
     gtk_label_set_line_wrap (GTK_LABEL (vol->conn_label), TRUE);
     gtk_label_set_justify (GTK_LABEL (vol->conn_label), GTK_JUSTIFY_LEFT);
-#if !GTK_CHECK_VERSION(3, 0, 0)
+#if GTK_CHECK_VERSION(3, 0, 0)
+    gtk_label_set_xalign (GTK_LABEL (vol->conn_label), 0.0);
+    gtk_label_set_yalign (GTK_LABEL (vol->conn_label), 0.0);
+#else
     gtk_misc_set_alignment (GTK_MISC (vol->conn_label), 0.0, 0.0);
 #endif
     gtk_widget_set_size_request (vol->conn_label, 350, -1);

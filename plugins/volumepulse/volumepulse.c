@@ -685,7 +685,9 @@ void profiles_dialog_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWid
 
     ltext = g_strdup_printf ("%s:", device_display_name (vol, label));
     lbl = gtk_label_new (ltext);
-#if !GTK_CHECK_VERSION(3, 0, 0)
+#if GTK_CHECK_VERSION(3, 0, 0)
+    gtk_label_set_xalign (GTK_LABEL (lbl), 0.0);
+#else
     gtk_misc_set_alignment (GTK_MISC (lbl), 0.0, 0.5);
 #endif
     gtk_box_pack_start (GTK_BOX (dest), lbl, FALSE, FALSE, 5);
