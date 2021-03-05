@@ -521,7 +521,11 @@ void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name,
     // loop forward from the first element, comparing against the new label
     while (l)
     {
+#if GTK_CHECK_VERSION(3, 0, 0)
+        if (g_strcmp0 (disp_label, lxpanel_plugin_get_menu_label (GTK_WIDGET (l->data))) < 0) break;
+#else
         if (g_strcmp0 (disp_label, gtk_menu_item_get_label (GTK_MENU_ITEM (l->data))) < 0) break;
+#endif
         count++;
         l = l->next;
     }
@@ -597,14 +601,22 @@ static void menu_set_alsa_input (GtkWidget *widget, VolumePulsePlugin *vol)
 
 static void menu_set_bluetooth_output (GtkWidget *widget, VolumePulsePlugin *vol)
 {
+#if GTK_CHECK_VERSION(3, 0, 0)
+    bluetooth_set_output (vol, gtk_widget_get_name (widget), lxpanel_plugin_get_menu_label (widget));
+#else
     bluetooth_set_output (vol, gtk_widget_get_name (widget), gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
+#endif
 }
 
 /* Handler for menu click to set a Bluetooth device as input */
 
 static void menu_set_bluetooth_input (GtkWidget *widget, VolumePulsePlugin *vol)
 {
+#if GTK_CHECK_VERSION(3, 0, 0)
+    bluetooth_set_input (vol, gtk_widget_get_name (widget), lxpanel_plugin_get_menu_label (widget));
+#else
     bluetooth_set_input (vol, gtk_widget_get_name (widget), gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
+#endif
 }
 
 /* Handler for menu click to open the profiles dialog */
