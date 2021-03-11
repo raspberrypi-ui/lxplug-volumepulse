@@ -1,0 +1,126 @@
+# Icelandic translation for lxplug-volumepulse package.
+# Copyright (C) 2021 Free Software Foundation, Inc.
+# This file is distributed under the same license as the lxplug-volumepulse package.
+#
+# Sveinn í Felli <sv1@fellsnet.is>, 2021.
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2018-04-21 22:24+0300\n"
+"PO-Revision-Date: 2021-03-05 13:39+0000\n"
+"Last-Translator: Sveinn í Felli <sv1@fellsnet.is>\n"
+"Language-Team: Icelandic <translation-team-is@lists.sourceforge.net>\n"
+"Language: is\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: Lokalize 2.0\n"
+
+#: ../plugins/volumepulse/volumepulse.c:179
+msgid "HDMI"
+msgstr "HDMI"
+
+#: ../plugins/volumepulse/volumepulse.c:189
+msgid "AV Jack"
+msgstr "AV-tengi"
+
+#. Create a check button as the child of the vertical box.
+#: ../plugins/volumepulse/volumepulse.c:260
+msgid "Mute"
+msgstr "Þagga"
+
+#. insert submenus
+#: ../plugins/volumepulse/volumepulse.c:349
+msgid "Audio Outputs"
+msgstr "Hljóðútgangar"
+
+#: ../plugins/volumepulse/volumepulse.c:356
+msgid "Audio Inputs"
+msgstr "Hljóðinngangar"
+
+#: ../plugins/volumepulse/volumepulse.c:365
+msgid "Device Profiles..."
+msgstr "Stillisnið tækja..."
+
+#: ../plugins/volumepulse/volumepulse.c:371
+msgid "No audio devices found"
+msgstr "Engin hljóðtæki fundust"
+
+#: ../plugins/volumepulse/volumepulse.c:420
+msgid "Input from this device not available in the current profile"
+msgstr "Inntak frá þessu tæki er ekki tiltækt í fyrirliggjandi stillisniði"
+
+#: ../plugins/volumepulse/volumepulse.c:422
+msgid "Output to this device not available in the current profile"
+msgstr "Úttak frá þessu tæki er ekki tiltækt í fyrirliggjandi stillisniði"
+
+#: ../plugins/volumepulse/volumepulse.c:550
+msgid "Device Profiles"
+msgstr "Stillisnið tækja"
+
+#: ../plugins/volumepulse/volumepulse.c:608
+msgid "Device not connected"
+msgstr "Tæki ekki tengt"
+
+#. update tooltip
+#: ../plugins/volumepulse/volumepulse.c:773
+#: ../plugins/volumepulse/volumepulse.c:882
+msgid "Volume control"
+msgstr "Hljóðstyrkstillir"
+
+#: ../plugins/volumepulse/volumepulse.c:930
+msgid "Volume Control (PulseAudio)"
+msgstr "Hljóðstyrkstillir (PulseAudio)"
+
+#: ../plugins/volumepulse/volumepulse.c:931
+msgid "Display and control volume for PulseAudio"
+msgstr "Birta og sýsla með hljóðstyrk fyrir PulseAudio"
+
+#: ../plugins/volumepulse/bluetooth.c:223
+msgid "Reconnecting Bluetooth devices..."
+msgstr "Endurtengi Bluetooth-tæki..."
+
+#: ../plugins/volumepulse/bluetooth.c:314
+#, c-format
+msgid "Bluetooth %s device not found"
+msgstr "Bluetooth %s tæki fannst ekki"
+
+#. update dialog to show a warning
+#: ../plugins/volumepulse/bluetooth.c:373
+msgid "Device not found by PulseAudio"
+msgstr "PulseAudio fann ekki tæki"
+
+#: ../plugins/volumepulse/bluetooth.c:516
+msgid "Connecting Audio Device"
+msgstr "Tengi hljóðtæki"
+
+#: ../plugins/volumepulse/bluetooth.c:538
+#, c-format
+msgid "Failed to connect to Bluetooth device - %s"
+msgstr "Mistókst að tengjast við Bluetooth-tæki - %s"
+
+#: ../plugins/volumepulse/bluetooth.c:544
+msgid "_OK"
+msgstr "Í _lagi"
+
+#: ../plugins/volumepulse/bluetooth.c:615
+#, c-format
+msgid "Connecting Bluetooth device '%s' as output..."
+msgstr "Tengi Bluetooth-tæki '%s' sem úttak..."
+
+#: ../plugins/volumepulse/bluetooth.c:647
+#, c-format
+msgid "Connecting Bluetooth device '%s' as input..."
+msgstr "Tengi Bluetooth-tæki '%s' sem inntak..."
+
+#. if the current default source and sink are both the same device, disconnect it and reconnect to
+#. put it into A2DP rather than HSP
+#: ../plugins/volumepulse/bluetooth.c:702
+msgid "Reconnecting Bluetooth input device as output only..."
+msgstr "Endurtengi Bluetooth-inntakstæki einungis sem úttak..."
+
+#: ../plugins/volumepulse/bluetooth.c:748
+msgid "Reconnecting Bluetooth device..."
+msgstr "Endurtengi Bluetooth-tæki..."
