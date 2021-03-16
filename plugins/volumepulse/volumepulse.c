@@ -225,7 +225,7 @@ static void popup_window_show (GtkWidget *p)
     gtk_container_set_border_width (GTK_CONTAINER (vol->popup_window), 5);
     gtk_window_set_skip_taskbar_hint (GTK_WINDOW (vol->popup_window), TRUE);
     gtk_window_set_skip_pager_hint (GTK_WINDOW (vol->popup_window), TRUE);
-    gtk_window_set_type_hint (GTK_WINDOW (vol->popup_window), GDK_WINDOW_TYPE_HINT_DIALOG);
+    gtk_window_set_type_hint (GTK_WINDOW (vol->popup_window), GDK_WINDOW_TYPE_HINT_DROPDOWN_MENU);
 
     /* Create a scrolled window as the child of the top level window. */
     GtkWidget *scrolledwindow = gtk_scrolled_window_new (NULL, NULL);
