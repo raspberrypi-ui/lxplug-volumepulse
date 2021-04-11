@@ -1,4 +1,4 @@
-lxplug-volumepulse (0.6) buster; urgency=medium
+lxplug-volumepulse (0.6) bullseye; urgency=medium
 
   * GTK+3 version
 
