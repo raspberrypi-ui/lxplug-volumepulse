@@ -38,7 +38,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BT_SERV_HSP             "00001108"
 #define BT_SERV_HFP             "0000111E"
 
-#define BT_PULSE_RETRIES    100000
+#define BT_PULSE_RETRIES    25000
 
 typedef enum {
     CONNECT,
@@ -74,6 +74,7 @@ static void bt_cb_object_added (GDBusObjectManager *manager, GDBusObject *object
 static void bt_cb_object_removed (GDBusObjectManager *manager, GDBusObject *object, gpointer user_data);
 static void bt_connect_device (VolumePulsePlugin *vol, const char *device);
 static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_data);
+static gboolean bt_get_profile (gpointer user_data);
 static void bt_cb_trusted (GObject *source, GAsyncResult *res, gpointer user_data);
 static void bt_disconnect_device (VolumePulsePlugin *vol, const char *device);
 static void bt_cb_disconnected (GObject *source, GAsyncResult *res, gpointer user_data);
@@ -342,8 +343,6 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
     GError *error = NULL;
-    char *paname, *pacard, *msg;
-    int count;
 
     GVariant *var = g_dbus_proxy_call_finish (G_DBUS_PROXY (source), res, &error);
     if (var) g_variant_unref (var);
@@ -365,68 +364,83 @@ static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_d
     }
     else
     {
-        DEBUG ("Connected OK");
+        DEBUG ("Connected OK - polling for profile");
 
-        // some devices take a very long time to be valid PulseAudio cards after connection
-        pacard = bt_to_pa_name (btop->device, "card", NULL);
-        count = 0;
-        do
+        // start polling for the PulseAudio profile of the device
+        vol->bt_profile_count = 0;
+        g_idle_add (bt_get_profile, vol);
+    }
+}
+
+/* Function polled after connection to get profile to confirm PA has found the device */
+
+static gboolean bt_get_profile (gpointer user_data)
+{
+    VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
+    bt_operation_t *btop = (bt_operation_t *) vol->bt_ops->data;
+    char *paname, *pacard, *msg;
+
+    // some devices take a very long time to be valid PulseAudio cards after connection
+    pacard = bt_to_pa_name (btop->device, "card", NULL);
+    pulse_get_profile (vol, pacard);
+    if (vol->pa_profile == NULL && vol->bt_profile_count++ < BT_PULSE_RETRIES)
+    {
+        g_free (pacard);
+        return TRUE;
+    }
+
+    DEBUG ("Profile polled %d times", vol->bt_profile_count);
+
+    if (vol->pa_profile == NULL)
+    {
+        DEBUG ("Bluetooth device not found by PulseAudio - profile not available");
+
+        // update dialog to show a warning
+        bt_connect_dialog_update (vol, _("Device not found by PulseAudio"));
+    }
+    else
+    {
+        DEBUG ("Bluetooth device found by PulseAudio with profile %s", vol->pa_profile);
+        if (!pulse_set_profile (vol, pacard, btop->direction == OUTPUT && vol->bt_force_hsp == FALSE ? "a2dp_sink" : "headset_head_unit"))
         {
-            pulse_get_profile (vol, pacard);
-            count++;
-        }
-        while (vol->pa_profile == NULL && count < BT_PULSE_RETRIES);
-        DEBUG ("Profile polled %d times", count);
-
-        if (vol->pa_profile == NULL)
-        {
-            DEBUG ("Bluetooth device not found by PulseAudio - profile not available");
-
-            // update dialog to show a warning
-            bt_connect_dialog_update (vol, _("Device not found by PulseAudio"));
+            DEBUG ("Failed to set device profile : %s", vol->pa_error_msg);
+            msg = g_strdup_printf (_("Could not set profile for device : %s"), vol->pa_error_msg);
+            bt_connect_dialog_update (vol, msg);
+            g_free (msg);
         }
         else
         {
-            DEBUG ("Bluetooth device found by PulseAudio with profile %s", vol->pa_profile);
-            if (!pulse_set_profile (vol, pacard, btop->direction == OUTPUT && vol->bt_force_hsp == FALSE ? "a2dp_sink" : "headset_head_unit"))
+            if (btop->direction == OUTPUT && vol->bt_force_hsp == FALSE) DEBUG ("Profile set to a2dp_sink");
+            else DEBUG ("Profile set to headset_head_unit");
+
+            if (btop->direction != OUTPUT)
             {
-                DEBUG ("Failed to set device profile : %s", vol->pa_error_msg);
-                msg = g_strdup_printf (_("Could not set profile for device : %s"), vol->pa_error_msg);
-                bt_connect_dialog_update (vol, msg);
-                g_free (msg);
+                paname = bt_to_pa_name (btop->device, "source", "headset_head_unit");
+                pulse_change_source (vol, paname);
+                vsystem ("echo %s > ~/.btin", btop->device);
+                g_free (paname);
             }
-            else
+
+            if (btop->direction != INPUT)
             {
-                if (btop->direction == OUTPUT && vol->bt_force_hsp == FALSE) DEBUG ("Profile set to a2dp_sink");
-                else DEBUG ("Profile set to headset_head_unit");
-
-                if (btop->direction != OUTPUT)
-                {
-                    paname = bt_to_pa_name (btop->device, "source", "headset_head_unit");
-                    pulse_change_source (vol, paname);
-                    vsystem ("echo %s > ~/.btin", btop->device);
-                    g_free (paname);
-                }
-
-                if (btop->direction != INPUT)
-                {
-                    paname = bt_to_pa_name (btop->device, "sink", btop->direction == OUTPUT && vol->bt_force_hsp == FALSE ? "a2dp_sink" : "headset_head_unit");
-                    pulse_change_sink (vol, paname);
-                    vsystem ("echo %s > ~/.btout", btop->device);
-                    g_free (paname);
-                }
+                paname = bt_to_pa_name (btop->device, "sink", btop->direction == OUTPUT && vol->bt_force_hsp == FALSE ? "a2dp_sink" : "headset_head_unit");
+                pulse_change_sink (vol, paname);
+                vsystem ("echo %s > ~/.btout", btop->device);
+                g_free (paname);
             }
-            g_free (pacard);
-
-            if ((vol->bt_input == FALSE || btop->direction != OUTPUT) && vol->conn_ok == NULL)
-                close_widget (&vol->conn_dialog);
         }
+
+        if ((vol->bt_input == FALSE || btop->direction != OUTPUT) && vol->conn_ok == NULL)
+            close_widget (&vol->conn_dialog);
     }
+    g_free (pacard);
+
     pulse_unmute_all_streams (vol);
 
     bt_next_operation (vol);
 
     volumepulse_update_display (vol);
+    return FALSE;
 }
 
 /* Callback for trust completed */
