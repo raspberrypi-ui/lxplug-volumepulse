@@ -365,6 +365,7 @@ static gboolean popup_window_mouse_out (GtkWidget *widget, GdkEventButton *event
 static void menu_show (VolumePulsePlugin *vol)
 {
     GtkWidget *mi;
+    GList *items, *head;
 
     // create input selector
     vol->menu_devices = gtk_menu_new ();
@@ -401,7 +402,8 @@ static void menu_show (VolumePulsePlugin *vol)
     bluetooth_add_devices_to_menu (vol, FALSE);
 
     // did we find any output devices? if not, the menu will be empty...
-    if (gtk_container_get_children (GTK_CONTAINER (vol->menu_outputs)) != NULL)
+    items = gtk_container_get_children (GTK_CONTAINER (vol->menu_outputs));
+    if (items != NULL)
     {
         if (vol->menu_inputs)
         {
@@ -437,6 +439,8 @@ static void menu_show (VolumePulsePlugin *vol)
 #endif
         g_signal_connect (mi, "activate", G_CALLBACK (menu_open_profile_dialog), (gpointer) vol);
         gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
+
+        g_list_free (items);
     }
     else
     {
@@ -460,13 +464,14 @@ static void menu_show (VolumePulsePlugin *vol)
     // lock menu if a dialog is open
     if (vol->conn_dialog || vol->profiles_dialog)
     {
-        GList *items = gtk_container_get_children (GTK_CONTAINER (vol->menu_devices));
+        items = gtk_container_get_children (GTK_CONTAINER (vol->menu_devices));
+        head = items;
         while (items)
         {
             gtk_widget_set_sensitive (GTK_WIDGET (items->data), FALSE);
             items = items->next;
         }
-        g_list_free (items);
+        g_list_free (head);
     }
 
     // show the menu
@@ -478,7 +483,10 @@ static void menu_show (VolumePulsePlugin *vol)
 void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input)
 {
     GtkWidget *menu = input ? vol->menu_inputs : vol->menu_outputs;
+    GList *list, *l;
+    int count;
     const char *disp_label = device_display_name (vol, label);
+
 #if GTK_CHECK_VERSION(3, 0, 0)
     GtkWidget *mi = lxpanel_plugin_new_menu_item (vol->panel, disp_label, 0, NULL);
 #else
@@ -502,17 +510,10 @@ void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name,
             gtk_widget_set_tooltip_text (mi, _("Output to this device not available in the current profile"));
     }
 
-    // insert alphabetically in current section - count the list first
-    int count = 0;
-    GList *l = g_list_first (gtk_container_get_children (GTK_CONTAINER (menu)));
-    while (l)
-    {
-        count++;
-        l = l->next;
-    }
-
     // find the start point of the last section - either a separator or the beginning of the list
-    l = g_list_last (gtk_container_get_children (GTK_CONTAINER (menu)));
+    list = gtk_container_get_children (GTK_CONTAINER (menu));
+    count = g_list_length (list);
+    l = g_list_last (list);
     while (l)
     {
         if (G_OBJECT_TYPE (l->data) == GTK_TYPE_SEPARATOR_MENU_ITEM) break;
@@ -521,7 +522,7 @@ void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name,
     }
 
     // if l is NULL, init to element after start; if l is non-NULL, init to element after separator
-    if (!l) l = gtk_container_get_children (GTK_CONTAINER (menu));
+    if (!l) l = list;
     else l = l->next;
 
     // loop forward from the first element, comparing against the new label
@@ -537,22 +538,29 @@ void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name,
     }
 
     gtk_menu_shell_insert (GTK_MENU_SHELL (menu), mi, count);
+    g_list_free (list);
 }
 
 /* Add a separator to the menu (but only if there isn't already one there...) */
 
 void menu_add_separator (VolumePulsePlugin *vol, GtkWidget *menu)
 {
+    GtkWidget *mi;
+    GList *list, *l;
+
     if (menu == NULL) return;
     if (vol->separator == TRUE) return;
 
     // find the end of the menu
-    GList *l = g_list_last (gtk_container_get_children (GTK_CONTAINER (menu)));
-    if (l == NULL) return;
-    if (G_OBJECT_TYPE (l->data) == GTK_TYPE_SEPARATOR_MENU_ITEM) return;
-    GtkWidget *mi = gtk_separator_menu_item_new ();
-    gtk_menu_shell_append (GTK_MENU_SHELL (menu), mi);
-    vol->separator = TRUE;
+    list = gtk_container_get_children (GTK_CONTAINER (menu));
+    l = g_list_last (list);
+    if (l && G_OBJECT_TYPE (l->data) != GTK_TYPE_SEPARATOR_MENU_ITEM)
+    {
+        mi = gtk_separator_menu_item_new ();
+        gtk_menu_shell_append (GTK_MENU_SHELL (menu), mi);
+        vol->separator = TRUE;
+    }
+    g_list_free (list);
 }
 
 /* Add a tickmark to the supplied widget if it is the default item in its parent menu */
@@ -737,11 +745,11 @@ void profiles_dialog_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWid
 
 static void profiles_dialog_relocate_last_item (GtkWidget *box)
 {
-    GtkWidget *elem;
+    GtkWidget *elem, *newcomb, *newlab;
     GList *children = gtk_container_get_children (GTK_CONTAINER (box));
     int n = g_list_length (children);
-    GtkWidget *newcomb = g_list_nth_data (children, n - 1);
-    GtkWidget *newlab = g_list_nth_data (children, n - 2);
+    newcomb = g_list_nth_data (children, n - 1);
+    newlab = g_list_nth_data (children, n - 2);
     const char *new_item = gtk_label_get_text (GTK_LABEL (newlab));
     n -= 2;
     while (n > 0)
@@ -752,6 +760,7 @@ static void profiles_dialog_relocate_last_item (GtkWidget *box)
     }
     gtk_box_reorder_child (GTK_BOX (box), newlab, n);
     gtk_box_reorder_child (GTK_BOX (box), newcomb, n + 1);
+    g_list_free (children);
 }
 
 /* Handler for "changed" signal from a profile combo box */
