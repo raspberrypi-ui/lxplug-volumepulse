@@ -882,7 +882,7 @@ static void pa_cb_replace_cards_with_sinks (pa_context *context, const pa_sink_i
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
-    if (!eol)
+    if (!eol && vol->menu_outputs)
     {
         const char *api = pa_proplist_gets (i->proplist, "device.api");
         if (!g_strcmp0 (api, "alsa"))
@@ -943,7 +943,7 @@ static void pa_cb_replace_cards_with_sources (pa_context *context, const pa_sour
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
-    if (!eol)
+    if (!eol && vol->menu_inputs)
     {
         const char *api = pa_proplist_gets (i->proplist, "device.api");
         if (!g_strcmp0 (api, "alsa"))
