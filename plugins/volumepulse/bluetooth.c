@@ -82,7 +82,6 @@ static gboolean bt_has_service (VolumePulsePlugin *vol, const gchar *path, const
 static void bt_connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...);
 static void bt_connect_dialog_update (VolumePulsePlugin *vol, const char *msg);
 static void bt_connect_dialog_ok (GtkButton *button, VolumePulsePlugin *vol);
-static gboolean bt_connect_dialog_delete (GtkWidget *widget, GdkEvent *event, VolumePulsePlugin *vol);
 
 /*----------------------------------------------------------------------------*/
 /* Bluetooth operation list management                                        */
@@ -430,7 +429,7 @@ static gboolean bt_get_profile (gpointer user_data)
             }
         }
 
-        if ((vol->bt_input == FALSE || btop->direction != OUTPUT) && vol->conn_ok == NULL)
+        if ((vol->bt_input == FALSE || btop->direction != OUTPUT) && !gtk_widget_is_visible (vol->conn_ok))
             close_widget (&vol->conn_dialog);
     }
     g_free (pacard);
@@ -524,6 +523,8 @@ static gboolean bt_has_service (VolumePulsePlugin *vol, const gchar *path, const
 
 static void bt_connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...)
 {
+    GtkBuilder *builder;
+    GtkWidget *wid;
     char *msg;
     va_list arg;
 
@@ -531,28 +532,27 @@ static void bt_connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...
     g_vasprintf (&msg, fmt, arg);
     va_end (arg);
 
-    vol->conn_dialog = gtk_dialog_new_with_buttons (_("Connecting Audio Device"), NULL, GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, NULL);
-    gtk_window_set_icon_name (GTK_WINDOW (vol->conn_dialog), "preferences-system-bluetooth");
-    gtk_window_set_position (GTK_WINDOW (vol->conn_dialog), GTK_WIN_POS_CENTER);
-    gtk_container_set_border_width (GTK_CONTAINER (vol->conn_dialog), 10);
-    vol->conn_label = gtk_label_new (msg);
-    gtk_label_set_line_wrap (GTK_LABEL (vol->conn_label), TRUE);
-    gtk_label_set_justify (GTK_LABEL (vol->conn_label), GTK_JUSTIFY_LEFT);
-#if GTK_CHECK_VERSION(3, 0, 0)
-    gtk_label_set_xalign (GTK_LABEL (vol->conn_label), 0.0);
-    gtk_label_set_yalign (GTK_LABEL (vol->conn_label), 0.0);
-#else
-    gtk_misc_set_alignment (GTK_MISC (vol->conn_label), 0.0, 0.0);
-#endif
-    gtk_widget_set_size_request (vol->conn_label, 350, -1);
-    gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (vol->conn_dialog))), vol->conn_label, TRUE, TRUE, 0);
-    g_signal_connect (vol->conn_dialog, "delete_event", G_CALLBACK (bt_connect_dialog_delete), vol);
-    vol->conn_ok = NULL;
-    gtk_widget_show_all (vol->conn_dialog);
+    builder = gtk_builder_new ();
+    gtk_builder_add_from_file (builder, PACKAGE_DATA_DIR "/ui/lxplug-volumepulse.ui", NULL);
+
+    vol->conn_dialog = (GtkWidget *) gtk_builder_get_object (builder, "modal");
+    vol->conn_label = (GtkWidget *) gtk_builder_get_object (builder, "modal_msg");
+    vol->conn_ok = (GtkWidget *) gtk_builder_get_object (builder, "modal_ok");
+    wid = (GtkWidget *) gtk_builder_get_object (builder, "modal_cancel");
+    gtk_widget_hide (wid);
+    wid = (GtkWidget *) gtk_builder_get_object (builder, "modal_pb");
+    gtk_widget_hide (wid);
+    g_object_unref (builder);
+
+    gtk_label_set_text (GTK_LABEL (vol->conn_label), msg);
+    gtk_widget_hide (vol->conn_ok);
+
+    gtk_widget_show (vol->conn_dialog);
+
     g_free (msg);
 }
 
-/* Either update the message on the connection dialog to show an error, or close the dialog */
+/* Update the message on the connection dialog to show an error */
 
 static void bt_connect_dialog_update (VolumePulsePlugin *vol, const gchar *msg)
 {
@@ -562,12 +562,8 @@ static void bt_connect_dialog_update (VolumePulsePlugin *vol, const gchar *msg)
     gtk_label_set_text (GTK_LABEL (vol->conn_label), buffer);
     g_free (buffer);
 
-    if (vol->conn_ok == NULL)
-    {
-        vol->conn_ok = gtk_dialog_add_button (GTK_DIALOG (vol->conn_dialog), _("_OK"), 1);
-        g_signal_connect (vol->conn_ok, "clicked", G_CALLBACK (bt_connect_dialog_ok), vol);
-        gtk_widget_show (vol->conn_ok);
-    }
+    g_signal_connect (vol->conn_ok, "clicked", G_CALLBACK (bt_connect_dialog_ok), vol);
+    gtk_widget_show (vol->conn_ok);
 }
 
 /* Handler for 'OK' button on connection dialog */
@@ -575,14 +571,6 @@ static void bt_connect_dialog_update (VolumePulsePlugin *vol, const gchar *msg)
 static void bt_connect_dialog_ok (GtkButton *button, VolumePulsePlugin *vol)
 {
     close_widget (&vol->conn_dialog);
-}
-
-/* Handler for "delete-event" signal from connection dialog */
-
-static gboolean bt_connect_dialog_delete (GtkWidget *widget, GdkEvent *event, VolumePulsePlugin *vol)
-{
-    close_widget (&vol->conn_dialog);
-    return TRUE;
 }
 
 /*----------------------------------------------------------------------------*/
