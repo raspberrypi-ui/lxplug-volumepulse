@@ -1,3 +1,9 @@
+lxplug-volumepulse (0.9) bullseye; urgency=medium
+
+  * Use standard design for dialogs
+
+ -- Simon Long <simon@raspberrypi.com>  Tue, 29 Jun 2021 14:05:11 +0100
+
 lxplug-volumepulse (0.8) bullseye; urgency=medium
 
   * Fix some memory leaks
