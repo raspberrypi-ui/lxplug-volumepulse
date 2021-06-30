@@ -532,7 +532,7 @@ static void bt_connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...
     g_vasprintf (&msg, fmt, arg);
     va_end (arg);
 
-    builder = gtk_builder_new_from_file (PACKAGE_DATA_DIR "/ui/lxplug-volumepulse.ui");
+    builder = gtk_builder_new_from_file (PACKAGE_DATA_DIR "/ui/lxpanel-modal.ui");
     vol->conn_dialog = (GtkWidget *) gtk_builder_get_object (builder, "modal");
     vol->conn_label = (GtkWidget *) gtk_builder_get_object (builder, "modal_msg");
     vol->conn_ok = (GtkWidget *) gtk_builder_get_object (builder, "modal_ok");
