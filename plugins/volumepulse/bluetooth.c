@@ -524,7 +524,6 @@ static gboolean bt_has_service (VolumePulsePlugin *vol, const gchar *path, const
 static void bt_connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...)
 {
     GtkBuilder *builder;
-    GtkWidget *wid;
     char *msg;
     va_list arg;
 
@@ -536,10 +535,8 @@ static void bt_connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...
     vol->conn_dialog = (GtkWidget *) gtk_builder_get_object (builder, "modal");
     vol->conn_label = (GtkWidget *) gtk_builder_get_object (builder, "modal_msg");
     vol->conn_ok = (GtkWidget *) gtk_builder_get_object (builder, "modal_ok");
-    wid = (GtkWidget *) gtk_builder_get_object (builder, "modal_cancel");
-    gtk_widget_hide (wid);
-    wid = (GtkWidget *) gtk_builder_get_object (builder, "modal_pb");
-    gtk_widget_hide (wid);
+    gtk_widget_hide (GTK_WIDGET (gtk_builder_get_object (builder, "modal_cancel")));
+    gtk_widget_hide (GTK_WIDGET (gtk_builder_get_object (builder, "modal_pb")));
     g_object_unref (builder);
 
     gtk_label_set_text (GTK_LABEL (vol->conn_label), msg);
