@@ -190,7 +190,10 @@ static void hdmi_init (VolumePulsePlugin *vol)
 static const char *device_display_name (VolumePulsePlugin *vol, const char *name)
 {
     if (!g_strcmp0 (name, "bcm2835 HDMI 1")) return vol->hdmi_names[0];
+    else if (!g_strcmp0 (name, "vc4-hdmi")) return vol->hdmi_names[0];
+    else if (!g_strcmp0 (name, "vc4-hdmi-0")) return vol->hdmi_names[0];
     else if (!g_strcmp0 (name, "bcm2835 HDMI 2")) return vol->hdmi_names[1];
+    else if (!g_strcmp0 (name, "vc4-hdmi-1")) return vol->hdmi_names[1];
     else if (!g_strcmp0 (name, "bcm2835 Headphones")) return _("AV Jack");
     else return name;
 }
