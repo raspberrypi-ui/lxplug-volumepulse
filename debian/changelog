@@ -1,3 +1,9 @@
+lxplug-volumepulse (0.11) bullseye; urgency=medium
+
+  * Disable volume slider while muted
+
+ -- Simon Long <simon@raspberrypi.com>  Thu, 13 Jan 2022 12:55:42 +0000
+
 lxplug-volumepulse (0.10) bullseye; urgency=medium
 
   * Remap KMS HDMI device names to monitor names
