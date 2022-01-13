@@ -271,8 +271,8 @@ static void popup_window_show (GtkWidget *p)
     vol->popup_volume_scale = gtk_scale_new (GTK_ORIENTATION_VERTICAL, GTK_ADJUSTMENT (gtk_adjustment_new (100, 0, 100, 0, 0, 0)));
 #else
     vol->popup_volume_scale = gtk_vscale_new (GTK_ADJUSTMENT (gtk_adjustment_new (100, 0, 100, 0, 0, 0)));
-#endif
     gtk_widget_set_name (vol->popup_volume_scale, "volscale");
+#endif
     g_object_set (vol->popup_volume_scale, "height-request", 120, NULL);
     gtk_scale_set_draw_value (GTK_SCALE (vol->popup_volume_scale), FALSE);
     gtk_range_set_inverted (GTK_RANGE (vol->popup_volume_scale), TRUE);
@@ -902,6 +902,8 @@ void volumepulse_update_display (VolumePulsePlugin *vol)
         g_signal_handler_block (vol->popup_volume_scale, vol->volume_scale_handler);
         gtk_range_set_value (GTK_RANGE (vol->popup_volume_scale), level);
         g_signal_handler_unblock (vol->popup_volume_scale, vol->volume_scale_handler);
+
+        gtk_widget_set_sensitive (vol->popup_volume_scale, !mute);
     }
 
     /* update tooltip */
