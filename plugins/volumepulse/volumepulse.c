@@ -889,6 +889,7 @@ void volumepulse_update_display (VolumePulsePlugin *vol)
         if (level >= 66) icon = "audio-volume-high";
         else if (level >= 33) icon = "audio-volume-medium";
         else if (level > 0) icon = "audio-volume-low";
+        else icon = "audio-volume-silent";
     }
     lxpanel_plugin_set_taskbar_icon (vol->panel, vol->tray_icon, icon);
 
