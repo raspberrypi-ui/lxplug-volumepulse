@@ -1,3 +1,9 @@
+lxplug-volumepulse (0.12) bullseye; urgency=medium
+
+  * Show silent icon when volume is zero but not in mute
+
+ -- Simon Long <simon@raspberrypi.com>  Sat, 15 Jan 2022 14:52:21 +0000
+
 lxplug-volumepulse (0.11) bullseye; urgency=medium
 
   * Disable volume slider while muted
