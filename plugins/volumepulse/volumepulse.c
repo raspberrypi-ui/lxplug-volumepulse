@@ -374,7 +374,6 @@ static void menu_show (VolumePulsePlugin *vol)
     vol->menu_devices = gtk_menu_new ();
 #if GTK_CHECK_VERSION(3, 0, 0)
     gtk_widget_set_name (vol->menu_devices, "panelmenu");
-    gtk_menu_set_reserve_toggle_size (GTK_MENU (vol->menu_devices), FALSE);
 #endif
     vol->menu_inputs = NULL;
 
@@ -390,7 +389,6 @@ static void menu_show (VolumePulsePlugin *vol)
         vol->menu_outputs = gtk_menu_new ();
 #if GTK_CHECK_VERSION(3, 0, 0)
         gtk_widget_set_name (vol->menu_devices, "panelmenu");
-        gtk_menu_set_reserve_toggle_size (GTK_MENU (vol->menu_outputs), FALSE);
 #endif
     }
     else vol->menu_outputs = vol->menu_devices;
@@ -411,22 +409,14 @@ static void menu_show (VolumePulsePlugin *vol)
         if (vol->menu_inputs)
         {
             // insert submenus
-#if GTK_CHECK_VERSION(3, 0, 0)
-            mi = lxpanel_plugin_new_menu_item (vol->panel, _("Audio Outputs"), 0, NULL);
-#else
             mi = gtk_menu_item_new_with_label (_("Audio Outputs"));
-#endif
             gtk_menu_item_set_submenu (GTK_MENU_ITEM (mi), vol->menu_outputs);
             gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
 
             mi = gtk_separator_menu_item_new ();
             gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
 
-#if GTK_CHECK_VERSION(3, 0, 0)
-            mi = lxpanel_plugin_new_menu_item (vol->panel, _("Audio Inputs"), 0, NULL);
-#else
             mi = gtk_menu_item_new_with_label (_("Audio Inputs"));
-#endif
             gtk_menu_item_set_submenu (GTK_MENU_ITEM (mi), vol->menu_inputs);
             gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
         }
@@ -435,11 +425,7 @@ static void menu_show (VolumePulsePlugin *vol)
         mi = gtk_separator_menu_item_new ();
         gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
 
-#if GTK_CHECK_VERSION(3, 0, 0)
-        mi = lxpanel_plugin_new_menu_item (vol->panel, _("Device Profiles..."), 0, NULL);
-#else
         mi = gtk_menu_item_new_with_label (_("Device Profiles..."));
-#endif
         g_signal_connect (mi, "activate", G_CALLBACK (menu_open_profile_dialog), (gpointer) vol);
         gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
 
@@ -447,11 +433,7 @@ static void menu_show (VolumePulsePlugin *vol)
     }
     else
     {
-#if GTK_CHECK_VERSION(3, 0, 0)
-        mi = lxpanel_plugin_new_menu_item (vol->panel, _("No audio devices found"), 0, NULL);
-#else
         mi = gtk_menu_item_new_with_label (_("No audio devices found"));
-#endif
         gtk_widget_set_sensitive (GTK_WIDGET (mi), FALSE);
         gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
     }
@@ -491,7 +473,7 @@ void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name,
     const char *disp_label = device_display_name (vol, label);
 
 #if GTK_CHECK_VERSION(3, 0, 0)
-    GtkWidget *mi = lxpanel_plugin_new_menu_item (vol->panel, disp_label, 0, NULL);
+    GtkWidget *mi = gtk_check_menu_item_new_with_label (disp_label);
 #else
     GtkWidget *mi = gtk_image_menu_item_new_with_label (disp_label);
     gtk_image_menu_item_set_always_show_image (GTK_IMAGE_MENU_ITEM (mi), TRUE);
@@ -531,11 +513,7 @@ void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name,
     // loop forward from the first element, comparing against the new label
     while (l)
     {
-#if GTK_CHECK_VERSION(3, 0, 0)
-        if (g_strcmp0 (disp_label, lxpanel_plugin_get_menu_label (GTK_WIDGET (l->data))) < 0) break;
-#else
         if (g_strcmp0 (disp_label, gtk_menu_item_get_label (GTK_MENU_ITEM (l->data))) < 0) break;
-#endif
         count++;
         l = l->next;
     }
@@ -582,11 +560,14 @@ static void menu_mark_default (GtkWidget *widget, gpointer data)
     // or if the BlueZ address from the widget is in the default name */
     if (!g_strcmp0 (def, wid) || (strstr (wid, "bluez") && strstr (def, wid + 20) && !strstr (def, "monitor")))
     {
+#if GTK_CHECK_VERSION(3, 0, 0)
+        gulong hid = g_signal_handler_find (widget, G_SIGNAL_MATCH_ID, g_signal_lookup ("activate", GTK_TYPE_CHECK_MENU_ITEM), 0, NULL, NULL, NULL);
+        g_signal_handler_block (widget, hid);
+        gtk_check_menu_item_set_active (GTK_CHECK_MENU_ITEM (widget), TRUE);
+        g_signal_handler_unblock (widget, hid);
+#else
         GtkWidget *image = gtk_image_new ();
         lxpanel_plugin_set_menu_icon (vol->panel, image, "dialog-ok-apply");
-#if GTK_CHECK_VERSION(3, 0, 0)
-        lxpanel_plugin_update_menu_icon (widget, image);
-#else
         gtk_image_menu_item_set_image (GTK_IMAGE_MENU_ITEM (widget), image);
 #endif
     }
@@ -618,22 +599,14 @@ static void menu_set_alsa_input (GtkWidget *widget, VolumePulsePlugin *vol)
 
 static void menu_set_bluetooth_output (GtkWidget *widget, VolumePulsePlugin *vol)
 {
-#if GTK_CHECK_VERSION(3, 0, 0)
-    bluetooth_set_output (vol, gtk_widget_get_name (widget), lxpanel_plugin_get_menu_label (widget));
-#else
     bluetooth_set_output (vol, gtk_widget_get_name (widget), gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
-#endif
 }
 
 /* Handler for menu click to set a Bluetooth device as input */
 
 static void menu_set_bluetooth_input (GtkWidget *widget, VolumePulsePlugin *vol)
 {
-#if GTK_CHECK_VERSION(3, 0, 0)
-    bluetooth_set_input (vol, gtk_widget_get_name (widget), lxpanel_plugin_get_menu_label (widget));
-#else
     bluetooth_set_input (vol, gtk_widget_get_name (widget), gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
-#endif
 }
 
 /* Handler for menu click to open the profiles dialog */

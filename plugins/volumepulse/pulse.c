@@ -782,13 +782,7 @@ static void pa_cb_get_info_inputs (pa_context *c, const pa_card_info *i, int eol
             if (nam)
             {
                 DEBUG ("pa_cb_get_info_inputs %s", nam);
-                if (!vol->menu_inputs)
-                {
-                    vol->menu_inputs = gtk_menu_new ();
-#if GTK_CHECK_VERSION(3, 0, 0)
-                    gtk_menu_set_reserve_toggle_size (GTK_MENU (vol->menu_inputs), FALSE);
-#endif
-                }
+                if (!vol->menu_inputs) vol->menu_inputs = gtk_menu_new ();
                 menu_add_item (vol, nam, nam, TRUE);
             }
         }
