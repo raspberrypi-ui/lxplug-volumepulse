@@ -1,3 +1,9 @@
+lxplug-volumepulse (0.13) bullseye; urgency=medium
+
+  * Use standard gtk_check_menu_item throughout
+
+ -- Simon Long <simon@raspberrypi.com>  Fri, 24 Jun 2022 10:29:03 +0100
+
 lxplug-volumepulse (0.12) bullseye; urgency=medium
 
   * Show silent icon when volume is zero but not in mute
