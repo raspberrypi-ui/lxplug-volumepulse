@@ -70,8 +70,6 @@ static char *bt_from_pa_name (const char *pa_name);
 static int bt_sink_source_compare (char *sink, char *source);
 static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, const gchar *owner, gpointer user_data);
 static void bt_cb_name_unowned (GDBusConnection *connection, const gchar *name, gpointer user_data);
-static void bt_cb_object_added (GDBusObjectManager *manager, GDBusObject *object, gpointer user_data);
-static void bt_cb_object_removed (GDBusObjectManager *manager, GDBusObject *object, gpointer user_data);
 static void bt_connect_device (VolumePulsePlugin *vol, const char *device);
 static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_data);
 static gboolean bt_get_profile (gpointer user_data);
@@ -211,10 +209,6 @@ static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, co
     }
     else
     {
-        /* register callbacks for devices being added or removed */
-        //g_signal_connect (vol->bt_objmanager, "object-added", G_CALLBACK (bt_cb_object_added), vol);
-        //g_signal_connect (vol->bt_objmanager, "object-removed", G_CALLBACK (bt_cb_object_removed), vol);
-
         DEBUG ("Reconnecting devices");
         vol->bt_oname = get_string ("cat ~/.btout 2> /dev/null");
         if (!g_strcmp0 (vol->bt_oname, ""))
@@ -252,55 +246,8 @@ static void bt_cb_name_unowned (GDBusConnection *connection, const gchar *name, 
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
     DEBUG ("Name %s unowned on D-Bus", name);
 
-    if (vol->bt_objmanager)
-    {
-        //g_signal_handlers_disconnect_by_func (vol->bt_objmanager, G_CALLBACK (bt_cb_object_added), vol);
-        //g_signal_handlers_disconnect_by_func (vol->bt_objmanager, G_CALLBACK (bt_cb_object_removed), vol);
-        g_object_unref (vol->bt_objmanager);
-    }
+    if (vol->bt_objmanager) g_object_unref (vol->bt_objmanager);
     vol->bt_objmanager = NULL;
-}
-
-/* Callback for BlueZ device connecting */
-
-static void bt_cb_object_added (GDBusObjectManager *manager, GDBusObject *object, gpointer user_data)
-{
-    VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
-    const char *obj = g_dbus_object_get_object_path (object);
-
-    DEBUG ("Bluetooth object %s added", obj);
-    pulse_get_default_sink_source (vol);
-    char *device = bt_from_pa_name (vol->pa_default_sink);
-    char *idevice = bt_from_pa_name (vol->pa_default_source);
-    if (g_strcmp0 (obj, device) || g_strcmp0 (obj, idevice))
-    {
-        DEBUG ("Selected Bluetooth audio device has connected");
-        volumepulse_update_display (vol);
-        //!!!!! do we need to do something else here?
-    }
-    if (device) g_free (device);
-    if (idevice) g_free (idevice);
-}
-
-/* Callback for BlueZ device disconnecting */
-
-static void bt_cb_object_removed (GDBusObjectManager *manager, GDBusObject *object, gpointer user_data)
-{
-    VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
-    const char *obj = g_dbus_object_get_object_path (object);
-
-    DEBUG ("Bluetooth object %s removed", obj);
-    pulse_get_default_sink_source (vol);
-    char *device = bt_from_pa_name (vol->pa_default_sink);
-    char *idevice = bt_from_pa_name (vol->pa_default_source);
-    if (g_strcmp0 (obj, device) || g_strcmp0 (obj, idevice))
-    {
-        DEBUG ("Selected Bluetooth audio device has disconnected");
-        volumepulse_update_display (vol);
-        //!!!!! do we need to do something else here?
-    }
-    if (device) g_free (device);
-    if (idevice) g_free (idevice);
 }
 
 /* Connect a BlueZ device */
@@ -589,13 +536,8 @@ void bluetooth_init (VolumePulsePlugin *vol)
 
 void bluetooth_terminate (VolumePulsePlugin *vol)
 {
-    /* Remove signal handlers on D-Bus object manager */
-    if (vol->bt_objmanager)
-    {
-        g_signal_handlers_disconnect_by_func (vol->bt_objmanager, G_CALLBACK (bt_cb_object_added), vol);
-        g_signal_handlers_disconnect_by_func (vol->bt_objmanager, G_CALLBACK (bt_cb_object_removed), vol);
-        g_object_unref (vol->bt_objmanager);
-    }
+    /* Remove D-Bus object manager */
+    if (vol->bt_objmanager) g_object_unref (vol->bt_objmanager);
     vol->bt_objmanager = NULL;
 
     /* Remove the watch on D-Bus */
