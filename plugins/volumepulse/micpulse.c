@@ -65,7 +65,6 @@ static void menu_set_alsa_output (GtkWidget *widget, VolumePulsePlugin *vol);
 static void menu_set_alsa_input (GtkWidget *widget, VolumePulsePlugin *vol);
 static void menu_set_bluetooth_output (GtkWidget *widget, VolumePulsePlugin *vol);
 static void menu_set_bluetooth_input (GtkWidget *widget, VolumePulsePlugin *vol);
-static void menu_open_profile_dialog (GtkWidget *widget, VolumePulsePlugin *vol);
 
 /* Profiles dialog */
 static void profiles_dialog_show (VolumePulsePlugin *vol);
@@ -375,7 +374,7 @@ static void menu_show (VolumePulsePlugin *vol)
 #if GTK_CHECK_VERSION(3, 0, 0)
     gtk_widget_set_name (vol->menu_devices, "panelmenu");
 #endif
-    vol->menu_inputs = NULL;
+    vol->menu_inputs = vol->menu_devices;
 
     // add ALSA inputs
     pulse_add_devices_to_menu (vol, TRUE, FALSE);
@@ -383,55 +382,9 @@ static void menu_show (VolumePulsePlugin *vol)
     // add Bluetooth inputs
     bluetooth_add_devices_to_menu (vol, TRUE);
 
-    // create a submenu for the outputs if there is an input submenu
-    if (vol->menu_inputs)
-    {
-        vol->menu_outputs = gtk_menu_new ();
-#if GTK_CHECK_VERSION(3, 0, 0)
-        gtk_widget_set_name (vol->menu_devices, "panelmenu");
-#endif
-    }
-    else vol->menu_outputs = vol->menu_devices;
-
-    // add internal outputs
-    pulse_add_devices_to_menu (vol, FALSE, TRUE);
-
-    // add external outputs
-    pulse_add_devices_to_menu (vol, FALSE, FALSE);
-
-    // add Bluetooth devices
-    bluetooth_add_devices_to_menu (vol, FALSE);
-
     // did we find any output devices? if not, the menu will be empty...
-    items = gtk_container_get_children (GTK_CONTAINER (vol->menu_outputs));
-    if (items != NULL)
-    {
-        if (vol->menu_inputs)
-        {
-            // insert submenus
-            mi = gtk_menu_item_new_with_label (_("Audio Outputs"));
-            gtk_menu_item_set_submenu (GTK_MENU_ITEM (mi), vol->menu_outputs);
-            gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
-
-            mi = gtk_separator_menu_item_new ();
-            gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
-
-            mi = gtk_menu_item_new_with_label (_("Audio Inputs"));
-            gtk_menu_item_set_submenu (GTK_MENU_ITEM (mi), vol->menu_inputs);
-            gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
-        }
-
-        // add the profiles menu item to the top level menu
-        mi = gtk_separator_menu_item_new ();
-        gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
-
-        mi = gtk_menu_item_new_with_label (_("Device Profiles..."));
-        g_signal_connect (mi, "activate", G_CALLBACK (menu_open_profile_dialog), (gpointer) vol);
-        gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
-
-        g_list_free (items);
-    }
-    else
+    items = gtk_container_get_children (GTK_CONTAINER (vol->menu_devices));
+    if (items == NULL)
     {
         mi = gtk_menu_item_new_with_label (_("No audio devices found"));
         gtk_widget_set_sensitive (GTK_WIDGET (mi), FALSE);
@@ -443,11 +396,10 @@ static void menu_show (VolumePulsePlugin *vol)
 
     // show the default sink and source in the menu
     pulse_get_default_sink_source (vol);
-    if (vol->menu_outputs) gtk_container_foreach (GTK_CONTAINER (vol->menu_outputs), menu_mark_default, vol);
-    if (vol->menu_inputs) gtk_container_foreach (GTK_CONTAINER (vol->menu_inputs), menu_mark_default, vol);
+    if (vol->menu_devices) gtk_container_foreach (GTK_CONTAINER (vol->menu_devices), menu_mark_default, vol);
 
     // lock menu if a dialog is open
-    if (vol->conn_dialog || vol->profiles_dialog)
+    if (vol->conn_dialog)
     {
         items = gtk_container_get_children (GTK_CONTAINER (vol->menu_devices));
         head = items;
@@ -551,9 +503,7 @@ static void menu_mark_default (GtkWidget *widget, gpointer data)
     VolumePulsePlugin *vol = (VolumePulsePlugin *) data;
     const char *def, *wid = gtk_widget_get_name (widget);
 
-    if (gtk_widget_get_parent (widget) == vol->menu_outputs) def = vol->pa_default_sink;
-    else if (gtk_widget_get_parent (widget) == vol->menu_inputs) def = vol->pa_default_source;
-    else return;
+    def = vol->pa_default_source;
     if (!def || !wid) return;
 
     // check to see if either the two names match (for an ALSA device),
@@ -607,13 +557,6 @@ static void menu_set_bluetooth_output (GtkWidget *widget, VolumePulsePlugin *vol
 static void menu_set_bluetooth_input (GtkWidget *widget, VolumePulsePlugin *vol)
 {
     bluetooth_set_input (vol, gtk_widget_get_name (widget), gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
-}
-
-/* Handler for menu click to open the profiles dialog */
-
-static void menu_open_profile_dialog (GtkWidget *widget, VolumePulsePlugin *vol)
-{
-    profiles_dialog_show (vol);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -850,6 +793,18 @@ void volumepulse_update_display (VolumePulsePlugin *vol)
     textdomain (GETTEXT_PACKAGE);
 #endif
 
+    pulse_count_devices (vol, TRUE);
+    if (vol->pa_devices)
+    {
+        gtk_widget_show_all (vol->plugin);
+        gtk_widget_set_sensitive (vol->plugin, TRUE);
+    }
+    else
+    {
+        gtk_widget_hide (vol->plugin);
+        gtk_widget_set_sensitive (vol->plugin, FALSE);
+    }
+
     /* read current mute and volume status */
     gboolean mute = pulse_get_mute (vol);
     int level = pulse_get_volume (vol);
@@ -960,6 +915,16 @@ static gboolean volumepulse_control_msg (GtkWidget *plugin, const char *cmd)
 
 /* Plugin constructor */
 
+static gboolean init_check (gpointer data)
+{
+    VolumePulsePlugin *vol = (VolumePulsePlugin *) data;
+
+    volumepulse_update_display (vol);
+
+    return FALSE;
+}
+
+
 static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *settings)
 {
     /* Allocate and initialize plugin context and set into plugin private data pointer */
@@ -1010,8 +975,11 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     bluetooth_init (vol);
 
     /* Update the display, show the widget, and return */
-    volumepulse_update_display (vol);
+    //volumepulse_update_display (vol);
     gtk_widget_show_all (vol->plugin);
+
+    g_idle_add (init_check, vol);
+
     return vol->plugin;
 }
 

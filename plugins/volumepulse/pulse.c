@@ -113,6 +113,8 @@ static void pa_cb_replace_cards_with_sources (pa_context *context, const pa_sour
 static void pa_replace_card_with_source_on_match (GtkWidget *widget, gpointer data);
 static void pa_card_check_bt_input_profile (GtkWidget *widget, gpointer data);
 static void pa_cb_add_devices_to_profile_dialog (pa_context *c, const pa_card_info *i, int eol, void *userdata);
+static void pa_cb_count_inputs (pa_context *c, const pa_card_info *i, int eol, void *userdata);
+static void pa_cb_count_outputs (pa_context *c, const pa_card_info *i, int eol, void *userdata);
 
 /*----------------------------------------------------------------------------*/
 /* PulseAudio controller initialisation / teardown                            */
@@ -1029,6 +1031,69 @@ static void pa_cb_add_devices_to_profile_dialog (pa_context *c, const pa_card_in
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
+/*----------------------------------------------------------------------------*/
+/* Utility functions                                                          */
+/*----------------------------------------------------------------------------*/
+
+/* Get a count of the number of input or output devices */
+
+int pulse_count_devices (VolumePulsePlugin *vol, gboolean input)
+{
+    DEBUG ("pulse_count_devices %d", input);
+    vol->pa_devices = 0;
+    START_PA_OPERATION
+    if (input)
+        op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_count_inputs, vol);
+    else
+        op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_count_outputs, vol);
+    END_PA_OPERATION ("get_card_info_list")
+}
+
+/*
+ * Callbacks for card count query, each of which just increments the global device counter
+ * whenever a matching device is found
+ */
+
+static void pa_cb_count_inputs (pa_context *c, const pa_card_info *i, int eol, void *userdata)
+{
+    VolumePulsePlugin *mic = (VolumePulsePlugin *) userdata;
+
+    if (!eol)
+    {
+        if (pa_card_has_port (i, PA_DIRECTION_INPUT))
+        {
+            const char *nam = pa_proplist_gets (i->proplist, "alsa.card_name");
+            if (nam)
+            {
+                DEBUG ("pa_cb_count_inputs %s", nam);
+                mic->pa_devices++;
+            }
+        }
+    }
+
+    pa_threaded_mainloop_signal (mic->pa_mainloop, 0);
+}
+
+static void pa_cb_count_outputs (pa_context *c, const pa_card_info *i, int eol, void *userdata)
+{
+    VolumePulsePlugin *mic = (VolumePulsePlugin *) userdata;
+
+    if (!eol)
+    {
+        if (pa_card_has_port (i, PA_DIRECTION_OUTPUT))
+        {
+            const char *nam = pa_proplist_gets (i->proplist, "alsa.card_name");
+            if (nam)
+            {
+                DEBUG ("pa_cb_count_outputs %s", nam);
+                mic->pa_devices++;
+            }
+        }
+    }
+
+    pa_threaded_mainloop_signal (mic->pa_mainloop, 0);
 }
 
 /* End of file */

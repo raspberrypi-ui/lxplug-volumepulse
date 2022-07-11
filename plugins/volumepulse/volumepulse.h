@@ -77,6 +77,7 @@ typedef struct {
     int pa_mute;                        /* Mute setting on default sink */
     GList *pa_indices;                  /* Indices for current streams */
     char *pa_error_msg;                 /* Error message from success / fail callback */
+    int pa_devices;
 
     /* Bluetooth interface */
     GDBusObjectManager *bt_objmanager;  /* D-Bus BlueZ object manager */
