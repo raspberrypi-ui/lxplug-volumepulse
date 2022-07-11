@@ -197,6 +197,7 @@ fi
 
 dnl Here are plugin listing.
 plugin_volumepulse=
+plugin_micpulse=
 
 AC_MSG_CHECKING([which plugins should be built dynamically])
 AC_ARG_WITH(plugins,
@@ -216,7 +217,7 @@ if test x"$plugins" != xall -a x"$plugins" != xnone; then
     fi
 fi
 
-ALL_PLUGINS_LIST="volumepulse"
+ALL_PLUGINS_LIST="volumepulse micpulse"
 AC_SUBST(ALL_PLUGINS_LIST)
 
 AC_DEFUN([check_plugin_name],[
@@ -257,7 +258,8 @@ if test "$plugins" != "none"; then
 fi
 
 PLUGINS_LIST="\
-    $plugin_volumepulse"
+    $plugin_volumepulse \
+    $plugin_micpulse"
 
 AC_SUBST(PLUGINS_LIST)
 
@@ -343,6 +345,9 @@ if test x$plugins_loading = xyes; then
 echo Building dynamic plugins:
     if test x"$plugin_volumepulse" != x; then
         AC_MSG_RESULT([    volumepulse - Control volume for PulseAudio])
+    fi
+    if test x"$plugin_micpulse" != x; then
+        AC_MSG_RESULT([    micpulse - Control microphone volume for PulseAudio])
     fi
 else
 echo Dynamic loader for plugins....... : disabled.
