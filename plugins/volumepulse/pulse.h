@@ -28,11 +28,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern void pulse_init (VolumePulsePlugin *vol);
 extern void pulse_terminate (VolumePulsePlugin *vol);
 
-extern int pulse_get_volume (VolumePulsePlugin *vol);
-extern int pulse_set_volume (VolumePulsePlugin *vol, int volume);
+extern int pulse_get_volume (VolumePulsePlugin *vol, gboolean input);
+extern int pulse_set_volume (VolumePulsePlugin *vol, int volume, gboolean input);
 
-extern int pulse_get_mute (VolumePulsePlugin *vol);
-extern int pulse_set_mute (VolumePulsePlugin *vol, int mute);
+extern int pulse_get_mute (VolumePulsePlugin *vol, gboolean input);
+extern int pulse_set_mute (VolumePulsePlugin *vol, int mute, gboolean input);
 
 extern int pulse_get_default_sink_source (VolumePulsePlugin *vol);
 extern void pulse_change_sink (VolumePulsePlugin *vol, const char *sinkname);

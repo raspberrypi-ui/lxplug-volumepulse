@@ -310,10 +310,10 @@ static void popup_window_show (GtkWidget *p)
 
 static void popup_window_scale_changed (GtkRange *range, VolumePulsePlugin *vol)
 {
-    if (pulse_get_mute (vol)) return;
+    if (pulse_get_mute (vol, TRUE)) return;
 
     /* Update the PulseAudio volume */
-    pulse_set_volume (vol, gtk_range_get_value (range));
+    pulse_set_volume (vol, gtk_range_get_value (range), TRUE);
 
     volumepulse_update_display (vol);
 }
@@ -323,7 +323,7 @@ static void popup_window_scale_changed (GtkRange *range, VolumePulsePlugin *vol)
 static void popup_window_mute_toggled (GtkWidget *widget, VolumePulsePlugin *vol)
 {
     /* Toggle the PulseAudio mute */
-    pulse_set_mute (vol, gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (widget)));
+    pulse_set_mute (vol, gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (widget)), TRUE);
 
     volumepulse_update_display (vol);
 }
@@ -733,7 +733,7 @@ static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButto
                 break;
 
         case 2: /* middle-click - toggle mute */
-                pulse_set_mute (vol, pulse_get_mute (vol) ? 0 : 1);
+                pulse_set_mute (vol, pulse_get_mute (vol, TRUE) ? 0 : 1, TRUE);
                 break;
 
         case 3: /* right-click - show device list */
@@ -765,10 +765,10 @@ static void volumepulse_menu_set_position (GtkWidget *menu, gint *px, gint *py, 
 
 static void volumepulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *evt, VolumePulsePlugin *vol)
 {
-    if (pulse_get_mute (vol)) return;
+    if (pulse_get_mute (vol, TRUE)) return;
 
     /* Update the PulseAudio volume by a step */
-    int val = pulse_get_volume (vol);
+    int val = pulse_get_volume (vol, TRUE);
 
     if (evt->direction == GDK_SCROLL_UP || evt->direction == GDK_SCROLL_LEFT
         || (evt->direction == GDK_SCROLL_SMOOTH && (evt->delta_x < 0 || evt->delta_y < 0)))
@@ -780,7 +780,7 @@ static void volumepulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *evt, Vo
     {
         if (val > 0) val -= 2;
     }
-    pulse_set_volume (vol, val);
+    pulse_set_volume (vol, val, TRUE);
 
     volumepulse_update_display (vol);
 }
@@ -806,8 +806,8 @@ void volumepulse_update_display (VolumePulsePlugin *vol)
     }
 
     /* read current mute and volume status */
-    gboolean mute = pulse_get_mute (vol);
-    int level = pulse_get_volume (vol);
+    gboolean mute = pulse_get_mute (vol, TRUE);
+    int level = pulse_get_volume (vol, TRUE);
     if (mute) level = 0;
 
     /* update icon */
@@ -869,24 +869,24 @@ static gboolean volumepulse_control_msg (GtkWidget *plugin, const char *cmd)
 
     if (!strncmp (cmd, "mute", 4))
     {
-        pulse_set_mute (vol, pulse_get_mute (vol) ? 0 : 1);
+        pulse_set_mute (vol, pulse_get_mute (vol, TRUE) ? 0 : 1, TRUE);
         volumepulse_update_display (vol);
         return TRUE;
     }
 
     if (!strncmp (cmd, "volu", 4))
     {
-        if (pulse_get_mute (vol)) pulse_set_mute (vol, 0);
+        if (pulse_get_mute (vol, TRUE)) pulse_set_mute (vol, 0, TRUE);
         else
         {
-            int volume = pulse_get_volume (vol);
+            int volume = pulse_get_volume (vol, TRUE);
             if (volume < 100)
             {
                 volume += 5;
                 volume /= 5;
                 volume *= 5;
             }
-            pulse_set_volume (vol, volume);
+            pulse_set_volume (vol, volume, TRUE);
         }
         volumepulse_update_display (vol);
         return TRUE;
@@ -894,17 +894,17 @@ static gboolean volumepulse_control_msg (GtkWidget *plugin, const char *cmd)
 
     if (!strncmp (cmd, "vold", 4))
     {
-        if (pulse_get_mute (vol)) pulse_set_mute (vol, 0);
+        if (pulse_get_mute (vol, TRUE)) pulse_set_mute (vol, 0, TRUE);
         else
         {
-            int volume = pulse_get_volume (vol);
+            int volume = pulse_get_volume (vol, TRUE);
             if (volume > 0)
             {
                 volume -= 1; // effectively -5 + 4 for rounding...
                 volume /= 5;
                 volume *= 5;
             }
-            pulse_set_volume (vol, volume);
+            pulse_set_volume (vol, volume, TRUE);
         }
         volumepulse_update_display (vol);
         return TRUE;

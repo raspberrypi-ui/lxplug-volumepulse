@@ -78,8 +78,9 @@ static int pa_set_subscription (VolumePulsePlugin *vol);
 static void pa_cb_subscription (pa_context *pacontext, pa_subscription_event_type_t event, uint32_t idx, void *userdata);
 static gboolean pa_update_disp_cb (gpointer userdata);
 static void pa_cb_generic_success (pa_context *context, int success, void *userdata);
-static int pa_get_current_vol_mute (VolumePulsePlugin *vol);
+static int pa_get_current_vol_mute (VolumePulsePlugin *vol, gboolean input);
 static void pa_cb_get_current_vol_mute (pa_context *context, const pa_sink_info *i, int eol, void *userdata);
+static void pa_cb_get_current_input_vol_mute (pa_context *context, const pa_source_info *i, int eol, void *userdata);
 static int pa_get_channels (VolumePulsePlugin *vol);
 static void pa_cb_get_channels (pa_context *context, const pa_sink_info *i, int eol, void *userdata);
 static int pa_restore_volume (VolumePulsePlugin *vol);
@@ -314,13 +315,13 @@ static void pa_cb_generic_success (pa_context *context, int success, void *userd
  * For set operations, the specific set_sink_xxx operations are called.
  */
 
-int pulse_get_volume (VolumePulsePlugin *vol)
+int pulse_get_volume (VolumePulsePlugin *vol, gboolean input)
 {
-    pa_get_current_vol_mute (vol);
+    pa_get_current_vol_mute (vol, input);
     return vol->pa_volume / PA_VOL_SCALE;
 }
 
-int pulse_set_volume (VolumePulsePlugin *vol, int volume)
+int pulse_set_volume (VolumePulsePlugin *vol, int volume, gboolean input)
 {
     pa_cvolume cvol;
     int i;
@@ -333,38 +334,61 @@ int pulse_set_volume (VolumePulsePlugin *vol, int volume)
 
     DEBUG ("pulse_set_volume %d", volume);
     START_PA_OPERATION
-    op = pa_context_set_sink_volume_by_name (vol->pa_context, vol->pa_default_sink, &cvol, &pa_cb_generic_success, vol);
+    if (input)
+        op = pa_context_set_source_volume_by_name (vol->pa_context, vol->pa_default_source, &cvol, &pa_cb_generic_success, vol);
+    else
+        op = pa_context_set_sink_volume_by_name (vol->pa_context, vol->pa_default_sink, &cvol, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_sink_volume_by_name")
 }
 
-int pulse_get_mute (VolumePulsePlugin *vol)
+int pulse_get_mute (VolumePulsePlugin *vol, gboolean input)
 {
-    pa_get_current_vol_mute (vol);
+    pa_get_current_vol_mute (vol, input);
     return vol->pa_mute;
 }
 
-int pulse_set_mute (VolumePulsePlugin *vol, int mute)
+int pulse_set_mute (VolumePulsePlugin *vol, int mute, gboolean input)
 {
     vol->pa_mute = mute;
 
-    DEBUG ("pulse_set_mute %d", mute);
+    DEBUG ("pulse_set_mute %d %d", mute, input);
     START_PA_OPERATION
-    op = pa_context_set_sink_mute_by_name (vol->pa_context, vol->pa_default_sink, vol->pa_mute, &pa_cb_generic_success, vol);
+    if (input)
+        op = pa_context_set_source_mute_by_name (vol->pa_context, vol->pa_default_source, vol->pa_mute, &pa_cb_generic_success, vol);
+    else
+        op = pa_context_set_sink_mute_by_name (vol->pa_context, vol->pa_default_sink, vol->pa_mute, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_sink_mute_by_name");
 }
 
 /* Query the controller for the volume and mute settings for the current default sink */
 
-static int pa_get_current_vol_mute (VolumePulsePlugin *vol)
+static int pa_get_current_vol_mute (VolumePulsePlugin *vol, gboolean input)
 {
     START_PA_OPERATION
-    op = pa_context_get_sink_info_by_name (vol->pa_context, vol->pa_default_sink, &pa_cb_get_current_vol_mute, vol);
+    if (input)
+        op = pa_context_get_source_info_by_name (vol->pa_context, vol->pa_default_source, &pa_cb_get_current_input_vol_mute, vol);
+    else
+        op = pa_context_get_sink_info_by_name (vol->pa_context, vol->pa_default_sink, &pa_cb_get_current_vol_mute, vol);
     END_PA_OPERATION ("get_sink_info_by_name")
 }
 
 /* Callback for volume / mute query */
 
 static void pa_cb_get_current_vol_mute (pa_context *context, const pa_sink_info *i, int eol, void *userdata)
+{
+    VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
+
+    if (!eol)
+    {
+        vol->pa_channels = i->volume.channels;
+        vol->pa_volume = i->volume.values[0];
+        vol->pa_mute = i->mute;
+    }
+
+    pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
+}
+
+static void pa_cb_get_current_input_vol_mute (pa_context *context, const pa_source_info *i, int eol, void *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
