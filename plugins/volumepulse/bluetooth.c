@@ -70,6 +70,8 @@ static char *bt_from_pa_name (const char *pa_name);
 static int bt_sink_source_compare (char *sink, char *source);
 static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, const gchar *owner, gpointer user_data);
 static void bt_cb_name_unowned (GDBusConnection *connection, const gchar *name, gpointer user_data);
+static void bt_cb_object_removed (GDBusObjectManager *manager, GDBusObject *object, gpointer user_data);
+static void bt_cb_interface_properties (GDBusObjectManagerClient *manager, GDBusObjectProxy *object_proxy, GDBusProxy *proxy, GVariant *parameters, GStrv inval, gpointer user_data);
 static void bt_connect_device (VolumePulsePlugin *vol, const char *device);
 static void bt_cb_connected (GObject *source, GAsyncResult *res, gpointer user_data);
 static gboolean bt_get_profile (gpointer user_data);
@@ -209,6 +211,10 @@ static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, co
     }
     else
     {
+        /* register callbacks for devices being added or removed */
+        g_signal_connect (vol->bt_objmanager, "object-removed", G_CALLBACK (bt_cb_object_removed), vol);
+        g_signal_connect (vol->bt_objmanager, "interface-proxy-properties-changed", G_CALLBACK (bt_cb_interface_properties), vol);
+
         DEBUG ("Reconnecting devices");
         vol->bt_oname = get_string ("cat ~/.btout 2> /dev/null");
         if (!g_strcmp0 (vol->bt_oname, ""))
@@ -246,8 +252,40 @@ static void bt_cb_name_unowned (GDBusConnection *connection, const gchar *name, 
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
     DEBUG ("Name %s unowned on D-Bus", name);
 
-    if (vol->bt_objmanager) g_object_unref (vol->bt_objmanager);
+    if (vol->bt_objmanager)
+    {
+        g_signal_handlers_disconnect_by_func (vol->bt_objmanager, G_CALLBACK (bt_cb_object_removed), vol);
+        g_signal_handlers_disconnect_by_func (vol->bt_objmanager, G_CALLBACK (bt_cb_interface_properties), vol);
+        g_object_unref (vol->bt_objmanager);
+    }
     vol->bt_objmanager = NULL;
+}
+
+/* Callback for BlueZ device disconnecting */
+
+static void bt_cb_object_removed (GDBusObjectManager *manager, GDBusObject *object, gpointer user_data)
+{
+    VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
+
+    DEBUG ("Bluetooth object %s removed", g_dbus_object_get_object_path (object));
+    volumepulse_update_display (vol);
+}
+
+/* Callback for BlueZ device property change - used to detect connection */
+
+static void bt_cb_interface_properties (GDBusObjectManagerClient *manager, GDBusObjectProxy *object_proxy, GDBusProxy *proxy, GVariant *parameters, GStrv inval, gpointer user_data)
+{
+    VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
+    GVariant *var;
+
+    DEBUG ("Bluetooth object %s property change", g_dbus_proxy_get_object_path (proxy));
+
+    var = g_variant_lookup_value (parameters, "Trusted", NULL);
+    if (var)
+    {
+        if (g_variant_get_boolean (var) == TRUE) volumepulse_update_display (vol);
+        g_variant_unref (var);
+    }
 }
 
 /* Connect a BlueZ device */
@@ -536,8 +574,13 @@ void bluetooth_init (VolumePulsePlugin *vol)
 
 void bluetooth_terminate (VolumePulsePlugin *vol)
 {
-    /* Remove D-Bus object manager */
-    if (vol->bt_objmanager) g_object_unref (vol->bt_objmanager);
+    /* Remove signal handlers on D-Bus object manager */
+    if (vol->bt_objmanager)
+    {
+        g_signal_handlers_disconnect_by_func (vol->bt_objmanager, G_CALLBACK (bt_cb_object_removed), vol);
+        g_signal_handlers_disconnect_by_func (vol->bt_objmanager, G_CALLBACK (bt_cb_interface_properties), vol);
+        g_object_unref (vol->bt_objmanager);
+    }
     vol->bt_objmanager = NULL;
 
     /* Remove the watch on D-Bus */
@@ -839,6 +882,48 @@ void bluetooth_add_devices_to_profile_dialog (VolumePulsePlugin *vol)
             objects = objects->next;
         }
     }
+}
+
+/* Loop through the devices BlueZ knows about, counting them */
+
+int bluetooth_count_devices (VolumePulsePlugin *vol, gboolean input)
+{
+    int count = 0;
+    if (vol->bt_objmanager)
+    {
+        // iterate all the objects the manager knows about
+        GList *objects = g_dbus_object_manager_get_objects (vol->bt_objmanager);
+        while (objects != NULL)
+        {
+            GDBusObject *object = (GDBusObject *) objects->data;
+            const char *objpath = g_dbus_object_get_object_path (object);
+            GList *interfaces = g_dbus_object_get_interfaces (object);
+            while (interfaces != NULL)
+            {
+                // if an object has a Device1 interface, it is a Bluetooth device - add it to the list
+                GDBusInterface *interface = G_DBUS_INTERFACE (interfaces->data);
+                if (g_strcmp0 (g_dbus_proxy_get_interface_name (G_DBUS_PROXY (interface)), "org.bluez.Device1") == 0)
+                {
+                    if (bt_has_service (vol, g_dbus_proxy_get_object_path (G_DBUS_PROXY (interface)), input ? BT_SERV_HSP : BT_SERV_AUDIO_SINK))
+                    {
+                        GVariant *name = g_dbus_proxy_get_cached_property (G_DBUS_PROXY (interface), "Alias");
+                        GVariant *icon = g_dbus_proxy_get_cached_property (G_DBUS_PROXY (interface), "Icon");
+                        GVariant *paired = g_dbus_proxy_get_cached_property (G_DBUS_PROXY (interface), "Paired");
+                        GVariant *trusted = g_dbus_proxy_get_cached_property (G_DBUS_PROXY (interface), "Trusted");
+                        if (name && icon && paired && trusted && g_variant_get_boolean (paired) && g_variant_get_boolean (trusted)) count++;
+                        g_variant_unref (name);
+                        g_variant_unref (icon);
+                        g_variant_unref (paired);
+                        g_variant_unref (trusted);
+                    }
+                    break;
+                }
+                interfaces = interfaces->next;
+            }
+            objects = objects->next;
+        }
+    }
+    return count;
 }
 
 /* End of file */

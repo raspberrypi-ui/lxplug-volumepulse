@@ -40,6 +40,7 @@ extern void bluetooth_reconnect (VolumePulsePlugin *vol, const char *name, const
 
 extern void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input);
 extern void bluetooth_add_devices_to_profile_dialog (VolumePulsePlugin *vol);
+extern int bluetooth_count_devices (VolumePulsePlugin *vol, gboolean input);
 
 /* End of file */
 /*----------------------------------------------------------------------------*/

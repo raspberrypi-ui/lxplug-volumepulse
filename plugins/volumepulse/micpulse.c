@@ -794,7 +794,7 @@ void volumepulse_update_display (VolumePulsePlugin *vol)
 #endif
 
     pulse_count_devices (vol, TRUE);
-    if (vol->pa_devices)
+    if (vol->pa_devices + bluetooth_count_devices (vol, TRUE))
     {
         gtk_widget_show_all (vol->plugin);
         gtk_widget_set_sensitive (vol->plugin, TRUE);
