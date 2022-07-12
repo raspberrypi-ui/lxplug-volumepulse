@@ -69,6 +69,7 @@ static char *bt_to_pa_name (const char *bluez_name, char *type, char *profile);
 static char *bt_from_pa_name (const char *pa_name);
 static int bt_sink_source_compare (char *sink, char *source);
 static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, const gchar *owner, gpointer user_data);
+static void bt_cb_name_owned_norc (GDBusConnection *connection, const gchar *name, const gchar *owner, gpointer user_data);
 static void bt_cb_name_unowned (GDBusConnection *connection, const gchar *name, gpointer user_data);
 static void bt_cb_object_removed (GDBusObjectManager *manager, GDBusObject *object, gpointer user_data);
 static void bt_cb_interface_properties (GDBusObjectManagerClient *manager, GDBusObjectProxy *object_proxy, GDBusProxy *proxy, GVariant *parameters, GStrv inval, gpointer user_data);
@@ -242,6 +243,28 @@ static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, co
         vol->bt_force_hsp = FALSE;
 
         bt_do_operation (vol);
+    }
+}
+
+static void bt_cb_name_owned_norc (GDBusConnection *connection, const gchar *name, const gchar *owner, gpointer user_data)
+{
+    VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
+    DEBUG ("Name %s owned on D-Bus", name);
+
+    /* BlueZ exists - get an object manager for it */
+    GError *error = NULL;
+    vol->bt_objmanager = g_dbus_object_manager_client_new_for_bus_sync (G_BUS_TYPE_SYSTEM, 0, "org.bluez", "/", NULL, NULL, NULL, NULL, &error);
+    if (error)
+    {
+        DEBUG ("Error getting object manager - %s", error->message);
+        vol->bt_objmanager = NULL;
+        g_error_free (error);
+    }
+    else
+    {
+        /* register callbacks for devices being added or removed */
+        g_signal_connect (vol->bt_objmanager, "object-removed", G_CALLBACK (bt_cb_object_removed), vol);
+        g_signal_connect (vol->bt_objmanager, "interface-proxy-properties-changed", G_CALLBACK (bt_cb_interface_properties), vol);
     }
 }
 
@@ -559,7 +582,7 @@ static void bt_connect_dialog_ok (GtkButton *button, VolumePulsePlugin *vol)
 
 /* Initialise BlueZ interface */
 
-void bluetooth_init (VolumePulsePlugin *vol)
+void bluetooth_init (VolumePulsePlugin *vol, gboolean reconnect)
 {
     /* Reset Bluetooth variables */
     vol->bt_oname = NULL;
@@ -567,7 +590,10 @@ void bluetooth_init (VolumePulsePlugin *vol)
     vol->bt_ops = NULL;
 
     /* Set up callbacks to see if BlueZ is on D-Bus */
-    vol->bt_watcher_id = g_bus_watch_name (G_BUS_TYPE_SYSTEM, "org.bluez", 0, bt_cb_name_owned, bt_cb_name_unowned, vol, NULL);
+    if (reconnect)
+        vol->bt_watcher_id = g_bus_watch_name (G_BUS_TYPE_SYSTEM, "org.bluez", 0, bt_cb_name_owned, bt_cb_name_unowned, vol, NULL);
+    else
+        vol->bt_watcher_id = g_bus_watch_name (G_BUS_TYPE_SYSTEM, "org.bluez", 0, bt_cb_name_owned_norc, bt_cb_name_unowned, vol, NULL);
 }
 
 /* Teardown BlueZ interface */

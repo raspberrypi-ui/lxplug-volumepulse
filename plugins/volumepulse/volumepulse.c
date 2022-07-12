@@ -1007,7 +1007,7 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     pulse_init (vol);
 
     /* Set up Bluez D-Bus interface */
-    bluetooth_init (vol);
+    bluetooth_init (vol, TRUE);
 
     /* Update the display, show the widget, and return */
     volumepulse_update_display (vol);
