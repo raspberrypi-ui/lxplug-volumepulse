@@ -212,10 +212,6 @@ static void bt_cb_name_owned (GDBusConnection *connection, const gchar *name, co
     }
     else
     {
-        /* register callbacks for devices being added or removed */
-        g_signal_connect (vol->bt_objmanager, "object-removed", G_CALLBACK (bt_cb_object_removed), vol);
-        g_signal_connect (vol->bt_objmanager, "interface-proxy-properties-changed", G_CALLBACK (bt_cb_interface_properties), vol);
-
         DEBUG ("Reconnecting devices");
         vol->bt_oname = get_string ("cat ~/.btout 2> /dev/null");
         if (!g_strcmp0 (vol->bt_oname, ""))

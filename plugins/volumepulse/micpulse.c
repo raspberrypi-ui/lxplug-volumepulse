@@ -42,9 +42,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /* Static function prototypes                                                 */
 /*----------------------------------------------------------------------------*/
 
-/* Helpers */
-static int get_value (const char *fmt, ...);
-
 /* Volume popup */
 static void popup_window_show (GtkWidget *p);
 static void popup_window_scale_changed (GtkRange *range, VolumePulsePlugin *vol);
@@ -126,21 +123,6 @@ char *get_string (const char *fmt, ...)
     }
     g_free (cmdline);
     return res ? res : g_strdup ("");
-}
-
-/* Call the supplied system command and parse the result for an integer value */
-
-static int get_value (const char *fmt, ...)
-{
-    char *res;
-    int n, m;
-
-    res = get_string (fmt);
-    n = sscanf (res, "%d", &m);
-    g_free (res);
-
-    if (n != 1) return -1;
-    else return m;
 }
 
 /* Destroy a widget and null its pointer */
@@ -526,9 +508,7 @@ void volumepulse_update_display (VolumePulsePlugin *vol)
     if (mute) level = 0;
 
     /* update icon */
-    const char *icon = "audio-input-microphone";
-    if (mute) icon = "audio-input-mic-muted";
-    lxpanel_plugin_set_taskbar_icon (vol->panel, vol->tray_icon, icon);
+    lxpanel_plugin_set_taskbar_icon (vol->panel, vol->tray_icon, mute ? "audio-input-mic-muted" : "audio-input-microphone");
 
     /* update popup window controls */
     if (vol->popup_window)
@@ -693,7 +673,6 @@ static void micpulse_destructor (gpointer user_data)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
 
-    close_widget (&vol->profiles_dialog);
     close_widget (&vol->conn_dialog);
     close_widget (&vol->popup_window);
     close_widget (&vol->menu_devices);
