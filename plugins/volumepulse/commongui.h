@@ -25,33 +25,23 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-extern void pulse_init (VolumePulsePlugin *vol);
-extern void pulse_terminate (VolumePulsePlugin *vol);
+extern char *get_string (const char *fmt, ...);
+extern int vsystem (const char *fmt, ...);
+extern void close_widget (GtkWidget **wid);
 
-extern int pulse_get_volume (VolumePulsePlugin *vol);
-extern int pulse_set_volume (VolumePulsePlugin *vol, int volume);
+extern void menu_add_separator (VolumePulsePlugin *vol, GtkWidget *menu);
+extern void menu_mark_default (GtkWidget *widget, gpointer data);
+extern void menu_set_alsa_output (GtkWidget *widget, VolumePulsePlugin *vol);
+extern void menu_set_alsa_input (GtkWidget *widget, VolumePulsePlugin *vol);
+extern void menu_set_bluetooth_output (GtkWidget *widget, VolumePulsePlugin *vol);
+extern void menu_set_bluetooth_input (GtkWidget *widget, VolumePulsePlugin *vol);
 
-extern int pulse_get_mute (VolumePulsePlugin *vol);
-extern int pulse_set_mute (VolumePulsePlugin *vol, int mute);
-
-extern int pulse_get_default_sink_source (VolumePulsePlugin *vol);
-extern void pulse_change_sink (VolumePulsePlugin *vol, const char *sinkname);
-extern void pulse_change_source (VolumePulsePlugin *vol, const char *sourcename);
-
-extern void pulse_mute_all_streams (VolumePulsePlugin *vol);
-extern void pulse_unmute_all_streams (VolumePulsePlugin *vol);
-
-extern void pulse_move_input_streams (VolumePulsePlugin *vol);
-extern void pulse_move_output_streams (VolumePulsePlugin *vol);
-
-extern int pulse_get_profile (VolumePulsePlugin *vol, const char *card);
-extern int pulse_set_profile (VolumePulsePlugin *vol, const char *card, const char *profile);
-
-extern int pulse_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input, gboolean internal);
-extern void pulse_update_devices_in_menu (VolumePulsePlugin *vol);
-extern int pulse_add_devices_to_profile_dialog (VolumePulsePlugin *vol);
-
-extern int pulse_count_devices (VolumePulsePlugin *vol);
+extern gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
+extern void volumepulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *evt, VolumePulsePlugin *vol);
+extern void volumepulse_theme_change (GtkWidget *widget, VolumePulsePlugin *vol);
+extern void volumepulse_panel_configuration_changed (LXPanel *panel, GtkWidget *plugin);
+extern gboolean volumepulse_control_msg (GtkWidget *plugin, const char *cmd);
+extern void volumepulse_destructor (gpointer user_data);
 
 /* End of file */
 /*----------------------------------------------------------------------------*/

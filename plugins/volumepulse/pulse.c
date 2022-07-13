@@ -27,6 +27,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "volumepulse.h"
 #include "pulse.h"
+#include "commongui.h"
 
 /*----------------------------------------------------------------------------*/
 /* Local macros and definitions                                               */
@@ -315,13 +316,13 @@ static void pa_cb_generic_success (pa_context *context, int success, void *userd
  * For set operations, the specific set_sink_xxx operations are called.
  */
 
-int pulse_get_volume (VolumePulsePlugin *vol, gboolean input)
+int pulse_get_volume (VolumePulsePlugin *vol)
 {
-    pa_get_current_vol_mute (vol, input);
+    pa_get_current_vol_mute (vol, vol->input_control);
     return vol->pa_volume / PA_VOL_SCALE;
 }
 
-int pulse_set_volume (VolumePulsePlugin *vol, int volume, gboolean input)
+int pulse_set_volume (VolumePulsePlugin *vol, int volume)
 {
     pa_cvolume cvol;
     int i;
@@ -332,28 +333,28 @@ int pulse_set_volume (VolumePulsePlugin *vol, int volume, gboolean input)
     cvol.channels = vol->pa_channels;
     for (i = 0; i < cvol.channels; i++) cvol.values[i] = vol->pa_volume;
 
-    DEBUG ("pulse_set_volume %d", volume);
+    DEBUG ("pulse_set_volume %d %d", volume, vol->input_control);
     START_PA_OPERATION
-    if (input)
+    if (vol->input_control)
         op = pa_context_set_source_volume_by_name (vol->pa_context, vol->pa_default_source, &cvol, &pa_cb_generic_success, vol);
     else
         op = pa_context_set_sink_volume_by_name (vol->pa_context, vol->pa_default_sink, &cvol, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_sink_volume_by_name")
 }
 
-int pulse_get_mute (VolumePulsePlugin *vol, gboolean input)
+int pulse_get_mute (VolumePulsePlugin *vol)
 {
-    pa_get_current_vol_mute (vol, input);
+    pa_get_current_vol_mute (vol, vol->input_control);
     return vol->pa_mute;
 }
 
-int pulse_set_mute (VolumePulsePlugin *vol, int mute, gboolean input)
+int pulse_set_mute (VolumePulsePlugin *vol, int mute)
 {
     vol->pa_mute = mute;
 
-    DEBUG ("pulse_set_mute %d %d", mute, input);
+    DEBUG ("pulse_set_mute %d %d", mute, vol->input_control);
     START_PA_OPERATION
-    if (input)
+    if (vol->input_control)
         op = pa_context_set_source_mute_by_name (vol->pa_context, vol->pa_default_source, vol->pa_mute, &pa_cb_generic_success, vol);
     else
         op = pa_context_set_sink_mute_by_name (vol->pa_context, vol->pa_default_sink, vol->pa_mute, &pa_cb_generic_success, vol);
@@ -1063,11 +1064,11 @@ static void pa_cb_add_devices_to_profile_dialog (pa_context *c, const pa_card_in
 
 /* Get a count of the number of input or output devices */
 
-int pulse_count_devices (VolumePulsePlugin *vol, gboolean input)
+int pulse_count_devices (VolumePulsePlugin *vol)
 {
     vol->pa_devices = 0;
     START_PA_OPERATION
-    if (input)
+    if (vol->input_control)
         op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_count_inputs, vol);
     else
         op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_count_outputs, vol);

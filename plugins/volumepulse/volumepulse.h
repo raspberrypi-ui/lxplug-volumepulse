@@ -61,6 +61,7 @@ typedef struct {
     guint volume_scale_handler;         /* Handler for volume_scale widget */
     guint mute_check_handler;           /* Handler for mute_check widget */
     gboolean separator;                 /* Flag to show whether a menu separator has been added */
+    gboolean input_control;             /* Flag to show whether this is an input or output controller */
 
     /* HDMI devices */
     char *hdmi_names[2];                /* Display names of HDMI devices */
@@ -92,14 +93,10 @@ typedef struct {
 
 /* Functions in volumepulse.c needed in other modules */
 
-extern char *get_string (const char *fmt, ...);
-extern int vsystem (const char *fmt, ...);
-extern void close_widget (GtkWidget **wid);
-
-extern void volumepulse_update_display (VolumePulsePlugin *vol);
+extern void menu_show (VolumePulsePlugin *vol);
 extern void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input);
-extern void menu_add_separator (VolumePulsePlugin *vol, GtkWidget *menu);
 extern void profiles_dialog_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name);
+extern void volumepulse_update_display (VolumePulsePlugin *vol);
 
 /* End of file */
 /*----------------------------------------------------------------------------*/

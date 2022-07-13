@@ -18,7 +18,8 @@ pkglibdir = $(libdir)/lxpanel/plugins
 volumepulse_la_SOURCES = \
 	volumepulse/volumepulse.c \
 	volumepulse/pulse.c \
-	volumepulse/bluetooth.c
+	volumepulse/bluetooth.c \
+	volumepulse/commongui.c
 
 volumepulse_la_CFLAGS = \
 	-I$(top_srcdir) \
@@ -39,7 +40,8 @@ volumepulse_la_LDFLAGS = \
 micpulse_la_SOURCES = \
 	volumepulse/micpulse.c \
 	volumepulse/pulse.c \
-	volumepulse/bluetooth.c
+	volumepulse/bluetooth.c \
+	volumepulse/commongui.c
 
 micpulse_la_CFLAGS = \
 	-I$(top_srcdir) \
