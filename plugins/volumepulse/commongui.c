@@ -227,6 +227,44 @@ static gboolean popup_button_press (GtkWidget *widget, GdkEventButton *event, Vo
 /* Device select menu                                                         */
 /*----------------------------------------------------------------------------*/
 
+/* Create the device select menu */
+
+void menu_create (VolumePulsePlugin *vol)
+{
+    GtkWidget *mi;
+    GList *items;
+
+    // create input selector
+    vol->menu_devices = gtk_menu_new ();
+    gtk_widget_set_name (vol->menu_devices, "panelmenu");
+
+    // add internal devices
+    pulse_add_devices_to_menu (vol, TRUE);
+
+    // add ALSA devices
+    pulse_add_devices_to_menu (vol, FALSE);
+
+    // add Bluetooth devices
+    bluetooth_add_devices_to_menu (vol);
+
+    // update the menu item names, which are currently ALSA device names, to PulseAudio sink/source names
+    pulse_update_devices_in_menu (vol);
+
+    // show the default sink and source in the menu
+    pulse_get_default_sink_source (vol);
+    gtk_container_foreach (GTK_CONTAINER (vol->menu_devices), menu_mark_default, vol);
+
+    // did we find any devices? if not, the menu will be empty...
+    items = gtk_container_get_children (GTK_CONTAINER (vol->menu_devices));
+    if (items == NULL)
+    {
+        mi = gtk_menu_item_new_with_label (_("No audio devices found"));
+        gtk_widget_set_sensitive (GTK_WIDGET (mi), FALSE);
+        gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
+    }
+    else g_list_free (items);
+}
+
 /* Add a separator to the menu (but only if there isn't already one there...) */
 
 void menu_add_separator (VolumePulsePlugin *vol, GtkWidget *menu)
@@ -271,40 +309,40 @@ void menu_mark_default (GtkWidget *widget, gpointer data)
     }
 }
 
-/* Handler for menu click to set an ALSA device as output */
+/* Handler for menu click to set an ALSA device as output or input */
 
-void menu_set_alsa_output (GtkWidget *widget, VolumePulsePlugin *vol)
+void menu_set_alsa_device (GtkWidget *widget, VolumePulsePlugin *vol)
 {
-    bluetooth_remove_output (vol);
+    if (vol->input_control)
+        bluetooth_remove_input (vol);
+    else
+        bluetooth_remove_output (vol);
+
     pulse_unmute_all_streams (vol);
-    pulse_change_sink (vol, gtk_widget_get_name (widget));
-    pulse_move_output_streams (vol);
+
+    if (vol->input_control)
+    {
+        pulse_change_source (vol, gtk_widget_get_name (widget));
+        pulse_move_input_streams (vol);
+    }
+    else
+    {
+        pulse_change_sink (vol, gtk_widget_get_name (widget));
+        pulse_move_output_streams (vol);
+    }
+
     volumepulse_update_display (vol);
 }
 
-/* Handler for menu click to set an ALSA device as input */
+/* Handler for menu click to set a Bluetooth device as output or input */
 
-void menu_set_alsa_input (GtkWidget *widget, VolumePulsePlugin *vol)
+void menu_set_bluetooth_device (GtkWidget *widget, VolumePulsePlugin *vol)
 {
-    bluetooth_remove_input (vol);
-    pulse_unmute_all_streams (vol);
-    pulse_change_source (vol, gtk_widget_get_name (widget));
-    pulse_move_input_streams (vol);
-    volumepulse_update_display (vol);
-}
+    if (vol->input_control)
+        bluetooth_set_input (vol, gtk_widget_get_name (widget), gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
+    else
+        bluetooth_set_output (vol, gtk_widget_get_name (widget), gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
 
-/* Handler for menu click to set a Bluetooth device as output */
-
-void menu_set_bluetooth_output (GtkWidget *widget, VolumePulsePlugin *vol)
-{
-    bluetooth_set_output (vol, gtk_widget_get_name (widget), gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
-}
-
-/* Handler for menu click to set a Bluetooth device as input */
-
-void menu_set_bluetooth_input (GtkWidget *widget, VolumePulsePlugin *vol)
-{
-    bluetooth_set_input (vol, gtk_widget_get_name (widget), gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
 }
 
 /*----------------------------------------------------------------------------*/

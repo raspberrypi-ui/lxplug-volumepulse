@@ -25,7 +25,7 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-extern void bluetooth_init (VolumePulsePlugin *vol, gboolean reconnect);
+extern void bluetooth_init (VolumePulsePlugin *vol);
 extern void bluetooth_terminate (VolumePulsePlugin *vol);
 
 extern gboolean bluetooth_is_connected (VolumePulsePlugin *vol, const char *path);

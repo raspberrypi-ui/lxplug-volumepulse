@@ -579,7 +579,7 @@ static void bt_connect_dialog_ok (GtkButton *button, VolumePulsePlugin *vol)
 
 /* Initialise BlueZ interface */
 
-void bluetooth_init (VolumePulsePlugin *vol, gboolean reconnect)
+void bluetooth_init (VolumePulsePlugin *vol)
 {
     /* Reset Bluetooth variables */
     vol->bt_oname = NULL;
@@ -587,10 +587,10 @@ void bluetooth_init (VolumePulsePlugin *vol, gboolean reconnect)
     vol->bt_ops = NULL;
 
     /* Set up callbacks to see if BlueZ is on D-Bus */
-    if (reconnect)
-        vol->bt_watcher_id = g_bus_watch_name (G_BUS_TYPE_SYSTEM, "org.bluez", 0, bt_cb_name_owned, bt_cb_name_unowned, vol, NULL);
-    else
+    if (vol->input_control)
         vol->bt_watcher_id = g_bus_watch_name (G_BUS_TYPE_SYSTEM, "org.bluez", 0, bt_cb_name_owned_norc, bt_cb_name_unowned, vol, NULL);
+    else
+        vol->bt_watcher_id = g_bus_watch_name (G_BUS_TYPE_SYSTEM, "org.bluez", 0, bt_cb_name_owned, bt_cb_name_unowned, vol, NULL);
 }
 
 /* Teardown BlueZ interface */
