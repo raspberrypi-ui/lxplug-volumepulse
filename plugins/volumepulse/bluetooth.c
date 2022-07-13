@@ -813,7 +813,7 @@ void bluetooth_reconnect (VolumePulsePlugin *vol, const char *name, const char *
 
 /* Loop through the devices BlueZ knows about, adding them to the device menu */
 
-void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input)
+void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol)
 {
     vol->separator = FALSE;
     if (vol->bt_objmanager)
@@ -831,7 +831,7 @@ void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input)
                 GDBusInterface *interface = G_DBUS_INTERFACE (interfaces->data);
                 if (g_strcmp0 (g_dbus_proxy_get_interface_name (G_DBUS_PROXY (interface)), "org.bluez.Device1") == 0)
                 {
-                    if (bt_has_service (vol, g_dbus_proxy_get_object_path (G_DBUS_PROXY (interface)), input ? BT_SERV_HSP : BT_SERV_AUDIO_SINK))
+                    if (bt_has_service (vol, g_dbus_proxy_get_object_path (G_DBUS_PROXY (interface)), vol->input_control ? BT_SERV_HSP : BT_SERV_AUDIO_SINK))
                     {
                         GVariant *name = g_dbus_proxy_get_cached_property (G_DBUS_PROXY (interface), "Alias");
                         GVariant *icon = g_dbus_proxy_get_cached_property (G_DBUS_PROXY (interface), "Icon");
@@ -840,10 +840,8 @@ void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input)
                         if (name && icon && paired && trusted && g_variant_get_boolean (paired) && g_variant_get_boolean (trusted))
                         {
                             // create a menu if there isn't one already
-                            if (input && !vol->menu_inputs) vol->menu_inputs = gtk_menu_new ();
-                            menu_add_separator (vol, input ? vol->menu_inputs : vol->menu_outputs);
-                            if (input) menu_add_item (vol, g_variant_get_string (name, NULL), objpath, TRUE);
-                            else menu_add_item (vol, g_variant_get_string (name, NULL), objpath, FALSE);
+                            menu_add_separator (vol, vol->menu_devices);
+                            menu_add_item (vol, g_variant_get_string (name, NULL), objpath);
                         }
                         g_variant_unref (name);
                         g_variant_unref (icon);

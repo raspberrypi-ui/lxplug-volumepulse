@@ -140,50 +140,26 @@ void menu_show (VolumePulsePlugin *vol)
     // create input selector
     vol->menu_devices = gtk_menu_new ();
     gtk_widget_set_name (vol->menu_devices, "panelmenu");
-    vol->menu_inputs = NULL;
 
-    // add ALSA inputs
-    //pulse_add_devices_to_menu (vol, TRUE, FALSE);
+    // add internal devices
+    pulse_add_devices_to_menu (vol, TRUE);
 
-    // add Bluetooth inputs
-    //bluetooth_add_devices_to_menu (vol, TRUE);
-
-    // create a submenu for the outputs if there is an input submenu
-    if (vol->menu_inputs)
-    {
-        vol->menu_outputs = gtk_menu_new ();
-        gtk_widget_set_name (vol->menu_devices, "panelmenu");
-    }
-    else vol->menu_outputs = vol->menu_devices;
-
-    // add internal outputs
-    pulse_add_devices_to_menu (vol, FALSE, TRUE);
-
-    // add external outputs
-    pulse_add_devices_to_menu (vol, FALSE, FALSE);
+    // add ALSA devices
+    pulse_add_devices_to_menu (vol, FALSE);
 
     // add Bluetooth devices
-    bluetooth_add_devices_to_menu (vol, FALSE);
+    bluetooth_add_devices_to_menu (vol);
 
-    // did we find any output devices? if not, the menu will be empty...
-    items = gtk_container_get_children (GTK_CONTAINER (vol->menu_outputs));
-    if (items != NULL)
+    // did we find any devices? if not, the menu will be empty...
+    items = gtk_container_get_children (GTK_CONTAINER (vol->menu_devices));
+    if (items == NULL)
     {
-        if (vol->menu_inputs)
-        {
-            // insert submenus
-            mi = gtk_menu_item_new_with_label (_("Audio Outputs"));
-            gtk_menu_item_set_submenu (GTK_MENU_ITEM (mi), vol->menu_outputs);
-            gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
-
-            mi = gtk_separator_menu_item_new ();
-            gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
-
-            mi = gtk_menu_item_new_with_label (_("Audio Inputs"));
-            gtk_menu_item_set_submenu (GTK_MENU_ITEM (mi), vol->menu_inputs);
-            gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
-        }
-
+        mi = gtk_menu_item_new_with_label (_("No audio devices found"));
+        gtk_widget_set_sensitive (GTK_WIDGET (mi), FALSE);
+        gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
+    }
+    else
+    {
         // add the profiles menu item to the top level menu
         mi = gtk_separator_menu_item_new ();
         gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
@@ -194,20 +170,13 @@ void menu_show (VolumePulsePlugin *vol)
 
         g_list_free (items);
     }
-    else
-    {
-        mi = gtk_menu_item_new_with_label (_("No audio devices found"));
-        gtk_widget_set_sensitive (GTK_WIDGET (mi), FALSE);
-        gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
-    }
 
     // update the menu item names, which are currently ALSA device names, to PulseAudio sink/source names
     pulse_update_devices_in_menu (vol);
 
     // show the default sink and source in the menu
     pulse_get_default_sink_source (vol);
-    if (vol->menu_outputs) gtk_container_foreach (GTK_CONTAINER (vol->menu_outputs), menu_mark_default, vol);
-    if (vol->menu_inputs) gtk_container_foreach (GTK_CONTAINER (vol->menu_inputs), menu_mark_default, vol);
+    gtk_container_foreach (GTK_CONTAINER (vol->menu_devices), menu_mark_default, vol);
 
     // lock menu if a dialog is open
     if (vol->conn_dialog || vol->profiles_dialog)
@@ -228,9 +197,8 @@ void menu_show (VolumePulsePlugin *vol)
 
 /* Add a device entry to the menu */
 
-void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input)
+void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name)
 {
-    GtkWidget *menu = input ? vol->menu_inputs : vol->menu_outputs;
     GList *list, *l;
     int count;
     const char *disp_label = device_display_name (vol, label);
@@ -239,22 +207,17 @@ void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name,
     gtk_widget_set_name (mi, name);
     if (strstr (name, "bluez"))
     {
-        if (input) g_signal_connect (mi, "activate", G_CALLBACK (menu_set_bluetooth_input), (gpointer) vol);
-        else g_signal_connect (mi, "activate", G_CALLBACK (menu_set_bluetooth_output), (gpointer) vol);
+        g_signal_connect (mi, "activate", G_CALLBACK (menu_set_bluetooth_output), (gpointer) vol);
     }
     else
     {
-        if (input) g_signal_connect (mi, "activate", G_CALLBACK (menu_set_alsa_input), (gpointer) vol);
-        else g_signal_connect (mi, "activate", G_CALLBACK (menu_set_alsa_output), (gpointer) vol);
+        g_signal_connect (mi, "activate", G_CALLBACK (menu_set_alsa_output), (gpointer) vol);
         gtk_widget_set_sensitive (mi, FALSE);
-        if (input)
-            gtk_widget_set_tooltip_text (mi, _("Input from this device not available in the current profile"));
-        else
-            gtk_widget_set_tooltip_text (mi, _("Output to this device not available in the current profile"));
+        gtk_widget_set_tooltip_text (mi, _("Output to this device not available in the current profile"));
     }
 
     // find the start point of the last section - either a separator or the beginning of the list
-    list = gtk_container_get_children (GTK_CONTAINER (menu));
+    list = gtk_container_get_children (GTK_CONTAINER (vol->menu_devices));
     count = g_list_length (list);
     l = g_list_last (list);
     while (l)
@@ -276,7 +239,7 @@ void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name,
         l = l->next;
     }
 
-    gtk_menu_shell_insert (GTK_MENU_SHELL (menu), mi, count);
+    gtk_menu_shell_insert (GTK_MENU_SHELL (vol->menu_devices), mi, count);
     g_list_free (list);
 }
 

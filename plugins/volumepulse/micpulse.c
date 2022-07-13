@@ -59,15 +59,17 @@ void menu_show (VolumePulsePlugin *vol)
     // create input selector
     vol->menu_devices = gtk_menu_new ();
     gtk_widget_set_name (vol->menu_devices, "panelmenu");
-    vol->menu_inputs = vol->menu_devices;
 
-    // add ALSA inputs
-    pulse_add_devices_to_menu (vol, TRUE, FALSE);
+    // add internal devices
+    pulse_add_devices_to_menu (vol, TRUE);
 
-    // add Bluetooth inputs
-    bluetooth_add_devices_to_menu (vol, TRUE);
+    // add ALSA devices
+    pulse_add_devices_to_menu (vol, FALSE);
 
-    // did we find any input devices? if not, the menu will be empty...
+    // add Bluetooth devices
+    bluetooth_add_devices_to_menu (vol);
+
+    // did we find any devices? if not, the menu will be empty...
     items = gtk_container_get_children (GTK_CONTAINER (vol->menu_devices));
     if (items == NULL)
     {
@@ -81,10 +83,10 @@ void menu_show (VolumePulsePlugin *vol)
 
     // show the default sink and source in the menu
     pulse_get_default_sink_source (vol);
-    if (vol->menu_devices) gtk_container_foreach (GTK_CONTAINER (vol->menu_devices), menu_mark_default, vol);
+    gtk_container_foreach (GTK_CONTAINER (vol->menu_devices), menu_mark_default, vol);
 
     // lock menu if a dialog is open
-    if (vol->conn_dialog)
+    if (vol->conn_dialog || vol->profiles_dialog)
     {
         items = gtk_container_get_children (GTK_CONTAINER (vol->menu_devices));
         head = items;
@@ -102,9 +104,8 @@ void menu_show (VolumePulsePlugin *vol)
 
 /* Add a device entry to the menu */
 
-void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input)
+void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name)
 {
-    GtkWidget *menu = input ? vol->menu_inputs : vol->menu_outputs;
     GList *list, *l;
     int count;
 
@@ -122,7 +123,7 @@ void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name,
     }
 
     // find the start point of the last section - either a separator or the beginning of the list
-    list = gtk_container_get_children (GTK_CONTAINER (menu));
+    list = gtk_container_get_children (GTK_CONTAINER (vol->menu_devices));
     count = g_list_length (list);
     l = g_list_last (list);
     while (l)
@@ -144,7 +145,7 @@ void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name,
         l = l->next;
     }
 
-    gtk_menu_shell_insert (GTK_MENU_SHELL (menu), mi, count);
+    gtk_menu_shell_insert (GTK_MENU_SHELL (vol->menu_devices), mi, count);
     g_list_free (list);
 }
 

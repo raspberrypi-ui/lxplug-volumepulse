@@ -49,8 +49,6 @@ typedef struct {
     GtkWidget *popup_volume_scale;      /* Scale for volume */
     GtkWidget *popup_mute_check;        /* Checkbox for mute state */
     GtkWidget *menu_devices;            /* Right-click menu */
-    GtkWidget *menu_outputs;            /* Output select menu */
-    GtkWidget *menu_inputs;             /* Input select menu */
     GtkWidget *profiles_dialog;         /* Device profiles dialog */
     GtkWidget *profiles_int_box;        /* Vbox for profile combos */
     GtkWidget *profiles_ext_box;        /* Vbox for profile combos */
@@ -78,7 +76,7 @@ typedef struct {
     int pa_mute;                        /* Mute setting on default sink */
     GList *pa_indices;                  /* Indices for current streams */
     char *pa_error_msg;                 /* Error message from success / fail callback */
-    int pa_devices;
+    int pa_devices;                     /* Counter for pulse devices */
 
     /* Bluetooth interface */
     GDBusObjectManager *bt_objmanager;  /* D-Bus BlueZ object manager */
@@ -94,7 +92,7 @@ typedef struct {
 /* Functions in volumepulse.c needed in other modules */
 
 extern void menu_show (VolumePulsePlugin *vol);
-extern void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input);
+extern void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name);
 extern void profiles_dialog_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name);
 extern void volumepulse_update_display (VolumePulsePlugin *vol);
 

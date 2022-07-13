@@ -778,12 +778,13 @@ int pulse_set_profile (VolumePulsePlugin *vol, const char *card, const char *pro
  
 /* Loop through all cards, adding each to relevant part of device menu */
 
-int pulse_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input, gboolean internal)
+int pulse_add_devices_to_menu (VolumePulsePlugin *vol, gboolean internal)
 {
+    if (internal && vol->input_control) return 0;
     vol->separator = FALSE;
-    DEBUG ("pulse_add_devices_to_menu %d %d", input, internal);
+    DEBUG ("pulse_add_devices_to_menu %d %d", vol->input_control, internal);
     START_PA_OPERATION
-    if (input)
+    if (vol->input_control)
         op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_get_info_inputs, vol);
     else if (internal)
         op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_get_info_internal, vol);
@@ -809,8 +810,7 @@ static void pa_cb_get_info_inputs (pa_context *c, const pa_card_info *i, int eol
             if (nam)
             {
                 DEBUG ("pa_cb_get_info_inputs %s", nam);
-                if (!vol->menu_inputs) vol->menu_inputs = gtk_menu_new ();
-                menu_add_item (vol, nam, nam, TRUE);
+                menu_add_item (vol, nam, nam);
             }
         }
     }
@@ -833,7 +833,7 @@ static void pa_cb_get_info_internal (pa_context *c, const pa_card_info *i, int e
                 {
                     if (!strcmp (nam, "bcm2835 Headphones") && vsystem ("raspi-config nonint has_analog")) return;
                     DEBUG ("pa_cb_get_info_internal %s", nam);
-                    menu_add_item (vol, nam, nam, FALSE);
+                    menu_add_item (vol, nam, nam);
                 }
             }
         }
@@ -856,8 +856,8 @@ static void pa_cb_get_info_external (pa_context *c, const pa_card_info *i, int e
                 if (nam)
                 {
                     DEBUG ("pa_cb_get_info_external %s", nam);
-                    menu_add_separator (vol, vol->menu_outputs);
-                    menu_add_item (vol, nam, nam, FALSE);
+                    menu_add_separator (vol, vol->menu_devices);
+                    menu_add_item (vol, nam, nam);
                 }
             }
         }
@@ -883,8 +883,8 @@ static gboolean pa_card_has_port (const pa_card_info *i, pa_direction_t dir)
 
 void pulse_update_devices_in_menu (VolumePulsePlugin *vol)
 {
-    pa_replace_cards_with_sinks (vol);
-    pa_replace_cards_with_sources (vol);
+    if (vol->input_control) pa_replace_cards_with_sources (vol);
+    else pa_replace_cards_with_sinks (vol);
 }
 
 /* Query controller for list of sinks */
@@ -903,13 +903,13 @@ static void pa_cb_replace_cards_with_sinks (pa_context *context, const pa_sink_i
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
-    if (!eol && vol->menu_outputs)
+    if (!eol && vol->menu_devices)
     {
         const char *api = pa_proplist_gets (i->proplist, "device.api");
         if (!g_strcmp0 (api, "alsa"))
-            gtk_container_foreach (GTK_CONTAINER (vol->menu_outputs), pa_replace_card_with_sink_on_match, (void *) i);
+            gtk_container_foreach (GTK_CONTAINER (vol->menu_devices), pa_replace_card_with_sink_on_match, (void *) i);
         else
-            gtk_container_foreach (GTK_CONTAINER (vol->menu_outputs), pa_card_check_bt_output_profile, (void *) i);
+            gtk_container_foreach (GTK_CONTAINER (vol->menu_devices), pa_card_check_bt_output_profile, (void *) i);
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
@@ -964,13 +964,13 @@ static void pa_cb_replace_cards_with_sources (pa_context *context, const pa_sour
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
-    if (!eol && vol->menu_inputs)
+    if (!eol && vol->menu_devices)
     {
         const char *api = pa_proplist_gets (i->proplist, "device.api");
         if (!g_strcmp0 (api, "alsa"))
-            gtk_container_foreach (GTK_CONTAINER (vol->menu_inputs), pa_replace_card_with_source_on_match, (void *) i);
+            gtk_container_foreach (GTK_CONTAINER (vol->menu_devices), pa_replace_card_with_source_on_match, (void *) i);
         else
-            gtk_container_foreach (GTK_CONTAINER (vol->menu_inputs), pa_card_check_bt_input_profile, (void *) i);
+            gtk_container_foreach (GTK_CONTAINER (vol->menu_devices), pa_card_check_bt_input_profile, (void *) i);
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);

@@ -256,9 +256,8 @@ void menu_mark_default (GtkWidget *widget, gpointer data)
     VolumePulsePlugin *vol = (VolumePulsePlugin *) data;
     const char *def, *wid = gtk_widget_get_name (widget);
 
-    if (gtk_widget_get_parent (widget) == vol->menu_outputs) def = vol->pa_default_sink;
-    else if (gtk_widget_get_parent (widget) == vol->menu_inputs) def = vol->pa_default_source;
-    else return;
+    if (vol->input_control) def = vol->pa_default_source;
+    else def = vol->pa_default_sink;
     if (!def || !wid) return;
 
     // check to see if either the two names match (for an ALSA device),

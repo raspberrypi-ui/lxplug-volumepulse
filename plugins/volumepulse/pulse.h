@@ -47,7 +47,7 @@ extern void pulse_move_output_streams (VolumePulsePlugin *vol);
 extern int pulse_get_profile (VolumePulsePlugin *vol, const char *card);
 extern int pulse_set_profile (VolumePulsePlugin *vol, const char *card, const char *profile);
 
-extern int pulse_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input, gboolean internal);
+extern int pulse_add_devices_to_menu (VolumePulsePlugin *vol, gboolean internal);
 extern void pulse_update_devices_in_menu (VolumePulsePlugin *vol);
 extern int pulse_add_devices_to_profile_dialog (VolumePulsePlugin *vol);
 
