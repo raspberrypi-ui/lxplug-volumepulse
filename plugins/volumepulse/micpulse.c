@@ -25,19 +25,10 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
-
-#include <stdlib.h>
-#include <string.h>
-#include <glib.h>
-
-#include "plugin.h"
 #include "volumepulse.h"
+#include "commongui.h"
 #include "pulse.h"
 #include "bluetooth.h"
-#include "commongui.h"
 
 /*----------------------------------------------------------------------------*/
 /* Static function prototypes                                                 */
@@ -125,10 +116,6 @@ void profiles_dialog_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWid
 
 void volumepulse_update_display (VolumePulsePlugin *vol)
 {
-#ifdef ENABLE_NLS
-    textdomain (GETTEXT_PACKAGE);
-#endif
-
     pulse_count_devices (vol);
     if (vol->pa_devices + bluetooth_count_devices (vol, TRUE))
     {
@@ -184,7 +171,6 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     setlocale (LC_ALL, "");
     bindtextdomain (GETTEXT_PACKAGE, PACKAGE_LOCALE_DIR);
     bind_textdomain_codeset (GETTEXT_PACKAGE, "UTF-8");
-    textdomain (GETTEXT_PACKAGE);
 #endif
 
     vol->input_control = TRUE;

@@ -26,8 +26,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 #include "volumepulse.h"
-#include "pulse.h"
 #include "commongui.h"
+
+#include "pulse.h"
 
 /*----------------------------------------------------------------------------*/
 /* Local macros and definitions                                               */

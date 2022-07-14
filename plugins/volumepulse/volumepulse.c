@@ -25,19 +25,10 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
-
-#include <stdlib.h>
-#include <string.h>
-#include <glib.h>
-
-#include "plugin.h"
 #include "volumepulse.h"
+#include "commongui.h"
 #include "pulse.h"
 #include "bluetooth.h"
-#include "commongui.h"
 
 /*----------------------------------------------------------------------------*/
 /* Static function prototypes                                                 */
@@ -358,10 +349,6 @@ static gboolean profiles_dialog_delete (GtkWidget *wid, GdkEvent *event, VolumeP
 
 void volumepulse_update_display (VolumePulsePlugin *vol)
 {
-#ifdef ENABLE_NLS
-    textdomain (GETTEXT_PACKAGE);
-#endif
-
     /* read current mute and volume status */
     gboolean mute = pulse_get_mute (vol);
     int level = pulse_get_volume (vol);
@@ -413,7 +400,6 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     setlocale (LC_ALL, "");
     bindtextdomain (GETTEXT_PACKAGE, PACKAGE_LOCALE_DIR);
     bind_textdomain_codeset (GETTEXT_PACKAGE, "UTF-8");
-    textdomain (GETTEXT_PACKAGE);
 #endif
 
     vol->input_control = FALSE;

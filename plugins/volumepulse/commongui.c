@@ -25,18 +25,10 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
-
-#include <stdlib.h>
-#include <string.h>
-#include <glib.h>
-
-#include "plugin.h"
 #include "volumepulse.h"
 #include "pulse.h"
 #include "bluetooth.h"
+
 #include "commongui.h"
 
 /*----------------------------------------------------------------------------*/
@@ -353,10 +345,6 @@ void menu_set_bluetooth_device (GtkWidget *widget, VolumePulsePlugin *vol)
 
 gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol)
 {
-#ifdef ENABLE_NLS
-    textdomain (GETTEXT_PACKAGE);
-#endif
-
     switch (event->button)
     {
         case 1: /* left-click - show or hide volume popup */
