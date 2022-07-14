@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: lxplug_volumepulse 0.1\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2020-09-08 16:21+0100\n"
+"POT-Creation-Date: 2022-07-14 12:50+0100\n"
 "PO-Revision-Date: 2020-09-08 16:22+0100\n"
 "Last-Translator: Simon Long <simon@raspberrypi.com>\n"
 "Language-Team: English (British)\n"
@@ -17,109 +17,113 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: ../plugins/volumepulse/volumepulse.c:179
+#: ../plugins/volumepulse/volumepulse.c:112
 msgid "HDMI"
 msgstr "HDMI"
 
-#: ../plugins/volumepulse/volumepulse.c:189
+#: ../plugins/volumepulse/volumepulse.c:125
 msgid "AV Jack"
 msgstr "AV Jack"
 
-#. Create a check button as the child of the vertical box.
-#: ../plugins/volumepulse/volumepulse.c:260
-msgid "Mute"
-msgstr "Mute"
-
-#. insert submenus
-#: ../plugins/volumepulse/volumepulse.c:349
-msgid "Audio Outputs"
-msgstr "Audio Outputs"
-
-#: ../plugins/volumepulse/volumepulse.c:356
-msgid "Audio Inputs"
-msgstr "Audio Inputs"
-
-#: ../plugins/volumepulse/volumepulse.c:365
+#: ../plugins/volumepulse/volumepulse.c:148
 msgid "Device Profiles..."
 msgstr "Device Profiles..."
 
-#: ../plugins/volumepulse/volumepulse.c:371
-msgid "No audio devices found"
-msgstr "No audio devices found"
-
-#: ../plugins/volumepulse/volumepulse.c:420
-msgid "Input from this device not available in the current profile"
-msgstr "Input from this device not available in the current profile"
-
-#: ../plugins/volumepulse/volumepulse.c:422
+#: ../plugins/volumepulse/volumepulse.c:181
 msgid "Output to this device not available in the current profile"
 msgstr "Output to this device not available in the current profile"
 
-#: ../plugins/volumepulse/volumepulse.c:550
+#: ../plugins/volumepulse/volumepulse.c:231
 msgid "Device Profiles"
 msgstr "Device Profiles"
 
-#: ../plugins/volumepulse/volumepulse.c:608
+#: ../plugins/volumepulse/volumepulse.c:257
+msgid "_OK"
+msgstr "_OK"
+
+#: ../plugins/volumepulse/volumepulse.c:289
 msgid "Device not connected"
 msgstr "Device not connected"
 
 #. update tooltip
-#: ../plugins/volumepulse/volumepulse.c:773
-#: ../plugins/volumepulse/volumepulse.c:882
+#: ../plugins/volumepulse/volumepulse.c:396
 msgid "Volume control"
 msgstr "Volume control"
 
-#: ../plugins/volumepulse/volumepulse.c:930
+#: ../plugins/volumepulse/volumepulse.c:469
 msgid "Volume Control (PulseAudio)"
 msgstr "Volume Control (PulseAudio)"
 
-#: ../plugins/volumepulse/volumepulse.c:931
+#: ../plugins/volumepulse/volumepulse.c:470
 msgid "Display and control volume for PulseAudio"
 msgstr "Display and control volume for PulseAudio"
 
-#: ../plugins/volumepulse/bluetooth.c:223
+#: ../plugins/volumepulse/bluetooth.c:230
 msgid "Reconnecting Bluetooth devices..."
 msgstr "Reconnecting Bluetooth devices..."
 
-#: ../plugins/volumepulse/bluetooth.c:314
+#: ../plugins/volumepulse/bluetooth.c:332
 #, c-format
 msgid "Bluetooth %s device not found"
 msgstr "Bluetooth %s device not found"
 
 #. update dialog to show a warning
-#: ../plugins/volumepulse/bluetooth.c:373
+#: ../plugins/volumepulse/bluetooth.c:403
 msgid "Device not found by PulseAudio"
 msgstr "Device not found by PulseAudio"
 
-#: ../plugins/volumepulse/bluetooth.c:516
-msgid "Connecting Audio Device"
-msgstr "Connecting Audio Device"
+#: ../plugins/volumepulse/bluetooth.c:411
+#, c-format
+msgid "Could not set profile for device : %s"
+msgstr "Could not set profile for device : %s"
 
-#: ../plugins/volumepulse/bluetooth.c:538
+#: ../plugins/volumepulse/bluetooth.c:561
 #, c-format
 msgid "Failed to connect to Bluetooth device - %s"
 msgstr "Failed to connect to Bluetooth device - %s"
 
-#: ../plugins/volumepulse/bluetooth.c:544
-msgid "_OK"
-msgstr "_OK"
-
-#: ../plugins/volumepulse/bluetooth.c:615
+#: ../plugins/volumepulse/bluetooth.c:629
 #, c-format
 msgid "Connecting Bluetooth device '%s' as output..."
 msgstr "Connecting Bluetooth device '%s' as output..."
 
-#: ../plugins/volumepulse/bluetooth.c:647
+#: ../plugins/volumepulse/bluetooth.c:685
 #, c-format
 msgid "Connecting Bluetooth device '%s' as input..."
 msgstr "Connecting Bluetooth device '%s' as input..."
 
 #. if the current default source and sink are both the same device, disconnect it and reconnect to
 #. put it into A2DP rather than HSP
-#: ../plugins/volumepulse/bluetooth.c:702
+#: ../plugins/volumepulse/bluetooth.c:758
 msgid "Reconnecting Bluetooth input device as output only..."
 msgstr "Reconnecting Bluetooth input device as output only..."
 
-#: ../plugins/volumepulse/bluetooth.c:748
+#: ../plugins/volumepulse/bluetooth.c:803
 msgid "Reconnecting Bluetooth device..."
 msgstr "Reconnecting Bluetooth device..."
+
+#. Create a check button as the child of the vertical box.
+#: ../plugins/volumepulse/commongui.c:166
+msgid "Mute"
+msgstr "Mute"
+
+#: ../plugins/volumepulse/commongui.c:261
+msgid "No audio devices found"
+msgstr "No audio devices found"
+
+#: ../plugins/volumepulse/micpulse.c:80
+msgid "Input from this device not available in the current profile"
+msgstr "Input from this device not available in the current profile"
+
+#. update tooltip
+#: ../plugins/volumepulse/micpulse.c:167
+msgid "Mic volume"
+msgstr "Mic volume"
+
+#: ../plugins/volumepulse/micpulse.c:237
+msgid "Microphone Control (PulseAudio)"
+msgstr "Microphone Control (PulseAudio)"
+
+#: ../plugins/volumepulse/micpulse.c:238
+msgid "Display and control microphones for PulseAudio"
+msgstr "Display and control microphones for PulseAudio"

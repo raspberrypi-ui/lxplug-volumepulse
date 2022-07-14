@@ -2,3 +2,5 @@
 plugins/volumepulse/volumepulse.c
 plugins/volumepulse/pulse.c
 plugins/volumepulse/bluetooth.c
+plugins/volumepulse/commongui.c
+plugins/volumepulse/micpulse.c
