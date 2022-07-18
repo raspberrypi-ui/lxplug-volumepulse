@@ -164,7 +164,7 @@ void volumepulse_update_display (VolumePulsePlugin *vol)
 
 static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *settings)
 {
-    /* Allocate and initialize plugin context and set into plugin private data pointer */
+    /* Allocate and initialize plugin context */
     VolumePulsePlugin *vol = g_new0 (VolumePulsePlugin, 1);
 
 #ifdef ENABLE_NLS
@@ -172,13 +172,6 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     bindtextdomain (GETTEXT_PACKAGE, PACKAGE_LOCALE_DIR);
     bind_textdomain_codeset (GETTEXT_PACKAGE, "UTF-8");
 #endif
-
-    vol->input_control = TRUE;
-
-    vol->menu_devices = NULL;
-    vol->popup_window = NULL;
-    vol->profiles_dialog = NULL;
-    vol->conn_dialog = NULL;
 
     /* Allocate top level widget and set into plugin widget pointer */
     vol->panel = panel;
@@ -192,15 +185,17 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
 
     /* Set up button */
     gtk_button_set_relief (GTK_BUTTON (vol->plugin), GTK_RELIEF_NONE);
-    gtk_widget_add_events (vol->plugin, GDK_BUTTON_PRESS_MASK | GDK_SCROLL_MASK);
-
-    /* Connect signals */
     g_signal_connect (vol->plugin, "button-press-event", G_CALLBACK (volumepulse_button_press_event), vol);
     g_signal_connect (vol->plugin, "scroll-event", G_CALLBACK (volumepulse_mouse_scrolled), vol);
-    g_signal_connect (panel_get_icon_theme (panel), "changed", G_CALLBACK (volumepulse_theme_change), vol);
+    gtk_widget_add_events (vol->plugin, GDK_SCROLL_MASK);
 
-    /* Delete any old ALSA config */
-    vsystem ("rm -f ~/.asoundrc");
+    /* Set up variables */
+    vol->input_control = TRUE;
+
+    vol->menu_devices = NULL;
+    vol->popup_window = NULL;
+    vol->profiles_dialog = NULL;
+    vol->conn_dialog = NULL;
 
     /* Set up PulseAudio */
     pulse_init (vol);
@@ -208,9 +203,8 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     /* Set up Bluez D-Bus interface */
     bluetooth_init (vol);
 
-    /* Update the display, show the widget, and return */
+    /* Show the widget and return */
     gtk_widget_show_all (vol->plugin);
-    volumepulse_update_display (vol);
     return vol->plugin;
 }
 
@@ -223,7 +217,7 @@ LXPanelPluginInit fm_module_init_lxpanel_gtk =
     .name = N_("Microphone Control (PulseAudio)"),
     .description = N_("Display and control microphones for PulseAudio"),
     .new_instance = volumepulse_constructor,
-    .reconfigure = volumepulse_panel_configuration_changed,
+    .reconfigure = volumepulse_configuration_changed,
     .control = volumepulse_control_msg,
     .gettext_package = GETTEXT_PACKAGE
 };

@@ -395,16 +395,9 @@ void volumepulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *evt, VolumePul
 /* Plugin structure                                                           */
 /*----------------------------------------------------------------------------*/
 
-/* Callback for icon theme change event from panel */
-
-void volumepulse_theme_change (GtkWidget *widget, VolumePulsePlugin *vol)
-{
-    volumepulse_update_display (vol);
-}
-
 /* Callback when panel configuration changes */
 
-void volumepulse_panel_configuration_changed (LXPanel *panel, GtkWidget *plugin)
+void volumepulse_configuration_changed (LXPanel *panel, GtkWidget *plugin)
 {
     VolumePulsePlugin *vol = lxpanel_plugin_get_data (plugin);
 
@@ -473,8 +466,6 @@ void volumepulse_destructor (gpointer user_data)
     close_widget (&vol->conn_dialog);
     close_widget (&vol->popup_window);
     close_widget (&vol->menu_devices);
-
-    g_signal_handlers_disconnect_by_func (panel_get_icon_theme (vol->panel), G_CALLBACK (volumepulse_theme_change), vol);
 
     bluetooth_terminate (vol);
     pulse_terminate (vol);

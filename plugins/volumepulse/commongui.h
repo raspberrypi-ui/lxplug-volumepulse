@@ -37,8 +37,7 @@ extern void menu_set_bluetooth_device (GtkWidget *widget, VolumePulsePlugin *vol
 
 extern gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
 extern void volumepulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *evt, VolumePulsePlugin *vol);
-extern void volumepulse_theme_change (GtkWidget *widget, VolumePulsePlugin *vol);
-extern void volumepulse_panel_configuration_changed (LXPanel *panel, GtkWidget *plugin);
+extern void volumepulse_configuration_changed (LXPanel *panel, GtkWidget *plugin);
 extern gboolean volumepulse_control_msg (GtkWidget *plugin, const char *cmd);
 extern void volumepulse_destructor (gpointer user_data);
 
