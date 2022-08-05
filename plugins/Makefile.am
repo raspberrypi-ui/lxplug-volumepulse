@@ -28,7 +28,8 @@ volumepulse_la_CFLAGS = \
 	-I/usr/include/lxpanel \
 	-I/usr/include/libxml2 \
 	$(PACKAGE_CFLAGS) \
-	$(G_CAST_CHECKS)
+	$(G_CAST_CHECKS) \
+	-Wall
 
 volumepulse_la_LDFLAGS = \
 	$(PACKAGE_LIBS) \
@@ -50,7 +51,8 @@ micpulse_la_CFLAGS = \
 	-I/usr/include/lxpanel \
 	-I/usr/include/libxml2 \
 	$(PACKAGE_CFLAGS) \
-	$(G_CAST_CHECKS)
+	$(G_CAST_CHECKS) \
+	-Wall
 
 micpulse_la_LDFLAGS = \
 	$(PACKAGE_LIBS) \

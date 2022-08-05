@@ -415,8 +415,14 @@ static gboolean bt_get_profile (gpointer user_data)
         }
         else
         {
-            if (btop->direction == OUTPUT && vol->bt_force_hsp == FALSE) DEBUG ("Profile set to a2dp_sink");
-            else DEBUG ("Profile set to headset_head_unit");
+            if (btop->direction == OUTPUT && vol->bt_force_hsp == FALSE)
+            {
+                DEBUG ("Profile set to a2dp_sink");
+            }
+            else
+            {
+                DEBUG ("Profile set to headset_head_unit");
+            }
 
             if (btop->direction != OUTPUT)
             {
@@ -920,7 +926,6 @@ int bluetooth_count_devices (VolumePulsePlugin *vol, gboolean input)
         while (objects != NULL)
         {
             GDBusObject *object = (GDBusObject *) objects->data;
-            const char *objpath = g_dbus_object_get_object_path (object);
             GList *interfaces = g_dbus_object_get_interfaces (object);
             while (interfaces != NULL)
             {

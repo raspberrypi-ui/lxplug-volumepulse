@@ -40,7 +40,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifdef DEBUG_ON
 #define DEBUG(fmt,args...) if(getenv("DEBUG_VP"))g_message("vp: " fmt,##args)
 #else
-#define DEBUG
+#define DEBUG(fmt,args...)
 #endif
 
 typedef struct {

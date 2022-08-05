@@ -215,7 +215,6 @@ static void menu_open_profile_dialog (GtkWidget *widget, VolumePulsePlugin *vol)
 static void profiles_dialog_show (VolumePulsePlugin *vol)
 {
     GtkWidget *btn, *wid, *box;
-    char *lbl;
 
     // create the window itself
     vol->profiles_dialog = gtk_window_new (GTK_WINDOW_TOPLEVEL);
