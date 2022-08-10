@@ -467,7 +467,10 @@ static void bt_cb_trusted (GObject *source, GAsyncResult *res, gpointer user_dat
         DEBUG ("Trusting error %s", error->message);
         g_error_free (error);
     }
-    else DEBUG ("Trusted OK");
+    else
+    {
+        DEBUG ("Trusted OK");
+    }
 }
 
 /* Disconnect a BlueZ device */
@@ -503,7 +506,10 @@ static void bt_cb_disconnected (GObject *source, GAsyncResult *res, gpointer use
         DEBUG ("Disconnect error %s", error->message);
         g_error_free (error);
     }
-    else DEBUG ("Disconnected OK");
+    else
+    {
+        DEBUG ("Disconnected OK");
+    }
 
     bt_next_operation (vol);
 }
