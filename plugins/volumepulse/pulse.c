@@ -876,6 +876,7 @@ static void pa_cb_get_info_external (pa_context *c, const pa_card_info *i, int e
 static gboolean pa_card_has_port (const pa_card_info *i, pa_direction_t dir)
 {
     pa_card_port_info **port = i->ports;
+    if (!i->n_ports) return FALSE;
     while (*port)
     {
         if ((*port)->direction == dir) return TRUE;
