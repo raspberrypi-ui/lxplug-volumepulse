@@ -197,6 +197,15 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     vol->profiles_dialog = NULL;
     vol->conn_dialog = NULL;
 
+    vol->pipewire = check_service ("pipewire-pulse");
+    if (vol->pipewire)
+    {
+        DEBUG ("using pipewire");
+    }
+    else
+    {
+        DEBUG ("using pulseaudio");
+    }
     /* Set up PulseAudio */
     pulse_init (vol);
 

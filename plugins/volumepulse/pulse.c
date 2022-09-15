@@ -1050,7 +1050,7 @@ static void pa_cb_add_devices_to_profile_dialog (pa_context *c, const pa_card_in
             profile++;
         }
 
-        if (!g_strcmp0 (pa_proplist_gets (i->proplist, "device.api"), "bluez"))
+        if (!g_strcmp0 (pa_proplist_gets (i->proplist, "device.api"), vol->pipewire ? "bluez5" : "bluez"))
             profiles_dialog_add_combo (vol, ls, vol->profiles_bt_box, sel, pa_proplist_gets (i->proplist, "device.description"), i->name);
         else
         {
