@@ -28,7 +28,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern char *get_string (const char *fmt, ...);
 extern int vsystem (const char *fmt, ...);
 extern void close_widget (GtkWidget **wid);
-extern int check_service (char *name);
 
 extern void menu_create (VolumePulsePlugin *vol);
 extern void menu_add_separator (VolumePulsePlugin *vol, GtkWidget *menu);

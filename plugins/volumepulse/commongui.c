@@ -100,26 +100,6 @@ void close_widget (GtkWidget **wid)
     }
 }
 
-/* Check if a systemd service is running */
-
-int check_service (char *name)
-{
-    int res;
-    char *buf;
-
-    buf = g_strdup_printf ("systemctl --user status %s 2> /dev/null | grep -qw Active:", name);
-    res = system (buf);
-    g_free (buf);
-
-    if (res) return 0;
-
-    buf = g_strdup_printf ("systemctl --user status %s 2> /dev/null | grep -w Active: | grep -qw inactive", name);
-    res = system (buf);
-    g_free (buf);
-
-    return res;
-}
-
 /*----------------------------------------------------------------------------*/
 /* Volume scale popup window                                                  */
 /*----------------------------------------------------------------------------*/
