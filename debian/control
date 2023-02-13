@@ -14,6 +14,6 @@ Package: lxplug-volumepulse
 Architecture: any
 Depends: ${misc:Depends}, ${shlibs:Depends}, lxmenu-data, libgtk-3-0 (>= 3.24),
  lxpanel (>= 0.10.1-1+rpt1), lxpanel-data (>= 0.10.1-1+rpt1), libfm-modules (>= 1.3.2-1+rpt1)
-Recommends: pi-bluetooth, pulseaudio-module-bluetooth
+Recommends: pulseaudio, pipewire, pipewire-pulse, pi-bluetooth, pulseaudio-module-bluetooth, libspa-0.2-bluetooth
 Description: PulseAudio controller plugin for lxpanel
  Plugin for lxpanel to use PulseAudio to control ALSA and Bluetooth devices.

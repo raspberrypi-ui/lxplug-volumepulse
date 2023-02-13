@@ -1,3 +1,9 @@
+lxplug-volumepulse (0.16) bookworm; urgency=medium
+
+  * Add pulseaudio and pipewire to recommends
+
+ -- Simon Long <simon@raspberrypi.com>  Mon, 13 Feb 2023 15:13:53 +0000
+
 lxplug-volumepulse (0.15) bullseye; urgency=medium
 
   * Remove pulseaudio dependency; make compatible with pipewire-pulse
