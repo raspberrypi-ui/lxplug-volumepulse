@@ -37,6 +37,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 static void popup_window_show (GtkWidget *p);
 static void popup_window_scale_changed (GtkRange *range, VolumePulsePlugin *vol);
+static void popup_window_scale_pressed (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
 static void popup_window_mute_toggled (GtkWidget *widget, VolumePulsePlugin *vol);
 static gboolean popup_mapped (GtkWidget *widget, GdkEvent *event, VolumePulsePlugin *vol);
 static gboolean popup_button_press (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
@@ -153,6 +154,7 @@ static void popup_window_show (GtkWidget *p)
     /* Value-changed and scroll-event signals. */
     vol->volume_scale_handler = g_signal_connect (vol->popup_volume_scale, "value-changed", G_CALLBACK (popup_window_scale_changed), vol);
     g_signal_connect (vol->popup_volume_scale, "scroll-event", G_CALLBACK (volumepulse_mouse_scrolled), vol);
+    g_signal_connect (vol->popup_volume_scale, "button-press-event", G_CALLBACK(popup_window_scale_pressed), vol);
 
     /* Create a check button as the child of the vertical box. */
     vol->popup_mute_check = gtk_check_button_new_with_label (_("Mute"));
@@ -183,6 +185,23 @@ static void popup_window_scale_changed (GtkRange *range, VolumePulsePlugin *vol)
     pulse_set_volume (vol, gtk_range_get_value (range));
 
     volumepulse_update_display (vol);
+}
+
+/* Handler for "button-press-event" signal on popup window vertical scale */
+
+static void popup_window_scale_pressed (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol)
+{
+    if (pulse_get_mute (vol)) return;
+
+    GtkRange *range = GTK_RANGE (widget);
+    gint range_height = gtk_widget_get_allocated_height (widget);
+    GtkAdjustment* adjustment = gtk_range_get_adjustment (range);
+    gdouble min = gtk_adjustment_get_lower(adjustment);
+    gdouble max = gtk_adjustment_get_upper(adjustment);
+    gdouble value = (range_height - event->y) / (gdouble)range_height * (max - min) + min;
+
+    /* Will call popup_window_scale_changed */
+    gtk_range_set_value (range, value);
 }
 
 /* Handler for "toggled" signal on popup window mute checkbox */
