@@ -1,3 +1,9 @@
+lxplug-volumepulse (0.18) bookworm; urgency=medium
+
+  * Fixes to improve detection and naming of HDMI devices
+
+ -- Simon Long <simon@raspberrypi.com>  Thu, 08 Jun 2023 11:58:23 +0100
+
 lxplug-volumepulse (0.17) bookworm; urgency=medium
 
   * Pipewire compatibility
