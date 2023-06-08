@@ -75,7 +75,7 @@ static void hdmi_init (VolumePulsePlugin *vol)
     int i, m;
 
     /* check xrandr for connected monitors */
-    m = get_value ("xrandr -q | grep -c connected");
+    m = get_value ("xrandr -q | grep -cw connected");
     if (m < 0) m = 1; /* couldn't read, so assume 1... */
     if (m > 2) m = 2;
 
@@ -85,10 +85,8 @@ static void hdmi_init (VolumePulsePlugin *vol)
     /* get the names */
     if (m == 2)
     {
-        for (i = 0; i < 2; i++)
-        {
-            vol->hdmi_names[i] = get_string ("xrandr --listmonitors | grep %d: | cut -d ' ' -f 6", i);
-        }
+        vol->hdmi_names[0] = get_string ("xrandr -q | grep connected | head -n 1 | cut -d ' ' -f 1");
+        vol->hdmi_names[1] = get_string ("xrandr -q | grep connected | tail -n 1 | cut -d ' ' -f 1");
 
         /* check both devices are HDMI */
         if (vol->hdmi_names[0] && !strncmp (vol->hdmi_names[0], "HDMI", 4)
