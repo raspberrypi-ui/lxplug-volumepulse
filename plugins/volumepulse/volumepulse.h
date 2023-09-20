@@ -31,6 +31,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <glib.h>
 #include <glib/gi18n.h>
+#include <glib/gprintf.h>
 #include <gtk/gtk.h>
 #include <pulse/pulseaudio.h>
 
@@ -45,17 +46,19 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 typedef struct {
     /* plugin */
-    GtkWidget *plugin;                  /* Back pointer to widget */
+    GtkWidget *box;                     /* Back pointer to widget */
+    GtkWidget *plugin[2];               /* Pointers to buttons */
     LXPanel *panel;                     /* Back pointer to panel */
     config_setting_t *settings;         /* Plugin settings */
+    gboolean wizard;                    /* Running under wizard? */
     gboolean pipewire;                  /* Pipewire running? */
 
     /* graphics */
-    GtkWidget *tray_icon;               /* Displayed icon */
-    GtkWidget *popup_window;            /* Top level window for popup */
-    GtkWidget *popup_volume_scale;      /* Scale for volume */
-    GtkWidget *popup_mute_check;        /* Checkbox for mute state */
-    GtkWidget *menu_devices;            /* Right-click menu */
+    GtkWidget *tray_icon[2];            /* Displayed icon */
+    GtkWidget *popup_window[2];         /* Top level window for popup */
+    GtkWidget *popup_volume_scale[2];   /* Scale for volume */
+    GtkWidget *popup_mute_check[2];     /* Checkbox for mute state */
+    GtkWidget *menu_devices[2];         /* Right-click menu */
     GtkWidget *profiles_dialog;         /* Device profiles dialog */
     GtkWidget *profiles_int_box;        /* Vbox for profile combos */
     GtkWidget *profiles_ext_box;        /* Vbox for profile combos */
@@ -63,17 +66,16 @@ typedef struct {
     GtkWidget *conn_dialog;             /* Connection dialog box */
     GtkWidget *conn_label;              /* Dialog box text field */
     GtkWidget *conn_ok;                 /* Dialog box button */
-    guint volume_scale_handler;         /* Handler for volume_scale widget */
-    guint mute_check_handler;           /* Handler for mute_check widget */
+    guint volume_scale_handler[2];      /* Handler for volume_scale widget */
+    guint mute_check_handler[2];        /* Handler for mute_check widget */
     gboolean separator;                 /* Flag to show whether a menu separator has been added */
-    gboolean input_control;             /* Flag to show whether this is an input or output controller */
 
     /* HDMI devices */
     char *hdmi_names[2];                /* Display names of HDMI devices */
 
     /* PulseAudio interface */
     pa_threaded_mainloop *pa_mainloop;  /* Controller loop variable */
-    pa_context *pa_context;             /* Controller context */
+    pa_context *pa_cont;                /* Controller context */
     pa_context_state_t pa_state;        /* Current controller state */
     char *pa_default_sink;              /* Current default sink name */
     char *pa_default_source;            /* Current default source name */
@@ -84,24 +86,29 @@ typedef struct {
     GList *pa_indices;                  /* Indices for current streams */
     char *pa_error_msg;                 /* Error message from success / fail callback */
     int pa_devices;                     /* Counter for pulse devices */
+    guint pa_idle_timer;
 
     /* Bluetooth interface */
     GDBusObjectManager *bt_objmanager;  /* D-Bus BlueZ object manager */
     guint bt_watcher_id;                /* D-Bus BlueZ watcher ID */
-    GList *bt_ops;                      /* List of Bluetooth connect and disconnect operations */
-    char *bt_iname;                     /* Input device name for use in list */
-    char *bt_oname;                     /* Output device name for use in list */
+    char *bt_conname;                   /* Name of device being connected */
     gboolean bt_input;                  /* Flag to show if current connect operation is for input or output */
     gboolean bt_force_hsp;              /* Flag to override automatic profile selection */
-    int bt_profile_count;               /* Counter for polling read of profile on connection */
+    int bt_retry_count;                 /* Counter for polling read of profile on connection */
+    guint bt_retry_timer;               /* Timer for retrying post-connection events */
+    gboolean bt_card_found;
 } VolumePulsePlugin;
 
 /* Functions in volumepulse.c needed in other modules */
 
-extern void menu_show (VolumePulsePlugin *vol);
-extern void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name);
+extern void vol_menu_show (VolumePulsePlugin *vol);
+extern void mic_menu_show (VolumePulsePlugin *vol);
+extern void vol_menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name);
+extern void mic_menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name);
 extern void profiles_dialog_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name);
 extern void volumepulse_update_display (VolumePulsePlugin *vol);
+extern void micpulse_update_display (VolumePulsePlugin *vol);
+extern void hdmi_init (VolumePulsePlugin *vol);
 
 /* End of file */
 /*----------------------------------------------------------------------------*/

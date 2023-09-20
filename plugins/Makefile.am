@@ -9,8 +9,7 @@ endif
 pkglib_LTLIBRARIES = $(DYNAMIC_PLUGINS)
 
 EXTRA_LTLIBRARIES = \
-	volumepulse.la \
-	micpulse.la
+	volumepulse.la
 
 pkglibdir = $(libdir)/lxpanel/plugins
 
@@ -19,7 +18,8 @@ volumepulse_la_SOURCES = \
 	volumepulse/volumepulse.c \
 	volumepulse/pulse.c \
 	volumepulse/bluetooth.c \
-	volumepulse/commongui.c
+	volumepulse/commongui.c \
+	volumepulse/micpulse.c
 
 volumepulse_la_CFLAGS = \
 	-I$(top_srcdir) \
@@ -32,29 +32,6 @@ volumepulse_la_CFLAGS = \
 	-Wall
 
 volumepulse_la_LDFLAGS = \
-	$(PACKAGE_LIBS) \
-	-module @LXPANEL_MODULE@ \
-	-lpulse \
-	-lxml2
-
-# micpulse
-micpulse_la_SOURCES = \
-	volumepulse/micpulse.c \
-	volumepulse/pulse.c \
-	volumepulse/bluetooth.c \
-	volumepulse/commongui.c
-
-micpulse_la_CFLAGS = \
-	-I$(top_srcdir) \
-	-DPACKAGE_DATA_DIR=\""$(datadir)/lxpanel"\" \
-	-DPACKAGE_LOCALE_DIR=\""$(prefix)/$(DATADIRNAME)/locale"\" \
-	-I/usr/include/lxpanel \
-	-I/usr/include/libxml2 \
-	$(PACKAGE_CFLAGS) \
-	$(G_CAST_CHECKS) \
-	-Wall
-
-micpulse_la_LDFLAGS = \
 	$(PACKAGE_LIBS) \
 	-module @LXPANEL_MODULE@ \
 	-lpulse \

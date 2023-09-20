@@ -36,7 +36,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /* Helpers */
 static int get_value (const char *fmt, ...);
-static void hdmi_init (VolumePulsePlugin *vol);
 static const char *device_display_name (VolumePulsePlugin *vol, const char *name);
 
 /* Menu popup */
@@ -70,23 +69,28 @@ static int get_value (const char *fmt, ...)
 
 /* Find number of HDMI devices and device names */
 
-static void hdmi_init (VolumePulsePlugin *vol)
+void hdmi_init (VolumePulsePlugin *vol)
 {
     int i, m;
 
     /* check xrandr for connected monitors */
-    m = get_value ("xrandr -q | grep -cw connected");
+    m = get_value ("xrandr -q | grep -c connected");
     if (m < 0) m = 1; /* couldn't read, so assume 1... */
     if (m > 2) m = 2;
 
-    vol->hdmi_names[0] = NULL;
-    vol->hdmi_names[1] = NULL;
+    for (i = 0; i < 2; i++)
+    {
+        if (vol->hdmi_names[i]) g_free (vol->hdmi_names[i]);
+        vol->hdmi_names[i] = NULL;
+    }
 
     /* get the names */
     if (m == 2)
     {
-        vol->hdmi_names[0] = get_string ("xrandr -q | grep connected | head -n 1 | cut -d ' ' -f 1");
-        vol->hdmi_names[1] = get_string ("xrandr -q | grep connected | tail -n 1 | cut -d ' ' -f 1");
+        for (i = 0; i < 2; i++)
+        {
+            vol->hdmi_names[i] = get_string ("xrandr --listmonitors | grep %d: | cut -d ' ' -f 6", i);
+        }
 
         /* check both devices are HDMI */
         if (vol->hdmi_names[0] && !strncmp (vol->hdmi_names[0], "HDMI", 4)
@@ -119,39 +123,39 @@ static const char *device_display_name (VolumePulsePlugin *vol, const char *name
 /* Device select menu                                                         */
 /*----------------------------------------------------------------------------*/
 
-void menu_show (VolumePulsePlugin *vol)
+void vol_menu_show (VolumePulsePlugin *vol)
 {
     GtkWidget *mi;
     GList *items;
 
     // create the menu
-    menu_create (vol);
+    menu_create (vol, FALSE);
 
-    items = gtk_container_get_children (GTK_CONTAINER (vol->menu_devices));
+    items = gtk_container_get_children (GTK_CONTAINER (vol->menu_devices[0]));
     if (items)
     {
         // add the profiles menu item to the top level menu
         mi = gtk_separator_menu_item_new ();
-        gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
+        gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices[0]), mi);
 
         mi = gtk_menu_item_new_with_label (_("Device Profiles..."));
         g_signal_connect (mi, "activate", G_CALLBACK (menu_open_profile_dialog), (gpointer) vol);
-        gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices), mi);
+        gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices[0]), mi);
 
         g_list_free (items);
     }
 
     // lock menu if a dialog is open
     if (vol->conn_dialog || vol->profiles_dialog)
-        gtk_container_foreach (GTK_CONTAINER (vol->menu_devices), (void *) gtk_widget_set_sensitive, FALSE);
+        gtk_container_foreach (GTK_CONTAINER (vol->menu_devices[0]), (void *) gtk_widget_set_sensitive, FALSE);
 
     // show the menu
-    gtk_widget_show_all (vol->menu_devices);
+    gtk_widget_show_all (vol->menu_devices[0]);
 }
 
 /* Add a device entry to the menu */
 
-void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name)
+void vol_menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name)
 {
     GList *list, *l;
     int count;
@@ -161,17 +165,17 @@ void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name)
     gtk_widget_set_name (mi, name);
     if (strstr (name, "bluez"))
     {
-        g_signal_connect (mi, "activate", G_CALLBACK (menu_set_bluetooth_device), (gpointer) vol);
+        g_signal_connect (mi, "activate", G_CALLBACK (menu_set_bluetooth_device_output), (gpointer) vol);
     }
     else
     {
-        g_signal_connect (mi, "activate", G_CALLBACK (menu_set_alsa_device), (gpointer) vol);
+        g_signal_connect (mi, "activate", G_CALLBACK (menu_set_alsa_device_output), (gpointer) vol);
         gtk_widget_set_sensitive (mi, FALSE);
         gtk_widget_set_tooltip_text (mi, _("Output to this device not available in the current profile"));
     }
 
     // find the start point of the last section - either a separator or the beginning of the list
-    list = gtk_container_get_children (GTK_CONTAINER (vol->menu_devices));
+    list = gtk_container_get_children (GTK_CONTAINER (vol->menu_devices[0]));
     count = g_list_length (list);
     l = g_list_last (list);
     while (l)
@@ -193,13 +197,13 @@ void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name)
         l = l->next;
     }
 
-    gtk_menu_shell_insert (GTK_MENU_SHELL (vol->menu_devices), mi, count);
+    gtk_menu_shell_insert (GTK_MENU_SHELL (vol->menu_devices[0]), mi, count);
     g_list_free (list);
 }
 
 /* Handler for menu click to open the profiles dialog */
 
-static void menu_open_profile_dialog (GtkWidget *widget, VolumePulsePlugin *vol)
+static void menu_open_profile_dialog (GtkWidget *, VolumePulsePlugin *vol)
 {
     profiles_dialog_show (vol);
 }
@@ -318,21 +322,18 @@ static void profiles_dialog_combo_changed (GtkComboBox *combo, VolumePulsePlugin
     gtk_combo_box_get_active_iter (combo, &iter);
     gtk_tree_model_get (gtk_combo_box_get_model (combo), &iter, 0, &option, -1);
     pulse_set_profile (vol, name, option);
-
-    // need to reconnect a Bluetooth device here to cause the profile to take effect...
-    bluetooth_reconnect (vol, name, option);
 }
 
 /* Handler for 'OK' button on profiles dialog */
 
-static void profiles_dialog_ok (GtkButton *button, VolumePulsePlugin *vol)
+static void profiles_dialog_ok (GtkButton *, VolumePulsePlugin *vol)
 {
     close_widget (&vol->profiles_dialog);
 }
 
 /* Handler for "delete-event" signal from profiles dialog */
 
-static gboolean profiles_dialog_delete (GtkWidget *wid, GdkEvent *event, VolumePulsePlugin *vol)
+static gboolean profiles_dialog_delete (GtkWidget *, GdkEvent *, VolumePulsePlugin *vol)
 {
     close_widget (&vol->profiles_dialog);
     return TRUE;
@@ -347,8 +348,8 @@ static gboolean profiles_dialog_delete (GtkWidget *wid, GdkEvent *event, VolumeP
 void volumepulse_update_display (VolumePulsePlugin *vol)
 {
     /* read current mute and volume status */
-    gboolean mute = pulse_get_mute (vol);
-    int level = pulse_get_volume (vol);
+    gboolean mute = pulse_get_mute (vol, FALSE);
+    int level = pulse_get_volume (vol, FALSE);
     if (mute) level = 0;
 
     /* update icon */
@@ -360,25 +361,25 @@ void volumepulse_update_display (VolumePulsePlugin *vol)
         else if (level > 0) icon = "audio-volume-low";
         else icon = "audio-volume-silent";
     }
-    lxpanel_plugin_set_taskbar_icon (vol->panel, vol->tray_icon, icon);
+    lxpanel_plugin_set_taskbar_icon (vol->panel, vol->tray_icon[0], icon);
 
     /* update popup window controls */
-    if (vol->popup_window)
+    if (vol->popup_window[0])
     {
-        g_signal_handler_block (vol->popup_mute_check, vol->mute_check_handler);
-        gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (vol->popup_mute_check), mute);
-        g_signal_handler_unblock (vol->popup_mute_check, vol->mute_check_handler);
+        g_signal_handler_block (vol->popup_mute_check[0], vol->mute_check_handler[0]);
+        gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (vol->popup_mute_check[0]), mute);
+        g_signal_handler_unblock (vol->popup_mute_check[0], vol->mute_check_handler[0]);
 
-        g_signal_handler_block (vol->popup_volume_scale, vol->volume_scale_handler);
-        gtk_range_set_value (GTK_RANGE (vol->popup_volume_scale), level);
-        g_signal_handler_unblock (vol->popup_volume_scale, vol->volume_scale_handler);
+        g_signal_handler_block (vol->popup_volume_scale[0], vol->volume_scale_handler[0]);
+        gtk_range_set_value (GTK_RANGE (vol->popup_volume_scale[0]), level);
+        g_signal_handler_unblock (vol->popup_volume_scale[0], vol->volume_scale_handler[0]);
 
-        gtk_widget_set_sensitive (vol->popup_volume_scale, !mute);
+        gtk_widget_set_sensitive (vol->popup_volume_scale[0], !mute);
     }
 
     /* update tooltip */
     char *tooltip = g_strdup_printf ("%s %d", _("Volume control"), level);
-    gtk_widget_set_tooltip_text (vol->plugin, tooltip);
+    if (!vol->wizard) gtk_widget_set_tooltip_text (vol->plugin[0], tooltip);
     g_free (tooltip);
 }
 
@@ -402,27 +403,42 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     /* Allocate top level widget and set into plugin widget pointer */
     vol->panel = panel;
     vol->settings = settings;
-    vol->plugin = gtk_button_new ();
-    lxpanel_plugin_set_data (vol->plugin, vol, volumepulse_destructor);
+    vol->box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
+    vol->plugin[0] = gtk_button_new ();
+    gtk_box_pack_start (GTK_BOX (vol->box), vol->plugin[0], TRUE, TRUE, 0);
+    vol->plugin[1] = gtk_button_new ();
+    gtk_box_pack_start (GTK_BOX (vol->box), vol->plugin[1], TRUE, TRUE, 0);
+
+    lxpanel_plugin_set_data (vol->box, vol, volumepulse_destructor);
 
     /* Allocate icon as a child of top level */
-    vol->tray_icon = gtk_image_new ();
-    gtk_container_add (GTK_CONTAINER (vol->plugin), vol->tray_icon);
+    vol->tray_icon[0] = gtk_image_new ();
+    gtk_container_add (GTK_CONTAINER (vol->plugin[0]), vol->tray_icon[0]);
+    vol->tray_icon[1] = gtk_image_new ();
+    gtk_container_add (GTK_CONTAINER (vol->plugin[1]), vol->tray_icon[1]);
 
     /* Set up button */
-    gtk_button_set_relief (GTK_BUTTON (vol->plugin), GTK_RELIEF_NONE);
-    g_signal_connect (vol->plugin, "button-press-event", G_CALLBACK (volumepulse_button_press_event), vol);
-    g_signal_connect (vol->plugin, "scroll-event", G_CALLBACK (volumepulse_mouse_scrolled), vol);
-    gtk_widget_add_events (vol->plugin, GDK_SCROLL_MASK);
+    gtk_button_set_relief (GTK_BUTTON (vol->plugin[0]), GTK_RELIEF_NONE);
+    g_signal_connect (vol->plugin[0], "button-press-event", G_CALLBACK (volumepulse_button_press_event), vol);
+    g_signal_connect (vol->plugin[0], "scroll-event", G_CALLBACK (volumepulse_mouse_scrolled), vol);
+    gtk_widget_add_events (vol->plugin[0], GDK_SCROLL_MASK);
+
+    gtk_button_set_relief (GTK_BUTTON (vol->plugin[1]), GTK_RELIEF_NONE);
+    g_signal_connect (vol->plugin[1], "button-press-event", G_CALLBACK (micpulse_button_press_event), vol);
+    g_signal_connect (vol->plugin[1], "scroll-event", G_CALLBACK (micpulse_mouse_scrolled), vol);
+    gtk_widget_add_events (vol->plugin[1], GDK_SCROLL_MASK);
 
     /* Set up variables */
-    vol->input_control = FALSE;
-
-    vol->menu_devices = NULL;
-    vol->popup_window = NULL;
+    vol->menu_devices[0] = NULL;
+    vol->menu_devices[1] = NULL;
+    vol->popup_window[0] = NULL;
+    vol->popup_window[1] = NULL;
     vol->profiles_dialog = NULL;
     vol->conn_dialog = NULL;
 
+    if (!g_strcmp0 (getenv ("USER"), "rpi-first-boot-wizard")) vol->wizard = TRUE;
+    else vol->wizard = FALSE;
+    
     vol->pipewire = !system ("ps ax | grep pipewire-pulse | grep -qv grep");
     if (vol->pipewire)
     {
@@ -446,8 +462,11 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     bluetooth_init (vol);
 
     /* Show the widget and return */
-    gtk_widget_show_all (vol->plugin);
-    return vol->plugin;
+    gtk_widget_show_all (vol->plugin[0]);
+    gtk_widget_show_all (vol->plugin[1]);
+    volumepulse_update_display (vol);
+    micpulse_update_display (vol);
+    return vol->box;
 }
 
 FM_DEFINE_MODULE (lxpanel_gtk, volumepulse)

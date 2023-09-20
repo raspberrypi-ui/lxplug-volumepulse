@@ -27,6 +27,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "volumepulse.h"
 #include "commongui.h"
+#include "bluetooth.h"
 
 #include "pulse.h"
 
@@ -80,7 +81,7 @@ static int pa_set_subscription (VolumePulsePlugin *vol);
 static void pa_cb_subscription (pa_context *pacontext, pa_subscription_event_type_t event, uint32_t idx, void *userdata);
 static gboolean pa_update_disp_cb (gpointer userdata);
 static void pa_cb_generic_success (pa_context *context, int success, void *userdata);
-static int pa_get_current_vol_mute (VolumePulsePlugin *vol);
+static int pa_get_current_vol_mute (VolumePulsePlugin *vol, gboolean input_control);
 static void pa_cb_get_current_vol_mute (pa_context *context, const pa_sink_info *i, int eol, void *userdata);
 static void pa_cb_get_current_input_vol_mute (pa_context *context, const pa_source_info *i, int eol, void *userdata);
 static int pa_get_channels (VolumePulsePlugin *vol);
@@ -133,10 +134,12 @@ static void pa_cb_count_outputs (pa_context *c, const pa_card_info *i, int eol, 
 
 void pulse_init (VolumePulsePlugin *vol)
 {
+    DEBUG ("pulse_init");
     pa_proplist *paprop;
     pa_mainloop_api *paapi;
 
-    vol->pa_context = NULL;
+    vol->pa_cont = NULL;
+    vol->pa_idle_timer = 0;
     vol->pa_mainloop = pa_threaded_mainloop_new ();
     pa_threaded_mainloop_start (vol->pa_mainloop);
 
@@ -146,10 +149,10 @@ void pulse_init (VolumePulsePlugin *vol)
     paprop = pa_proplist_new ();
     pa_proplist_sets (paprop, PA_PROP_APPLICATION_NAME, "unknown");
     pa_proplist_sets (paprop, PA_PROP_MEDIA_ROLE, "music");
-    vol->pa_context = pa_context_new_with_proplist (paapi, "unknown", paprop);
+    vol->pa_cont = pa_context_new_with_proplist (paapi, "unknown", paprop);
     pa_proplist_free (paprop);
 
-    if (vol->pa_context == NULL)
+    if (vol->pa_cont == NULL)
     {
         pa_threaded_mainloop_unlock (vol->pa_mainloop);
         pa_error_handler (vol, "create context");
@@ -158,8 +161,8 @@ void pulse_init (VolumePulsePlugin *vol)
 
     vol->pa_state = PA_CONTEXT_UNCONNECTED;
 
-    pa_context_set_state_callback (vol->pa_context, &pa_cb_state, vol);
-    pa_context_connect (vol->pa_context, NULL, PA_CONTEXT_NOAUTOSPAWN, NULL);
+    pa_context_set_state_callback (vol->pa_cont, &pa_cb_state, vol);
+    pa_context_connect (vol->pa_cont, NULL, PA_CONTEXT_NOAUTOSPAWN, NULL);
 
     while (vol->pa_state != PA_CONTEXT_READY && vol->pa_state != PA_CONTEXT_FAILED)
     {
@@ -181,6 +184,8 @@ void pulse_init (VolumePulsePlugin *vol)
 
     pa_set_subscription (vol);
     pulse_get_default_sink_source (vol);
+    pulse_move_output_streams (vol);
+    pulse_move_input_streams (vol);
 }
 
 /* Callback for changes in context state during initialisation */
@@ -205,15 +210,16 @@ static void pa_cb_state (pa_context *pacontext, void *userdata)
 
 void pulse_terminate (VolumePulsePlugin *vol)
 {
+    if (vol->pa_idle_timer) g_source_remove (vol->pa_idle_timer);
     if (vol->pa_mainloop != NULL)
     {
         /* Disconnect the controller context */
-        if (vol->pa_context != NULL)
+        if (vol->pa_cont != NULL)
         {
             pa_threaded_mainloop_lock (vol->pa_mainloop);
-            pa_context_disconnect (vol->pa_context);
-            pa_context_unref (vol->pa_context);
-            vol->pa_context = NULL;
+            pa_context_disconnect (vol->pa_cont);
+            pa_context_unref (vol->pa_cont);
+            vol->pa_cont = NULL;
             pa_threaded_mainloop_unlock (vol->pa_mainloop);
         }
 
@@ -227,9 +233,9 @@ void pulse_terminate (VolumePulsePlugin *vol)
 
 static void pa_error_handler (VolumePulsePlugin *vol, char *name)
 {
-    if (vol->pa_context != NULL)
+    if (vol->pa_cont != NULL)
     {
-        int code = pa_context_errno (vol->pa_context);
+        int code = pa_context_errno (vol->pa_cont);
         g_warning ("%s: err:%d %s\n", name, code, pa_strerror (code));
     }
     pulse_terminate (vol);
@@ -243,20 +249,21 @@ static void pa_error_handler (VolumePulsePlugin *vol, char *name)
 
 static int pa_set_subscription (VolumePulsePlugin *vol)
 {
-    pa_context_set_subscribe_callback (vol->pa_context, &pa_cb_subscription, vol);
+    pa_context_set_subscribe_callback (vol->pa_cont, &pa_cb_subscription, vol);
     START_PA_OPERATION
-    op = pa_context_subscribe (vol->pa_context, PA_SUBSCRIPTION_MASK_ALL, &pa_cb_generic_success, vol);
+    op = pa_context_subscribe (vol->pa_cont, PA_SUBSCRIPTION_MASK_ALL, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("subscribe")
 }
 
 /* Callback for notifications from the Pulse server */
 
-static void pa_cb_subscription (pa_context *pacontext, pa_subscription_event_type_t event, uint32_t idx, void *userdata)
+static void pa_cb_subscription (pa_context *, pa_subscription_event_type_t event, uint32_t, void *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
-    
-#ifdef DEBUG_ON
+
     const char *fac, *type;
+    int newcard = 0;
+
     switch (event & PA_SUBSCRIPTION_EVENT_FACILITY_MASK)
     {
         case PA_SUBSCRIPTION_EVENT_SINK : fac = "sink"; break;
@@ -267,20 +274,23 @@ static void pa_cb_subscription (pa_context *pacontext, pa_subscription_event_typ
         case PA_SUBSCRIPTION_EVENT_CLIENT : fac = "client"; break;
         case PA_SUBSCRIPTION_EVENT_SAMPLE_CACHE : fac = "sample cache"; break;
         case PA_SUBSCRIPTION_EVENT_SERVER : fac = "server"; break;
-        case PA_SUBSCRIPTION_EVENT_CARD : fac = "card"; break;
+        case PA_SUBSCRIPTION_EVENT_CARD : fac = "card"; newcard++; break;
         default : fac = "unknown";
     }
     switch (event & PA_SUBSCRIPTION_EVENT_TYPE_MASK)
     {
-        case PA_SUBSCRIPTION_EVENT_NEW : type = "New"; break;
+        case PA_SUBSCRIPTION_EVENT_NEW : type = "New"; newcard++; break;
         case PA_SUBSCRIPTION_EVENT_CHANGE : type = "Change"; break;
         case PA_SUBSCRIPTION_EVENT_REMOVE : type = "Remove"; break;
         default : type = "unknown";
     }
+
+#ifdef DEBUG_ON
     DEBUG ("PulseAudio event : %s %s", type, fac);
 #endif
+    if (vol->bt_card_found == FALSE && newcard) vol->bt_card_found = TRUE;
 
-    g_idle_add (pa_update_disp_cb, vol);
+    vol->pa_idle_timer = g_idle_add (pa_update_disp_cb, vol);
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
@@ -291,7 +301,9 @@ static gboolean pa_update_disp_cb (gpointer userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
+    vol->pa_idle_timer = 0;
     volumepulse_update_display (vol);
+    micpulse_update_display (vol);
     return FALSE;
 }
 
@@ -321,13 +333,13 @@ static void pa_cb_generic_success (pa_context *context, int success, void *userd
  * For set operations, the specific set_sink_xxx operations are called.
  */
 
-int pulse_get_volume (VolumePulsePlugin *vol)
+int pulse_get_volume (VolumePulsePlugin *vol, gboolean input_control)
 {
-    pa_get_current_vol_mute (vol);
+    pa_get_current_vol_mute (vol, input_control);
     return vol->pa_volume / PA_VOL_SCALE;
 }
 
-int pulse_set_volume (VolumePulsePlugin *vol, int volume)
+int pulse_set_volume (VolumePulsePlugin *vol, int volume, gboolean input_control)
 {
     pa_cvolume cvol;
     int i;
@@ -338,49 +350,49 @@ int pulse_set_volume (VolumePulsePlugin *vol, int volume)
     cvol.channels = vol->pa_channels;
     for (i = 0; i < cvol.channels; i++) cvol.values[i] = vol->pa_volume;
 
-    DEBUG ("pulse_set_volume %d %d", volume, vol->input_control);
+    DEBUG ("pulse_set_volume %d %d", volume, input_control);
     START_PA_OPERATION
-    if (vol->input_control)
-        op = pa_context_set_source_volume_by_name (vol->pa_context, vol->pa_default_source, &cvol, &pa_cb_generic_success, vol);
+    if (input_control)
+        op = pa_context_set_source_volume_by_name (vol->pa_cont, vol->pa_default_source, &cvol, &pa_cb_generic_success, vol);
     else
-        op = pa_context_set_sink_volume_by_name (vol->pa_context, vol->pa_default_sink, &cvol, &pa_cb_generic_success, vol);
+        op = pa_context_set_sink_volume_by_name (vol->pa_cont, vol->pa_default_sink, &cvol, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_sink_volume_by_name")
 }
 
-int pulse_get_mute (VolumePulsePlugin *vol)
+int pulse_get_mute (VolumePulsePlugin *vol, gboolean input_control)
 {
-    pa_get_current_vol_mute (vol);
+    pa_get_current_vol_mute (vol, input_control);
     return vol->pa_mute;
 }
 
-int pulse_set_mute (VolumePulsePlugin *vol, int mute)
+int pulse_set_mute (VolumePulsePlugin *vol, int mute, gboolean input_control)
 {
     vol->pa_mute = mute;
 
-    DEBUG ("pulse_set_mute %d %d", mute, vol->input_control);
+    DEBUG ("pulse_set_mute %d %d", mute, input_control);
     START_PA_OPERATION
-    if (vol->input_control)
-        op = pa_context_set_source_mute_by_name (vol->pa_context, vol->pa_default_source, vol->pa_mute, &pa_cb_generic_success, vol);
+    if (input_control)
+        op = pa_context_set_source_mute_by_name (vol->pa_cont, vol->pa_default_source, vol->pa_mute, &pa_cb_generic_success, vol);
     else
-        op = pa_context_set_sink_mute_by_name (vol->pa_context, vol->pa_default_sink, vol->pa_mute, &pa_cb_generic_success, vol);
+        op = pa_context_set_sink_mute_by_name (vol->pa_cont, vol->pa_default_sink, vol->pa_mute, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_sink_mute_by_name");
 }
 
 /* Query the controller for the volume and mute settings for the current default sink */
 
-static int pa_get_current_vol_mute (VolumePulsePlugin *vol)
+static int pa_get_current_vol_mute (VolumePulsePlugin *vol, gboolean input_control)
 {
     START_PA_OPERATION
-    if (vol->input_control)
-        op = pa_context_get_source_info_by_name (vol->pa_context, vol->pa_default_source, &pa_cb_get_current_input_vol_mute, vol);
+    if (input_control)
+        op = pa_context_get_source_info_by_name (vol->pa_cont, vol->pa_default_source, &pa_cb_get_current_input_vol_mute, vol);
     else
-        op = pa_context_get_sink_info_by_name (vol->pa_context, vol->pa_default_sink, &pa_cb_get_current_vol_mute, vol);
+        op = pa_context_get_sink_info_by_name (vol->pa_cont, vol->pa_default_sink, &pa_cb_get_current_vol_mute, vol);
     END_PA_OPERATION ("get_sink_info_by_name")
 }
 
 /* Callback for volume / mute query */
 
-static void pa_cb_get_current_vol_mute (pa_context *context, const pa_sink_info *i, int eol, void *userdata)
+static void pa_cb_get_current_vol_mute (pa_context *, const pa_sink_info *i, int eol, void *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
@@ -394,7 +406,7 @@ static void pa_cb_get_current_vol_mute (pa_context *context, const pa_sink_info 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
-static void pa_cb_get_current_input_vol_mute (pa_context *context, const pa_source_info *i, int eol, void *userdata)
+static void pa_cb_get_current_input_vol_mute (pa_context *, const pa_source_info *i, int eol, void *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
@@ -420,7 +432,7 @@ static int pa_restore_volume (VolumePulsePlugin *vol)
 
     DEBUG ("pa_restore_volume");
     START_PA_OPERATION
-    op = pa_context_set_sink_volume_by_name (vol->pa_context, vol->pa_default_sink, &cvol, &pa_cb_generic_success, vol);
+    op = pa_context_set_sink_volume_by_name (vol->pa_cont, vol->pa_default_sink, &cvol, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_sink_volume_by_name")
 }
 
@@ -430,7 +442,7 @@ static int pa_restore_mute (VolumePulsePlugin *vol)
 {
     DEBUG ("pa_restore_mute");
     START_PA_OPERATION
-    op = pa_context_set_sink_mute_by_name (vol->pa_context, vol->pa_default_sink, vol->pa_mute, &pa_cb_generic_success, vol);
+    op = pa_context_set_sink_mute_by_name (vol->pa_cont, vol->pa_default_sink, vol->pa_mute, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_sink_mute_by_name");
 }
 
@@ -439,13 +451,13 @@ static int pa_restore_mute (VolumePulsePlugin *vol)
 static int pa_get_channels (VolumePulsePlugin *vol)
 {
     START_PA_OPERATION
-    op = pa_context_get_sink_info_by_name (vol->pa_context, vol->pa_default_sink, &pa_cb_get_channels, vol);
+    op = pa_context_get_sink_info_by_name (vol->pa_cont, vol->pa_default_sink, &pa_cb_get_channels, vol);
     END_PA_OPERATION ("get_sink_info_by_name")
 }
 
 /* Callback for volume / mute query */
 
-static void pa_cb_get_channels (pa_context *context, const pa_sink_info *i, int eol, void *userdata)
+static void pa_cb_get_channels (pa_context *, const pa_sink_info *i, int eol, void *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
@@ -467,13 +479,13 @@ int pulse_get_default_sink_source (VolumePulsePlugin *vol)
 {
     DEBUG ("pulse_get_default_sink_source");
     START_PA_OPERATION
-    op = pa_context_get_server_info (vol->pa_context, &pa_cb_get_default_sink_source, vol);
+    op = pa_context_get_server_info (vol->pa_cont, &pa_cb_get_default_sink_source, vol);
     END_PA_OPERATION ("get_server_info")
 }
 
 /* Callback for default sink and source query */
 
-static void pa_cb_get_default_sink_source (pa_context *context, const pa_server_info *i, void *userdata)
+static void pa_cb_get_default_sink_source (pa_context *, const pa_server_info *i, void *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
@@ -493,18 +505,25 @@ static void pa_cb_get_default_sink_source (pa_context *context, const pa_server_
  * Finally, all streams listed in pa_indices are moved to the new sink.
  */
 
-void pulse_change_sink (VolumePulsePlugin *vol, const char *sinkname)
+int pulse_change_sink (VolumePulsePlugin *vol, const char *sinkname)
 {
     DEBUG ("pulse_change_sink %s", sinkname);
     if (vol->pa_default_sink) g_free (vol->pa_default_sink);
     vol->pa_default_sink = g_strdup (sinkname);
 
-    pa_set_default_sink (vol, sinkname);
-    pa_get_channels (vol);
-    pa_restore_volume (vol);
-    pa_restore_mute (vol);
-
+    if (!pa_set_default_sink (vol, sinkname))
+    {
+        DEBUG ("pulse_change_sink error");
+        return 0;
+    }
+    else
+    {
+        pa_get_channels (vol);
+        pa_restore_volume (vol);
+        pa_restore_mute (vol);
+    }
     DEBUG ("pulse_change_sink done");
+    return 1;
 }
 
 /* Create a list of current output streams and move each to the default sink */
@@ -525,7 +544,7 @@ static int pa_set_default_sink (VolumePulsePlugin *vol, const char *sinkname)
 {
     DEBUG ("pa_set_default_sink %s", sinkname);
     START_PA_OPERATION
-    op = pa_context_set_default_sink (vol->pa_context, sinkname, &pa_cb_generic_success, vol);
+    op = pa_context_set_default_sink (vol->pa_cont, sinkname, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_default_sink")
 }
 
@@ -535,13 +554,13 @@ static int pa_get_output_streams (VolumePulsePlugin *vol)
 {
     DEBUG ("pa_get_output_streams");
     START_PA_OPERATION
-    op = pa_context_get_sink_input_info_list (vol->pa_context, &pa_cb_get_output_streams, vol);
+    op = pa_context_get_sink_input_info_list (vol->pa_cont, &pa_cb_get_output_streams, vol);
     END_PA_OPERATION ("get_sink_input_info_list")
 }
 
 /* Callback for output stream query */
 
-static void pa_cb_get_output_streams (pa_context *context, const pa_sink_input_info *i, int eol, void *userdata)
+static void pa_cb_get_output_streams (pa_context *, const pa_sink_input_info *i, int eol, void *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
@@ -567,9 +586,9 @@ static void pa_list_move_to_default_sink (gpointer data, gpointer userdata)
 
 static int pa_move_stream_to_default_sink (VolumePulsePlugin *vol, int index)
 {
-    DEBUG ("pa_move_stream_to_default_sink %d", index);
+    DEBUG ("pa_move_stream_to_default_sink %s %d", vol->pa_default_sink, index);
     START_PA_OPERATION
-    op = pa_context_move_sink_input_by_name (vol->pa_context, index, vol->pa_default_sink, &pa_cb_generic_success, vol);
+    op = pa_context_move_sink_input_by_name (vol->pa_cont, index, vol->pa_default_sink, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("move_sink_input_by_name")
 }
 
@@ -579,15 +598,20 @@ static int pa_move_stream_to_default_sink (VolumePulsePlugin *vol, int index)
  * Finally, all streams listed in pa_indices are moved to the new source.
  */
  
-void pulse_change_source (VolumePulsePlugin *vol, const char *sourcename)
+int pulse_change_source (VolumePulsePlugin *vol, const char *sourcename)
 {
     DEBUG ("pulse_change_source %s", sourcename);
     if (vol->pa_default_source) g_free (vol->pa_default_source);
     vol->pa_default_source = g_strdup (sourcename);
 
-    pa_set_default_source (vol, sourcename);
+    if (!pa_set_default_source (vol, sourcename))
+    {
+        DEBUG ("pulse_change_source error");
+        return 0;
+    }
 
     DEBUG ("pulse_change_source done");
+    return 1;
 }
 
 /* Call the PulseAudio set default source operation */
@@ -596,7 +620,7 @@ static int pa_set_default_source (VolumePulsePlugin *vol, const char *sourcename
 {
     DEBUG ("pa_set_default_source %s", sourcename);
     START_PA_OPERATION
-    op = pa_context_set_default_source (vol->pa_context, sourcename, &pa_cb_generic_success, vol);
+    op = pa_context_set_default_source (vol->pa_cont, sourcename, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_default_source")
 }
 
@@ -618,13 +642,13 @@ static int pa_get_input_streams (VolumePulsePlugin *vol)
 {
     DEBUG ("pa_get_input_streams");
     START_PA_OPERATION
-    op = pa_context_get_source_output_info_list (vol->pa_context, &pa_cb_get_input_streams, vol);
+    op = pa_context_get_source_output_info_list (vol->pa_cont, &pa_cb_get_input_streams, vol);
     END_PA_OPERATION ("get_sink_input_info_list")
 }
 
 /* Callback for input stream query */
 
-static void pa_cb_get_input_streams (pa_context *context, const pa_source_output_info *i, int eol, void *userdata)
+static void pa_cb_get_input_streams (pa_context *, const pa_source_output_info *i, int eol, void *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
@@ -650,9 +674,9 @@ static void pa_list_move_to_default_source (gpointer data, gpointer userdata)
 
 static int pa_move_stream_to_default_source (VolumePulsePlugin *vol, int index)
 {
-    DEBUG ("pa_move_stream_to_default_source %d", index);
+    DEBUG ("pa_move_stream_to_default_source %s %d", vol->pa_default_source, index);
     START_PA_OPERATION
-    op = pa_context_move_source_output_by_name (vol->pa_context, index, vol->pa_default_source, &pa_cb_generic_success, vol);
+    op = pa_context_move_source_output_by_name (vol->pa_cont, index, vol->pa_default_source, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("move_source_output_by_name")
 }
 
@@ -686,7 +710,7 @@ static int pa_mute_stream (VolumePulsePlugin *vol, int index)
 {
     DEBUG ("pa_mute_stream %d", index);
     START_PA_OPERATION
-    op = pa_context_set_sink_input_mute (vol->pa_context, index, 1, &pa_cb_generic_success, vol);
+    op = pa_context_set_sink_input_mute (vol->pa_cont, index, 1, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_sink_input_mute")
 }
 
@@ -716,7 +740,7 @@ static int pa_unmute_stream (VolumePulsePlugin *vol, int index)
 {
     DEBUG ("pa_unmute_stream %d", index);
     START_PA_OPERATION
-    op = pa_context_set_sink_input_mute (vol->pa_context, index, 0, &pa_cb_generic_success, vol);
+    op = pa_context_set_sink_input_mute (vol->pa_cont, index, 0, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_sink_input_mute")
 }
 
@@ -739,13 +763,13 @@ int pulse_get_profile (VolumePulsePlugin *vol, const char *card)
     }
 
     START_PA_OPERATION
-    op = pa_context_get_card_info_by_name (vol->pa_context, card, &pa_cb_get_profile, vol);
+    op = pa_context_get_card_info_by_name (vol->pa_cont, card, &pa_cb_get_profile, vol);
     END_PA_OPERATION ("get_card_info_by_name")
 }
 
 /* Callback for profile query */
 
-static void pa_cb_get_profile (pa_context *c, const pa_card_info *i, int eol, void *userdata)
+static void pa_cb_get_profile (pa_context *, const pa_card_info *i, int eol, void *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
@@ -765,7 +789,7 @@ int pulse_set_profile (VolumePulsePlugin *vol, const char *card, const char *pro
 {
     DEBUG ("pulse_set_profile %s %s", card, profile);
     START_PA_OPERATION
-    op = pa_context_set_card_profile_by_name (vol->pa_context, card, profile, &pa_cb_generic_success, vol);
+    op = pa_context_set_card_profile_by_name (vol->pa_cont, card, profile, &pa_cb_generic_success, vol);
     END_PA_OPERATION ("set_card_profile_by_name")
 }
 
@@ -783,18 +807,18 @@ int pulse_set_profile (VolumePulsePlugin *vol, const char *card, const char *pro
  
 /* Loop through all cards, adding each to relevant part of device menu */
 
-int pulse_add_devices_to_menu (VolumePulsePlugin *vol, gboolean internal)
+int pulse_add_devices_to_menu (VolumePulsePlugin *vol, gboolean internal, gboolean input_control)
 {
-    if (internal && vol->input_control) return 0;
+    if (internal && input_control) return 0;
     vol->separator = FALSE;
-    DEBUG ("pulse_add_devices_to_menu %d %d", vol->input_control, internal);
+    DEBUG ("pulse_add_devices_to_menu %d %d", input_control, internal);
     START_PA_OPERATION
-    if (vol->input_control)
-        op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_get_info_inputs, vol);
+    if (input_control)
+        op = pa_context_get_card_info_list (vol->pa_cont, &pa_cb_get_info_inputs, vol);
     else if (internal)
-        op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_get_info_internal, vol);
+        op = pa_context_get_card_info_list (vol->pa_cont, &pa_cb_get_info_internal, vol);
     else
-        op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_get_info_external, vol);
+        op = pa_context_get_card_info_list (vol->pa_cont, &pa_cb_get_info_external, vol);
     END_PA_OPERATION ("get_card_info_list")
 }
 
@@ -803,7 +827,7 @@ int pulse_add_devices_to_menu (VolumePulsePlugin *vol, gboolean internal)
  * be in the menu in question and adding it if so
  */
 
-static void pa_cb_get_info_inputs (pa_context *c, const pa_card_info *i, int eol, void *userdata)
+static void pa_cb_get_info_inputs (pa_context *, const pa_card_info *i, int eol, void *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
@@ -815,7 +839,7 @@ static void pa_cb_get_info_inputs (pa_context *c, const pa_card_info *i, int eol
             if (nam)
             {
                 DEBUG ("pa_cb_get_info_inputs %s", nam);
-                menu_add_item (vol, nam, nam);
+                mic_menu_add_item (vol, nam, nam);
             }
         }
     }
@@ -823,7 +847,7 @@ static void pa_cb_get_info_inputs (pa_context *c, const pa_card_info *i, int eol
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
-static void pa_cb_get_info_internal (pa_context *c, const pa_card_info *i, int eol, void *userdata)
+static void pa_cb_get_info_internal (pa_context *, const pa_card_info *i, int eol, void *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
@@ -838,7 +862,7 @@ static void pa_cb_get_info_internal (pa_context *c, const pa_card_info *i, int e
                 {
                     if (!strcmp (nam, "bcm2835 Headphones") && vsystem ("raspi-config nonint has_analog")) return;
                     DEBUG ("pa_cb_get_info_internal %s", nam);
-                    menu_add_item (vol, nam, nam);
+                    vol_menu_add_item (vol, nam, nam);
                 }
             }
         }
@@ -847,7 +871,7 @@ static void pa_cb_get_info_internal (pa_context *c, const pa_card_info *i, int e
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
-static void pa_cb_get_info_external (pa_context *c, const pa_card_info *i, int eol, void *userdata)
+static void pa_cb_get_info_external (pa_context *, const pa_card_info *i, int eol, void *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
@@ -861,8 +885,8 @@ static void pa_cb_get_info_external (pa_context *c, const pa_card_info *i, int e
                 if (nam)
                 {
                     DEBUG ("pa_cb_get_info_external %s", nam);
-                    menu_add_separator (vol, vol->menu_devices);
-                    menu_add_item (vol, nam, nam);
+                    menu_add_separator (vol, vol->menu_devices[0]);
+                    vol_menu_add_item (vol, nam, nam);
                 }
             }
         }
@@ -879,7 +903,7 @@ static gboolean pa_card_has_port (const pa_card_info *i, pa_direction_t dir)
     if (!i->n_ports) return FALSE;
     while (*port)
     {
-        if ((*port)->direction == dir) return TRUE;
+        if ((*port)->direction == (int) dir) return TRUE;
         port++;
     }
     return FALSE;
@@ -887,9 +911,9 @@ static gboolean pa_card_has_port (const pa_card_info *i, pa_direction_t dir)
 
 /* Loop through all sinks and sources, updating device menu as appropriate */
 
-void pulse_update_devices_in_menu (VolumePulsePlugin *vol)
+void pulse_update_devices_in_menu (VolumePulsePlugin *vol, gboolean input_control)
 {
-    if (vol->input_control) pa_replace_cards_with_sources (vol);
+    if (input_control) pa_replace_cards_with_sources (vol);
     else pa_replace_cards_with_sinks (vol);
 }
 
@@ -899,23 +923,23 @@ static int pa_replace_cards_with_sinks (VolumePulsePlugin *vol)
 {
     DEBUG ("pa_replace_cards_with_sinks");
     START_PA_OPERATION
-    op = pa_context_get_sink_info_list (vol->pa_context, &pa_cb_replace_cards_with_sinks, vol);
+    op = pa_context_get_sink_info_list (vol->pa_cont, &pa_cb_replace_cards_with_sinks, vol);
     END_PA_OPERATION ("get_sink_info_list")
 }
 
 /* Callback for sink list query, which updates ALSA devices in menu as appropriate */
 
-static void pa_cb_replace_cards_with_sinks (pa_context *context, const pa_sink_info *i, int eol, void *userdata)
+static void pa_cb_replace_cards_with_sinks (pa_context *, const pa_sink_info *i, int eol, void *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
-    if (!eol && vol->menu_devices)
+    if (!eol && vol->menu_devices[0])
     {
         const char *api = pa_proplist_gets (i->proplist, "device.api");
         if (!g_strcmp0 (api, "alsa"))
-            gtk_container_foreach (GTK_CONTAINER (vol->menu_devices), pa_replace_card_with_sink_on_match, (void *) i);
+            gtk_container_foreach (GTK_CONTAINER (vol->menu_devices[0]), pa_replace_card_with_sink_on_match, (void *) i);
         else
-            gtk_container_foreach (GTK_CONTAINER (vol->menu_devices), pa_card_check_bt_output_profile, (void *) i);
+            gtk_container_foreach (GTK_CONTAINER (vol->menu_devices[0]), pa_card_check_bt_output_profile, (void *) i);
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
@@ -960,23 +984,23 @@ static int pa_replace_cards_with_sources (VolumePulsePlugin *vol)
 {
     DEBUG ("pa_replace_cards_with_sources");
     START_PA_OPERATION
-    op = pa_context_get_source_info_list (vol->pa_context, &pa_cb_replace_cards_with_sources, vol);
+    op = pa_context_get_source_info_list (vol->pa_cont, &pa_cb_replace_cards_with_sources, vol);
     END_PA_OPERATION ("get_source_info_list")
 }
 
 /* Callback for source list query, which updates ALSA devices in menu as appropriate */
 
-static void pa_cb_replace_cards_with_sources (pa_context *context, const pa_source_info *i, int eol, void *userdata)
+static void pa_cb_replace_cards_with_sources (pa_context *, const pa_source_info *i, int eol, void *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
-    if (!eol && vol->menu_devices)
+    if (!eol && vol->menu_devices[1])
     {
         const char *api = pa_proplist_gets (i->proplist, "device.api");
         if (!g_strcmp0 (api, "alsa"))
-            gtk_container_foreach (GTK_CONTAINER (vol->menu_devices), pa_replace_card_with_source_on_match, (void *) i);
+            gtk_container_foreach (GTK_CONTAINER (vol->menu_devices[1]), pa_replace_card_with_source_on_match, (void *) i);
         else
-            gtk_container_foreach (GTK_CONTAINER (vol->menu_devices), pa_card_check_bt_input_profile, (void *) i);
+            gtk_container_foreach (GTK_CONTAINER (vol->menu_devices[1]), pa_card_check_bt_input_profile, (void *) i);
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
@@ -1025,13 +1049,13 @@ int pulse_add_devices_to_profile_dialog (VolumePulsePlugin *vol)
 {
     DEBUG ("pulse_add_devices_to_profile_dialog");
     START_PA_OPERATION
-    op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_add_devices_to_profile_dialog, vol);
+    op = pa_context_get_card_info_list (vol->pa_cont, &pa_cb_add_devices_to_profile_dialog, vol);
     END_PA_OPERATION ("get_card_info_list")
 }
 
 /* Callback for card list query - reads profiles for card and adds as a combo box to profiles dialog */
 
-static void pa_cb_add_devices_to_profile_dialog (pa_context *c, const pa_card_info *i, int eol, void *userdata)
+static void pa_cb_add_devices_to_profile_dialog (pa_context *, const pa_card_info *i, int eol, void *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
@@ -1070,14 +1094,14 @@ static void pa_cb_add_devices_to_profile_dialog (pa_context *c, const pa_card_in
 
 /* Get a count of the number of input or output devices */
 
-int pulse_count_devices (VolumePulsePlugin *vol)
+int pulse_count_devices (VolumePulsePlugin *vol, gboolean input_control)
 {
     vol->pa_devices = 0;
     START_PA_OPERATION
-    if (vol->input_control)
-        op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_count_inputs, vol);
+    if (input_control)
+        op = pa_context_get_card_info_list (vol->pa_cont, &pa_cb_count_inputs, vol);
     else
-        op = pa_context_get_card_info_list (vol->pa_context, &pa_cb_count_outputs, vol);
+        op = pa_context_get_card_info_list (vol->pa_cont, &pa_cb_count_outputs, vol);
     END_PA_OPERATION ("get_card_info_list")
 }
 
@@ -1086,7 +1110,7 @@ int pulse_count_devices (VolumePulsePlugin *vol)
  * whenever a matching device is found
  */
 
-static void pa_cb_count_inputs (pa_context *c, const pa_card_info *i, int eol, void *userdata)
+static void pa_cb_count_inputs (pa_context *, const pa_card_info *i, int eol, void *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
@@ -1102,7 +1126,7 @@ static void pa_cb_count_inputs (pa_context *c, const pa_card_info *i, int eol, v
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
 }
 
-static void pa_cb_count_outputs (pa_context *c, const pa_card_info *i, int eol, void *userdata)
+static void pa_cb_count_outputs (pa_context *, const pa_card_info *i, int eol, void *userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
