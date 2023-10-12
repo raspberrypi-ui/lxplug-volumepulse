@@ -1,3 +1,9 @@
+lxplug-volumepulse (0.20) bookworm; urgency=medium
+
+  * Fix detection of multiple USB devices
+
+ -- Simon Long <simon@raspberrypi.com>  Thu, 12 Oct 2023 15:12:30 +0100
+
 lxplug-volumepulse (0.19) bookworm; urgency=medium
 
   * Combine volume and microphone plugins into one
