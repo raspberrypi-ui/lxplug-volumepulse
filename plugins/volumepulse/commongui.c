@@ -491,7 +491,7 @@ gboolean volumepulse_control_msg (GtkWidget *plugin, const char *cmd)
             int volume = pulse_get_volume (vol, FALSE);
             if (volume < 100)
             {
-                volume += 5;
+                volume += 9;  // some hardware rounds volumes, so make sure we are going as far as possible up before we round....
                 volume /= 5;
                 volume *= 5;
             }
@@ -509,7 +509,7 @@ gboolean volumepulse_control_msg (GtkWidget *plugin, const char *cmd)
             int volume = pulse_get_volume (vol, FALSE);
             if (volume > 0)
             {
-                volume -= 1; // effectively -5 + 4 for rounding...
+                volume -= 4; // ... and the same for going down
                 volume /= 5;
                 volume *= 5;
             }

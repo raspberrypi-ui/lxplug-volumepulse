@@ -1,3 +1,9 @@
+lxplug-volumepulse (0.22) bookworm; urgency=medium
+
+  * Fix volume steps on devices which do odd rounding things...
+
+ -- Simon Long <simon@raspberrypi.com>  Tue, 17 Oct 2023 15:06:42 +0100
+
 lxplug-volumepulse (0.21) bookworm; urgency=medium
 
   * Better fix for multiple USB devices
