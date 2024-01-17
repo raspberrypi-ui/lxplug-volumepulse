@@ -226,7 +226,7 @@ static gboolean popup_button_press (GtkWidget *widget, GdkEventButton *event, Vo
 
 /* Create the device select menu */
 
-void menu_create (VolumePulsePlugin *vol, gboolean input_control)
+gboolean menu_create (VolumePulsePlugin *vol, gboolean input_control)
 {
     GtkWidget *mi;
     GList *items;
@@ -259,8 +259,10 @@ void menu_create (VolumePulsePlugin *vol, gboolean input_control)
         mi = gtk_menu_item_new_with_label (_("No audio devices found"));
         gtk_widget_set_sensitive (GTK_WIDGET (mi), FALSE);
         gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices[index]), mi);
+        return FALSE;
     }
     else g_list_free (items);
+    return TRUE;
 }
 
 /* Add a separator to the menu (but only if there isn't already one there...) */
@@ -475,6 +477,7 @@ void volumepulse_configuration_changed (LXPanel *panel, GtkWidget *plugin)
 gboolean volumepulse_control_msg (GtkWidget *plugin, const char *cmd)
 {
     VolumePulsePlugin *vol = lxpanel_plugin_get_data (plugin);
+    if (!gtk_widget_is_visible (vol->plugin[0])) return TRUE;
 
     if (!strncmp (cmd, "mute", 4))
     {

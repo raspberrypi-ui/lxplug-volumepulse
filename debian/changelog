@@ -1,3 +1,9 @@
+lxplug-volumepulse (0.23) bookworm; urgency=medium
+
+  * Hide volume icon if no devices found
+
+ -- Simon Long <simon@raspberrypi.com>  Wed, 17 Jan 2024 08:34:17 +0000
+
 lxplug-volumepulse (0.22) bookworm; urgency=medium
 
   * Fix volume steps on devices which do odd rounding things...

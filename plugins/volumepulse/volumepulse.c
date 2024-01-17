@@ -126,13 +126,9 @@ static const char *device_display_name (VolumePulsePlugin *vol, const char *name
 void vol_menu_show (VolumePulsePlugin *vol)
 {
     GtkWidget *mi;
-    GList *items;
 
     // create the menu
-    menu_create (vol, FALSE);
-
-    items = gtk_container_get_children (GTK_CONTAINER (vol->menu_devices[0]));
-    if (items)
+    if (menu_create (vol, FALSE))
     {
         // add the profiles menu item to the top level menu
         mi = gtk_separator_menu_item_new ();
@@ -141,8 +137,6 @@ void vol_menu_show (VolumePulsePlugin *vol)
         mi = gtk_menu_item_new_with_label (_("Device Profiles..."));
         g_signal_connect (mi, "activate", G_CALLBACK (menu_open_profile_dialog), (gpointer) vol);
         gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices[0]), mi);
-
-        g_list_free (items);
     }
 
     // lock menu if a dialog is open
@@ -347,6 +341,18 @@ static gboolean profiles_dialog_delete (GtkWidget *, GdkEvent *, VolumePulsePlug
 
 void volumepulse_update_display (VolumePulsePlugin *vol)
 {
+    pulse_count_devices (vol, FALSE);
+    if (vol->pa_devices + bluetooth_count_devices (vol, FALSE) > 0)
+    {
+        gtk_widget_show_all (vol->plugin[0]);
+        gtk_widget_set_sensitive (vol->plugin[0], TRUE);
+    }
+    else
+    {
+        gtk_widget_hide (vol->plugin[0]);
+        gtk_widget_set_sensitive (vol->plugin[0], FALSE);
+    }
+
     /* read current mute and volume status */
     gboolean mute = pulse_get_mute (vol, FALSE);
     int level = pulse_get_volume (vol, FALSE);
