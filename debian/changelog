@@ -1,3 +1,9 @@
+lxplug-volumepulse (0.24) bookworm; urgency=medium
+
+  * Check that pulse context is valid
+
+ -- Simon Long <simon@raspberrypi.com>  Tue, 13 Feb 2024 07:25:03 +0000
+
 lxplug-volumepulse (0.23) bookworm; urgency=medium
 
   * Hide volume icon if no devices found
