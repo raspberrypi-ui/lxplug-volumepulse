@@ -1,3 +1,9 @@
+lxplug-volumepulse (0.25) bookworm; urgency=medium
+
+  * Hide volume control window on task list 
+
+ -- Simon Long <simon@raspberrypi.com>  Fri, 16 Feb 2024 13:04:03 +0000
+
 lxplug-volumepulse (0.24) bookworm; urgency=medium
 
   * Check that pulse context is valid
