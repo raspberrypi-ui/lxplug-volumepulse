@@ -124,6 +124,7 @@ void popup_window_show (GtkWidget *p, gboolean input_control)
     vol->popup_window[index] = gtk_window_new (GTK_WINDOW_TOPLEVEL);
     gtk_widget_set_name (vol->popup_window[index], "panelpopup");
     gtk_window_set_decorated (GTK_WINDOW (vol->popup_window[index]), FALSE);
+    gtk_window_set_skip_taskbar_hint (GTK_WINDOW (vol->popup_window[index]), TRUE);
 
     gtk_container_set_border_width (GTK_CONTAINER (vol->popup_window[index]), 0);
 
