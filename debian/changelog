@@ -1,3 +1,9 @@
+lxplug-volumepulse (0.26) bookworm; urgency=medium
+
+  * Fix memory leak
+
+ -- Simon Long <simon@raspberrypi.com>  Tue, 05 Mar 2024 07:13:48 +0000
+
 lxplug-volumepulse (0.25) bookworm; urgency=medium
 
   * Hide volume control window on task list 
