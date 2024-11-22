@@ -382,7 +382,7 @@ gboolean volumepulse_button_press_event (GtkWidget *, GdkEventButton *event, Vol
         case 3: /* right-click - show device list */
                 close_widget (&vol->popup_window[0]);
                 vol_menu_show (vol);
-                gtk_menu_popup_at_widget (GTK_MENU (vol->menu_devices[0]), vol->plugin[0], GDK_GRAVITY_NORTH_WEST, GDK_GRAVITY_NORTH_WEST, (GdkEvent *) event);
+                gtk_menu_popup_at_widget (GTK_MENU (vol->menu_devices[0]), vol->plugin[0], GDK_GRAVITY_SOUTH_WEST, GDK_GRAVITY_NORTH_WEST, (GdkEvent *) event);
                 break;
     }
 
@@ -407,7 +407,7 @@ gboolean micpulse_button_press_event (GtkWidget *, GdkEventButton *event, Volume
         case 3: /* right-click - show device list */
                 close_widget (&vol->popup_window[1]);
                 mic_menu_show (vol);
-                gtk_menu_popup_at_widget (GTK_MENU (vol->menu_devices[1]), vol->plugin[1], GDK_GRAVITY_NORTH_WEST, GDK_GRAVITY_NORTH_WEST, (GdkEvent *) event);
+                gtk_menu_popup_at_widget (GTK_MENU (vol->menu_devices[1]), vol->plugin[1], GDK_GRAVITY_SOUTH_WEST, GDK_GRAVITY_NORTH_WEST, (GdkEvent *) event);
                 break;
     }
 
