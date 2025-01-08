@@ -35,7 +35,22 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <gtk/gtk.h>
 #include <pulse/pulseaudio.h>
 
+#ifdef LXPLUG
 #include "plugin.h"
+#define wrap_new_menu_item(plugin,text,maxlen,icon) lxpanel_plugin_new_menu_item(plugin->panel,text,maxlen,icon)
+#define wrap_set_menu_icon(plugin,image,icon) lxpanel_plugin_set_menu_icon(plugin->panel,image,icon)
+#define wrap_set_taskbar_icon(plugin,image,icon) lxpanel_plugin_set_taskbar_icon(plugin->panel,image,icon)
+#define wrap_show_menu(plugin,menu) gtk_menu_popup_at_widget(GTK_MENU(menu),plugin,GDK_GRAVITY_SOUTH_WEST,GDK_GRAVITY_NORTH_WEST,NULL)
+#else
+#include "lxutils.h"
+#define lxpanel_notify(panel,msg) lxpanel_notify(msg)
+#define lxpanel_plugin_update_menu_icon(item,icon) update_menu_icon(item,icon)
+#define lxpanel_plugin_append_menu_icon(item,icon) append_menu_icon(item,icon)
+#define wrap_new_menu_item(plugin,text,maxlen,icon) new_menu_item(text,maxlen,icon,plugin->icon_size)
+#define wrap_set_menu_icon(plugin,image,icon) set_menu_icon(image,icon,plugin->icon_size)
+#define wrap_set_taskbar_icon(plugin,image,icon) set_taskbar_icon(image,icon,plugin->icon_size)
+#define wrap_show_menu(plugin,menu) show_menu_with_kbd(plugin,menu)
+#endif
 
 #define DEBUG_ON
 #ifdef DEBUG_ON
@@ -44,13 +59,23 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define DEBUG(fmt,args...)
 #endif
 
+#ifndef VOLUMEPULSE_STRUCT
+#define VOLUMEPULSE_STRUCT
+
 typedef struct {
     /* plugin */
-    GtkWidget *box;                     /* Back pointer to widget */
     GtkWidget *plugin[2];               /* Pointers to buttons */
+#ifdef LXPLUG
     LXPanel *panel;                     /* Back pointer to panel */
     config_setting_t *settings;         /* Plugin settings */
-    gboolean wizard;                    /* Running under wizard? */
+    GtkWidget *box;                     /* Back pointer to widget */
+#else
+    int icon_size;                      /* Variables used under wf-panel */
+    gboolean bottom;
+    GtkGesture *gesture[2];
+#endif
+    gboolean wizard;
+
     gboolean pipewire;                  /* Pipewire running? */
 
     /* graphics */
@@ -99,6 +124,8 @@ typedef struct {
     gboolean bt_card_found;
 } VolumePulsePlugin;
 
+#endif
+
 /* Functions in volumepulse.c needed in other modules */
 
 extern void vol_menu_show (VolumePulsePlugin *vol);
@@ -108,7 +135,7 @@ extern void mic_menu_add_item (VolumePulsePlugin *vol, const char *label, const 
 extern void profiles_dialog_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name);
 extern void volumepulse_update_display (VolumePulsePlugin *vol);
 extern void micpulse_update_display (VolumePulsePlugin *vol);
-extern void hdmi_init (VolumePulsePlugin *vol);
+
 
 /* End of file */
 /*----------------------------------------------------------------------------*/

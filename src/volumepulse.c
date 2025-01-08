@@ -25,6 +25,8 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include <locale.h>
+
 #include "volumepulse.h"
 #include "commongui.h"
 #include "pulse.h"
@@ -36,6 +38,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /* Helpers */
 static int get_value (const char *fmt, ...);
+static void hdmi_init (VolumePulsePlugin *vol);
 static const char *device_display_name (VolumePulsePlugin *vol, const char *name);
 
 /* Menu popup */
@@ -69,12 +72,17 @@ static int get_value (const char *fmt, ...)
 
 /* Find number of HDMI devices and device names */
 
-void hdmi_init (VolumePulsePlugin *vol)
+static void hdmi_init (VolumePulsePlugin *vol)
 {
     int i, m;
 
+#ifdef LXPLUG
     /* check xrandr for connected monitors */
     m = get_value ("xrandr -q | grep -c connected");
+#else
+    /* check wlr-randr for connected monitors */
+    m = get_value ("wlr-randr | grep -c ^[^[:space:]]");
+#endif
     if (m < 0) m = 1; /* couldn't read, so assume 1... */
     if (m > 2) m = 2;
 
@@ -87,10 +95,15 @@ void hdmi_init (VolumePulsePlugin *vol)
     /* get the names */
     if (m == 2)
     {
+#ifdef LXPLUG
         for (i = 0; i < 2; i++)
         {
             vol->hdmi_names[i] = get_string ("xrandr --listmonitors | grep %d: | cut -d ' ' -f 6", i);
         }
+#else
+        vol->hdmi_names[0] = get_string ("wlr-randr | grep  ^[^[:space:]] | sort | head -n 1 | cut -d ' ' -f 1");
+        vol->hdmi_names[1] = get_string ("wlr-randr | grep  ^[^[:space:]] | sort | tail -n 1 | cut -d ' ' -f 1");
+#endif
 
         /* check both devices are HDMI */
         if (vol->hdmi_names[0] && !strncmp (vol->hdmi_names[0], "HDMI", 4)
@@ -367,7 +380,7 @@ void volumepulse_update_display (VolumePulsePlugin *vol)
         else if (level > 0) icon = "audio-volume-low";
         else icon = "audio-volume-silent";
     }
-    lxpanel_plugin_set_taskbar_icon (vol->panel, vol->tray_icon[0], icon);
+    wrap_set_taskbar_icon (vol, vol->tray_icon[0], icon);
 
     /* update popup window controls */
     if (vol->popup_window[0])
@@ -394,17 +407,18 @@ void volumepulse_update_display (VolumePulsePlugin *vol)
 /*----------------------------------------------------------------------------*/
 
 /* Plugin constructor */
+#ifdef LXPLUG
+void volumepulse_destructor (gpointer user_data);
+
 
 static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *settings)
 {
     /* Allocate and initialize plugin context */
     VolumePulsePlugin *vol = g_new0 (VolumePulsePlugin, 1);
 
-#ifdef ENABLE_NLS
     setlocale (LC_ALL, "");
     bindtextdomain (GETTEXT_PACKAGE, PACKAGE_LOCALE_DIR);
     bind_textdomain_codeset (GETTEXT_PACKAGE, "UTF-8");
-#endif
 
     /* Allocate top level widget and set into plugin widget pointer */
     vol->panel = panel;
@@ -416,7 +430,10 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     gtk_box_pack_start (GTK_BOX (vol->box), vol->plugin[1], TRUE, TRUE, 0);
 
     lxpanel_plugin_set_data (vol->box, vol, volumepulse_destructor);
-
+#else
+void volumepulse_init (VolumePulsePlugin *vol)
+{
+#endif
     /* Allocate icon as a child of top level */
     vol->tray_icon[0] = gtk_image_new ();
     gtk_container_add (GTK_CONTAINER (vol->plugin[0]), vol->tray_icon[0]);
@@ -434,6 +451,22 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     g_signal_connect (vol->plugin[1], "scroll-event", G_CALLBACK (micpulse_mouse_scrolled), vol);
     gtk_widget_add_events (vol->plugin[1], GDK_SCROLL_MASK);
 
+#ifndef LXPLUG
+    g_signal_connect (vol->plugin[0], "button-release-event", G_CALLBACK (volumepulse_button_release_event), vol);
+    g_signal_connect (vol->plugin[1], "button-release-event", G_CALLBACK (micpulse_button_release_event), vol);
+
+    vol->gesture[0] = gtk_gesture_long_press_new (vol->plugin[0]);
+    gtk_gesture_single_set_touch_only (GTK_GESTURE_SINGLE (vol->gesture[0]), touch_only);
+    g_signal_connect (vol->gesture[0], "pressed", G_CALLBACK (volmic_gesture_pressed), vol);
+    gtk_event_controller_set_propagation_phase (GTK_EVENT_CONTROLLER (vol->gesture[0]), GTK_PHASE_BUBBLE);
+
+    vol->gesture[1] = gtk_gesture_long_press_new (vol->plugin[1]);
+    gtk_gesture_single_set_touch_only (GTK_GESTURE_SINGLE (vol->gesture[1]), touch_only);
+    g_signal_connect (vol->gesture[1], "pressed", G_CALLBACK (volmic_gesture_pressed), vol);
+    gtk_event_controller_set_propagation_phase (GTK_EVENT_CONTROLLER (vol->gesture[1]), GTK_PHASE_BUBBLE);
+#endif
+
+
     /* Set up variables */
     vol->menu_devices[0] = NULL;
     vol->menu_devices[1] = NULL;
@@ -441,10 +474,14 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     vol->popup_window[1] = NULL;
     vol->profiles_dialog = NULL;
     vol->conn_dialog = NULL;
+    vol->hdmi_names[0] = NULL;
+    vol->hdmi_names[1] = NULL;
 
+#ifdef LXPLUG
     if (!g_strcmp0 (getenv ("USER"), "rpi-first-boot-wizard")) vol->wizard = TRUE;
     else vol->wizard = FALSE;
-    
+#endif
+
     vol->pipewire = !system ("ps ax | grep pipewire-pulse | grep -qv grep");
     if (vol->pipewire)
     {
@@ -470,10 +507,121 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
     /* Show the widget and return */
     gtk_widget_show_all (vol->plugin[0]);
     gtk_widget_show_all (vol->plugin[1]);
+#ifdef LXPLUG
     volumepulse_update_display (vol);
     micpulse_update_display (vol);
     return vol->box;
+#endif
 }
+
+/* Plugin destructor */
+
+void volumepulse_destructor (gpointer user_data)
+{
+    VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
+
+    close_widget (&vol->profiles_dialog);
+    close_widget (&vol->conn_dialog);
+    close_widget (&vol->menu_devices[0]);
+    close_widget (&vol->menu_devices[1]);
+#ifdef LXPLUG
+    close_widget (&vol->popup_window[0]);
+    close_widget (&vol->popup_window[1]);
+#else
+    close_popup ();
+#endif
+
+    bluetooth_terminate (vol);
+    pulse_terminate (vol);
+
+    /* Deallocate all memory. */
+#ifndef LXPLUG
+    if (vol->gesture[0]) g_object_unref (vol->gesture[0]);
+    if (vol->gesture[1]) g_object_unref (vol->gesture[1]);
+#endif
+    g_free (vol);
+}
+
+/* Callback when control message arrives */
+
+#ifdef LXPLUG
+gboolean volumepulse_control_msg (GtkWidget *plugin, const char *cmd)
+{
+    VolumePulsePlugin *vol = lxpanel_plugin_get_data (plugin);
+#else
+gboolean volumepulse_control_msg (VolumePulsePlugin *vol, const char *cmd)
+{
+#endif
+    if (!gtk_widget_is_visible (vol->plugin[0])) return TRUE;
+
+    if (!strncmp (cmd, "mute", 4))
+    {
+        pulse_set_mute (vol, pulse_get_mute (vol, FALSE) ? 0 : 1, FALSE);
+        volumepulse_update_display (vol);
+        return TRUE;
+    }
+
+    if (!strncmp (cmd, "volu", 4))
+    {
+        if (pulse_get_mute (vol, FALSE)) pulse_set_mute (vol, 0, FALSE);
+        else
+        {
+            int volume = pulse_get_volume (vol, FALSE);
+            if (volume < 100)
+            {
+                volume += 9;  // some hardware rounds volumes, so make sure we are going as far as possible up before we round....
+                volume /= 5;
+                volume *= 5;
+            }
+            pulse_set_volume (vol, volume, FALSE);
+        }
+        volumepulse_update_display (vol);
+        return TRUE;
+    }
+
+    if (!strncmp (cmd, "vold", 4))
+    {
+        if (pulse_get_mute (vol, FALSE)) pulse_set_mute (vol, 0, FALSE);
+        else
+        {
+            int volume = pulse_get_volume (vol, FALSE);
+            if (volume > 0)
+            {
+                volume -= 4; // ... and the same for going down
+                volume /= 5;
+                volume *= 5;
+            }
+            pulse_set_volume (vol, volume, FALSE);
+        }
+        volumepulse_update_display (vol);
+        return TRUE;
+    }
+
+    if (!strncmp (cmd, "stop", 5))
+    {
+        pulse_terminate (vol);
+    }
+
+    if (!strncmp (cmd, "start", 5))
+    {
+        hdmi_init (vol);
+        pulse_init (vol);
+    }
+
+    return FALSE;
+}
+
+#ifdef LXPLUG
+
+/* Callback when panel configuration changes */
+
+void volumepulse_configuration_changed (LXPanel *panel, GtkWidget *plugin)
+{
+    VolumePulsePlugin *vol = lxpanel_plugin_get_data (plugin);
+
+    volumepulse_update_display (vol);
+}
+
 
 FM_DEFINE_MODULE (lxpanel_gtk, volumepulse)
 
@@ -488,6 +636,6 @@ LXPanelPluginInit fm_module_init_lxpanel_gtk =
     .control = volumepulse_control_msg,
     .gettext_package = GETTEXT_PACKAGE
 };
-
+#endif
 /* End of file */
 /*----------------------------------------------------------------------------*/

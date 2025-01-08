@@ -124,7 +124,7 @@ void micpulse_update_display (VolumePulsePlugin *vol)
     if (mute) level = 0;
 
     /* update icon */
-    lxpanel_plugin_set_taskbar_icon (vol->panel, vol->tray_icon[1], mute ? "audio-input-mic-muted" : "audio-input-microphone");
+    wrap_set_taskbar_icon (vol, vol->tray_icon[1], mute ? "audio-input-mic-muted" : "audio-input-microphone");
 
     /* update popup window controls */
     if (vol->popup_window[1])

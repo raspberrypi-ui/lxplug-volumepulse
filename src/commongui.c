@@ -43,8 +43,6 @@ static void popup_window_scale_changed_vol (GtkRange *range, VolumePulsePlugin *
 static void popup_window_mute_toggled_vol (GtkWidget *widget, VolumePulsePlugin *vol);
 static void popup_window_scale_changed_mic (GtkRange *range, VolumePulsePlugin *vol);
 static void popup_window_mute_toggled_mic (GtkWidget *widget, VolumePulsePlugin *vol);
-static gboolean popup_mapped (GtkWidget *widget, GdkEvent *event, VolumePulsePlugin *vol);
-static gboolean popup_button_press (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
 static void menu_mark_default_input (GtkWidget *widget, gpointer data);
 static void menu_mark_default_output (GtkWidget *widget, gpointer data);
 
@@ -111,20 +109,53 @@ void close_widget (GtkWidget **wid)
 /* Volume scale popup window                                                  */
 /*----------------------------------------------------------------------------*/
 
+static void vol_destroyed (GtkWidget *widget, gpointer data)
+{
+    VolumePulsePlugin *vol = (VolumePulsePlugin *) data;
+    if (widget == vol->popup_window[0]) vol->popup_window[0] = NULL;
+    if (widget == vol->popup_window[1]) vol->popup_window[1] = NULL;
+}
+
+#ifdef LXPLUG
+static gboolean popup_mapped (GtkWidget *widget, GdkEvent *, VolumePulsePlugin *)
+{
+    gdk_seat_grab (gdk_display_get_default_seat (gdk_display_get_default ()), gtk_widget_get_window (widget), GDK_SEAT_CAPABILITY_ALL_POINTING, TRUE, NULL, NULL, NULL, NULL);
+    return FALSE;
+}
+
+static gboolean popup_button_press (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol)
+{
+    int x, y;
+    gtk_window_get_size (GTK_WINDOW (widget), &x, &y);
+    if (event->x < 0 || event->y < 0 || event->x > x || event->y > y)
+    {
+        close_widget (&vol->popup_window[0]);
+        close_widget (&vol->popup_window[1]);
+        gdk_seat_ungrab (gdk_display_get_default_seat (gdk_display_get_default ()));
+    }
+    return FALSE;
+}
+#endif
+
 /* Create the pop-up volume window */
 
+#ifdef LXPLUG
 void popup_window_show (GtkWidget *p, gboolean input_control)
 {
     VolumePulsePlugin *vol = lxpanel_plugin_get_data (p);
+#else
+void popup_window_show (VolumePulsePlugin *vol, gboolean input_control)
+{
+#endif
     int index = input_control ? 1 : 0;
-    gint x, y;
 
     /* Create a new window. */
-    //vol->popup_window[index] = GTK_WIDGET (gtk_menu_button_get_popover (GTK_MENU_BUTTON (vol->plugin[index])));
     vol->popup_window[index] = gtk_window_new (GTK_WINDOW_TOPLEVEL);
     gtk_widget_set_name (vol->popup_window[index], "panelpopup");
+#ifdef LXPLUG
     gtk_window_set_decorated (GTK_WINDOW (vol->popup_window[index]), FALSE);
     gtk_window_set_skip_taskbar_hint (GTK_WINDOW (vol->popup_window[index]), TRUE);
+#endif
 
     gtk_container_set_border_width (GTK_CONTAINER (vol->popup_window[index]), 0);
 
@@ -149,8 +180,11 @@ void popup_window_show (GtkWidget *p, gboolean input_control)
     gtk_box_pack_end (GTK_BOX (box), vol->popup_mute_check[index], FALSE, FALSE, 0);
     vol->mute_check_handler[index] = g_signal_connect (vol->popup_mute_check[index], "toggled", input_control ? G_CALLBACK (popup_window_mute_toggled_mic) : G_CALLBACK (popup_window_mute_toggled_vol), vol);
     gtk_widget_set_can_focus (vol->popup_mute_check[index], FALSE);
+    g_signal_connect (vol->popup_window[index], "destroy", G_CALLBACK (vol_destroyed), vol);
 
     /* Realise the window */
+#ifdef LXPLUG
+    gint x, y;
     gtk_window_set_position (GTK_WINDOW (vol->popup_window[index]), GTK_WIN_POS_MOUSE);
     gtk_widget_show_all (vol->popup_window[index]);
     gtk_widget_hide (vol->popup_window[index]);
@@ -160,6 +194,10 @@ void popup_window_show (GtkWidget *p, gboolean input_control)
 
     g_signal_connect (G_OBJECT (vol->popup_window[index]), "map-event", G_CALLBACK (popup_mapped), vol);
     g_signal_connect (G_OBJECT (vol->popup_window[index]), "button-press-event", G_CALLBACK (popup_button_press), vol);
+#else
+    g_signal_connect (vol->popup_window[index], "destroy", G_CALLBACK (vol_destroyed), vol);
+    popup_window_at_button (vol->popup_window[index], vol->plugin[index]);
+#endif
 }
 
 /* Handler for "value_changed" signal on popup window vertical scale */
@@ -200,25 +238,6 @@ static void popup_window_mute_toggled_mic (GtkWidget *widget, VolumePulsePlugin 
     pulse_set_mute (vol, gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (widget)), TRUE);
 
     micpulse_update_display (vol);
-}
-
-static gboolean popup_mapped (GtkWidget *widget, GdkEvent *event, VolumePulsePlugin *vol)
-{
-    gdk_seat_grab (gdk_display_get_default_seat (gdk_display_get_default ()), gtk_widget_get_window (widget), GDK_SEAT_CAPABILITY_ALL_POINTING, TRUE, NULL, NULL, NULL, NULL);
-    return FALSE;
-}
-
-static gboolean popup_button_press (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol)
-{
-    int x, y;
-    gtk_window_get_size (GTK_WINDOW (widget), &x, &y);
-    if (event->x < 0 || event->y < 0 || event->x > x || event->y > y)
-    {
-        close_widget (&vol->popup_window[0]);
-        close_widget (&vol->popup_window[1]);
-        gdk_seat_ungrab (gdk_display_get_default_seat (gdk_display_get_default ()));
-    }
-    return FALSE;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -365,6 +384,7 @@ void menu_set_bluetooth_device_input (GtkWidget *widget, VolumePulsePlugin *vol)
 
 /* Handler for "button-press-event" signal on main widget. */
 
+#ifdef LXPLUG
 gboolean volumepulse_button_press_event (GtkWidget *, GdkEventButton *event, VolumePulsePlugin *vol)
 {
     switch (event->button)
@@ -414,6 +434,98 @@ gboolean micpulse_button_press_event (GtkWidget *, GdkEventButton *event, Volume
     micpulse_update_display (vol);
     return TRUE;
 }
+#else
+gboolean volumepulse_button_press_event (GtkWidget *, GdkEventButton *, VolumePulsePlugin *vol)
+{
+    pressed = PRESS_SHORT;
+    if (vol->popup_window[0])
+    {
+        close_popup ();
+        pressed = PRESS_NONE;
+    }
+
+    volumepulse_update_display (vol);
+    return FALSE;
+}
+
+gboolean volumepulse_button_release_event (GtkWidget *, GdkEventButton *event, VolumePulsePlugin *vol)
+{
+    if (pressed == PRESS_NONE) return TRUE;
+
+    switch (event->button)
+    {
+        case 1: /* left-click - show volume popup */
+                if (pressed == PRESS_LONG)
+                {
+                    vol_menu_show (vol);
+                    show_menu_with_kbd (vol->plugin[0], vol->menu_devices[0]);
+                }
+                else popup_window_show (vol, FALSE);
+                break;
+
+        case 2: /* middle-click - toggle mute */
+                pulse_set_mute (vol, pulse_get_mute (vol, FALSE) ? 0 : 1, FALSE);
+                break;
+
+        case 3: /* right-click - show device list */
+                vol_menu_show (vol);
+                show_menu_with_kbd (vol->plugin[0], vol->menu_devices[0]);
+                break;
+    }
+
+    pressed = PRESS_NONE;
+    volumepulse_update_display (vol);
+    return FALSE;
+}
+
+gboolean micpulse_button_press_event (GtkWidget *, GdkEventButton *, VolumePulsePlugin *vol)
+{
+    pressed = PRESS_SHORT;
+    if (vol->popup_window[1])
+    {
+        close_popup ();
+        pressed = PRESS_NONE;
+    }
+
+    micpulse_update_display (vol);
+    return FALSE;
+}
+
+gboolean micpulse_button_release_event (GtkWidget *, GdkEventButton *event, VolumePulsePlugin *vol)
+{
+    if (pressed == PRESS_NONE) return TRUE;
+
+    switch (event->button)
+    {
+        case 1: /* left-click - show volume popup */
+                if (pressed == PRESS_LONG)
+                {
+                    mic_menu_show (vol);
+                    show_menu_with_kbd (vol->plugin[1], vol->menu_devices[1]);
+                }
+                else popup_window_show (vol, TRUE);
+                break;
+
+        case 2: /* middle-click - toggle mute */
+                pulse_set_mute (vol, pulse_get_mute (vol, TRUE) ? 0 : 1, TRUE);
+                break;
+
+        case 3: /* right-click - show device list */
+                mic_menu_show (vol);
+                show_menu_with_kbd (vol->plugin[1], vol->menu_devices[1]);
+                break;
+    }
+
+    pressed = PRESS_NONE;
+    micpulse_update_display (vol);
+    return FALSE;
+}
+
+void volmic_gesture_pressed (GtkGestureLongPress *, gdouble, gdouble, VolumePulsePlugin *)
+{
+    if (pressed == PRESS_SHORT) pressed = PRESS_LONG;
+}
+#endif
 
 /* Handler for "scroll-event" signal */
 
@@ -459,103 +571,6 @@ void micpulse_mouse_scrolled (GtkScale *, GdkEventScroll *evt, VolumePulsePlugin
     pulse_set_volume (vol, val, TRUE);
 
     micpulse_update_display (vol);
-}
-
-/*----------------------------------------------------------------------------*/
-/* Plugin structure                                                           */
-/*----------------------------------------------------------------------------*/
-
-/* Callback when panel configuration changes */
-
-void volumepulse_configuration_changed (LXPanel *panel, GtkWidget *plugin)
-{
-    VolumePulsePlugin *vol = lxpanel_plugin_get_data (plugin);
-
-    volumepulse_update_display (vol);
-}
-
-/* Callback when control message arrives */
-
-gboolean volumepulse_control_msg (GtkWidget *plugin, const char *cmd)
-{
-    VolumePulsePlugin *vol = lxpanel_plugin_get_data (plugin);
-    if (!gtk_widget_is_visible (vol->plugin[0])) return TRUE;
-
-    if (!strncmp (cmd, "mute", 4))
-    {
-        pulse_set_mute (vol, pulse_get_mute (vol, FALSE) ? 0 : 1, FALSE);
-        volumepulse_update_display (vol);
-        return TRUE;
-    }
-
-    if (!strncmp (cmd, "volu", 4))
-    {
-        if (pulse_get_mute (vol, FALSE)) pulse_set_mute (vol, 0, FALSE);
-        else
-        {
-            int volume = pulse_get_volume (vol, FALSE);
-            if (volume < 100)
-            {
-                volume += 9;  // some hardware rounds volumes, so make sure we are going as far as possible up before we round....
-                volume /= 5;
-                volume *= 5;
-            }
-            pulse_set_volume (vol, volume, FALSE);
-        }
-        volumepulse_update_display (vol);
-        return TRUE;
-    }
-
-    if (!strncmp (cmd, "vold", 4))
-    {
-        if (pulse_get_mute (vol, FALSE)) pulse_set_mute (vol, 0, FALSE);
-        else
-        {
-            int volume = pulse_get_volume (vol, FALSE);
-            if (volume > 0)
-            {
-                volume -= 4; // ... and the same for going down
-                volume /= 5;
-                volume *= 5;
-            }
-            pulse_set_volume (vol, volume, FALSE);
-        }
-        volumepulse_update_display (vol);
-        return TRUE;
-    }
-
-    if (!strncmp (cmd, "stop", 5))
-    {
-        pulse_terminate (vol);
-    }
-
-    if (!strncmp (cmd, "start", 5))
-    {
-        hdmi_init (vol);
-        pulse_init (vol);
-    }
-
-    return FALSE;
-}
-
-/* Plugin destructor */
-
-void volumepulse_destructor (gpointer user_data)
-{
-    VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
-
-    close_widget (&vol->profiles_dialog);
-    close_widget (&vol->conn_dialog);
-    close_widget (&vol->popup_window[0]);
-    close_widget (&vol->menu_devices[0]);
-    close_widget (&vol->popup_window[1]);
-    close_widget (&vol->menu_devices[1]);
-
-    bluetooth_terminate (vol);
-    pulse_terminate (vol);
-
-    /* Deallocate all memory. */
-    g_free (vol);
 }
 
 /* End of file */
