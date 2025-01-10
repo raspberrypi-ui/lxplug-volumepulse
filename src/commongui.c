@@ -112,30 +112,21 @@ void close_widget (GtkWidget **wid)
 static void vol_destroyed (GtkWidget *widget, gpointer data)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) data;
-    if (widget == vol->popup_window[0]) vol->popup_window[0] = NULL;
-    if (widget == vol->popup_window[1]) vol->popup_window[1] = NULL;
-}
-
-#ifdef LXPLUG
-static gboolean popup_mapped (GtkWidget *widget, GdkEvent *, VolumePulsePlugin *)
-{
-    gdk_seat_grab (gdk_display_get_default_seat (gdk_display_get_default ()), gtk_widget_get_window (widget), GDK_SEAT_CAPABILITY_ALL_POINTING, TRUE, NULL, NULL, NULL, NULL);
-    return FALSE;
-}
-
-static gboolean popup_button_press (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol)
-{
-    int x, y;
-    gtk_window_get_size (GTK_WINDOW (widget), &x, &y);
-    if (event->x < 0 || event->y < 0 || event->x > x || event->y > y)
+    if (widget == vol->popup_window[0])
     {
-        close_widget (&vol->popup_window[0]);
-        close_widget (&vol->popup_window[1]);
-        gdk_seat_ungrab (gdk_display_get_default_seat (gdk_display_get_default ()));
+        g_signal_handlers_disconnect_matched (vol->popup_window[0], G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, vol);
+        g_signal_handlers_disconnect_matched (vol->popup_volume_scale[0], G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, vol);
+        g_signal_handlers_disconnect_matched (vol->popup_mute_check[0], G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, vol);
+        vol->popup_window[0] = NULL;
     }
-    return FALSE;
+    if (widget == vol->popup_window[1])
+    {
+        g_signal_handlers_disconnect_matched (vol->popup_window[1], G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, vol);
+        g_signal_handlers_disconnect_matched (vol->popup_volume_scale[1], G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, vol);
+        g_signal_handlers_disconnect_matched (vol->popup_mute_check[1], G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, vol);
+        vol->popup_window[0] = NULL;
+    }
 }
-#endif
 
 /* Create the pop-up volume window */
 
@@ -152,10 +143,6 @@ void popup_window_show (VolumePulsePlugin *vol, gboolean input_control)
     /* Create a new window. */
     vol->popup_window[index] = gtk_window_new (GTK_WINDOW_TOPLEVEL);
     gtk_widget_set_name (vol->popup_window[index], "panelpopup");
-#ifdef LXPLUG
-    gtk_window_set_decorated (GTK_WINDOW (vol->popup_window[index]), FALSE);
-    gtk_window_set_skip_taskbar_hint (GTK_WINDOW (vol->popup_window[index]), TRUE);
-#endif
 
     gtk_container_set_border_width (GTK_CONTAINER (vol->popup_window[index]), 0);
 
@@ -183,21 +170,7 @@ void popup_window_show (VolumePulsePlugin *vol, gboolean input_control)
     g_signal_connect (vol->popup_window[index], "destroy", G_CALLBACK (vol_destroyed), vol);
 
     /* Realise the window */
-#ifdef LXPLUG
-    gint x, y;
-    gtk_window_set_position (GTK_WINDOW (vol->popup_window[index]), GTK_WIN_POS_MOUSE);
-    gtk_widget_show_all (vol->popup_window[index]);
-    gtk_widget_hide (vol->popup_window[index]);
-    lxpanel_plugin_popup_set_position_helper (vol->panel, vol->plugin[index], vol->popup_window[index], &x, &y);
-    gdk_window_move (gtk_widget_get_window (vol->popup_window[index]), x, y);
-    gtk_window_present (GTK_WINDOW (vol->popup_window[index]));
-
-    g_signal_connect (G_OBJECT (vol->popup_window[index]), "map-event", G_CALLBACK (popup_mapped), vol);
-    g_signal_connect (G_OBJECT (vol->popup_window[index]), "button-press-event", G_CALLBACK (popup_button_press), vol);
-#else
-    g_signal_connect (vol->popup_window[index], "destroy", G_CALLBACK (vol_destroyed), vol);
-    popup_window_at_button (vol->popup_window[index], vol->plugin[index]);
-#endif
+    wrap_popup_at_button (vol, vol->popup_window[index], vol->plugin[index]);
 }
 
 /* Handler for "value_changed" signal on popup window vertical scale */
