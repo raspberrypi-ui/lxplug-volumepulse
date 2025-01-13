@@ -1,5 +1,5 @@
-/*
-Copyright (c) 2020 Raspberry Pi (Trading) Ltd.
+/*============================================================================
+Copyright (c) 2020-2025 Raspberry Pi Holdings Ltd.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -23,7 +23,15 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
 ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
+============================================================================*/
+
+#include <pulse/pulseaudio.h>
+
+#ifdef LXPLUG
+#include "plugin.h"
+#else
+#include "lxutils.h"
+#endif
 
 #include "volumepulse.h"
 #include "commongui.h"
@@ -568,7 +576,7 @@ static void pa_cb_get_output_streams (pa_context *, const pa_sink_input_info *i,
     if (!eol)
     {
         DEBUG ("pa_cb_get_output_streams %d", i->index);
-        vol->pa_indices = g_list_append (vol->pa_indices, (void *) i->index);
+        vol->pa_indices = g_list_append (vol->pa_indices, (void *) ((uintptr_t) i->index));
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
@@ -580,7 +588,7 @@ static void pa_list_move_to_default_sink (gpointer data, gpointer userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
-    pa_move_stream_to_default_sink (vol, (int) data);
+    pa_move_stream_to_default_sink (vol, (uintptr_t) data);
 }
 
 /* Call the PulseAudio move stream operation for the supplied index to move the stream to the default sink */
@@ -656,7 +664,7 @@ static void pa_cb_get_input_streams (pa_context *, const pa_source_output_info *
     if (!eol)
     {
         DEBUG ("pa_cb_get_input_streams %d", i->index);
-        vol->pa_indices = g_list_append (vol->pa_indices, (void *) i->index);
+        vol->pa_indices = g_list_append (vol->pa_indices, (void *) ((uintptr_t) i->index));
     }
 
     pa_threaded_mainloop_signal (vol->pa_mainloop, 0);
@@ -668,7 +676,7 @@ static void pa_list_move_to_default_source (gpointer data, gpointer userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
-    pa_move_stream_to_default_source (vol, (int) data);
+    pa_move_stream_to_default_source (vol, (uintptr_t) data);
 }
 
 /* Call the PulseAudio move stream operation for the supplied index to move the stream to the default source */
@@ -702,7 +710,7 @@ static void pa_list_mute_stream (gpointer data, gpointer userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
-    pa_mute_stream (vol, (int) data);
+    pa_mute_stream (vol, (uintptr_t) data);
 }
 
 /* Call the PulseAudio mute stream operation for the supplied index*/
@@ -732,7 +740,7 @@ static void pa_list_unmute_stream (gpointer data, gpointer userdata)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
-    pa_unmute_stream (vol, (int) data);
+    pa_unmute_stream (vol, (uintptr_t) data);
 }
 
 /* Call the PulseAudio unmute stream operation for the supplied index*/

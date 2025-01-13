@@ -1,5 +1,5 @@
-/*
-Copyright (c) 2020 Raspberry Pi (Trading) Ltd.
+/*============================================================================
+Copyright (c) 2020-2025 Raspberry Pi Holdings Ltd.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -23,11 +23,19 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
 ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
+============================================================================*/
 
 #define _GNU_SOURCE
-#include <stdio.h>
+
+#include <glib/gi18n.h>
 #include <glib/gprintf.h>
+#include <pulse/pulseaudio.h>
+
+#ifdef LXPLUG
+#include "plugin.h"
+#else
+#include "lxutils.h"
+#endif
 
 #include "volumepulse.h"
 #include "pulse.h"

@@ -1,5 +1,5 @@
-/*
-Copyright (c) 2020 Raspberry Pi (Trading) Ltd.
+/*============================================================================
+Copyright (c) 2020-2025 Raspberry Pi Holdings Ltd.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -23,9 +23,17 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
 ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
+============================================================================*/
 
 #include <locale.h>
+#include <glib/gi18n.h>
+#include <pulse/pulseaudio.h>
+
+#ifdef LXPLUG
+#include "plugin.h"
+#else
+#include "lxutils.h"
+#endif
 
 #include "volumepulse.h"
 #include "commongui.h"
@@ -347,11 +355,10 @@ static gboolean profiles_dialog_delete (GtkWidget *, GdkEvent *, VolumePulsePlug
 }
 
 /*----------------------------------------------------------------------------*/
-/* Plugin handlers and graphics                                               */
+/* wf-panel plugin functions                                                  */
 /*----------------------------------------------------------------------------*/
 
-/* Update icon and tooltip */
-
+/* Handler for system config changed message from panel */
 void volumepulse_update_display (VolumePulsePlugin *vol)
 {
     pulse_count_devices (vol, FALSE);
@@ -402,156 +409,9 @@ void volumepulse_update_display (VolumePulsePlugin *vol)
     g_free (tooltip);
 }
 
-/*----------------------------------------------------------------------------*/
-/* Plugin structure                                                           */
-/*----------------------------------------------------------------------------*/
-
-/* Plugin constructor */
-#ifdef LXPLUG
-void volumepulse_destructor (gpointer user_data);
-
-
-static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *settings)
-{
-    /* Allocate and initialize plugin context */
-    VolumePulsePlugin *vol = g_new0 (VolumePulsePlugin, 1);
-
-    setlocale (LC_ALL, "");
-    bindtextdomain (GETTEXT_PACKAGE, PACKAGE_LOCALE_DIR);
-    bind_textdomain_codeset (GETTEXT_PACKAGE, "UTF-8");
-
-    /* Allocate top level widget and set into plugin widget pointer */
-    vol->panel = panel;
-    vol->settings = settings;
-    vol->box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
-    vol->plugin[0] = gtk_button_new ();
-    gtk_box_pack_start (GTK_BOX (vol->box), vol->plugin[0], TRUE, TRUE, 0);
-    vol->plugin[1] = gtk_button_new ();
-    gtk_box_pack_start (GTK_BOX (vol->box), vol->plugin[1], TRUE, TRUE, 0);
-
-    lxpanel_plugin_set_data (vol->box, vol, volumepulse_destructor);
-#else
-void volumepulse_init (VolumePulsePlugin *vol)
-{
-#endif
-    /* Allocate icon as a child of top level */
-    vol->tray_icon[0] = gtk_image_new ();
-    gtk_container_add (GTK_CONTAINER (vol->plugin[0]), vol->tray_icon[0]);
-    vol->tray_icon[1] = gtk_image_new ();
-    gtk_container_add (GTK_CONTAINER (vol->plugin[1]), vol->tray_icon[1]);
-
-    /* Set up button */
-    gtk_button_set_relief (GTK_BUTTON (vol->plugin[0]), GTK_RELIEF_NONE);
-    g_signal_connect (vol->plugin[0], "button-press-event", G_CALLBACK (volumepulse_button_press_event), vol);
-    g_signal_connect (vol->plugin[0], "scroll-event", G_CALLBACK (volumepulse_mouse_scrolled), vol);
-    gtk_widget_add_events (vol->plugin[0], GDK_SCROLL_MASK);
-
-    gtk_button_set_relief (GTK_BUTTON (vol->plugin[1]), GTK_RELIEF_NONE);
-    g_signal_connect (vol->plugin[1], "button-press-event", G_CALLBACK (micpulse_button_press_event), vol);
-    g_signal_connect (vol->plugin[1], "scroll-event", G_CALLBACK (micpulse_mouse_scrolled), vol);
-    gtk_widget_add_events (vol->plugin[1], GDK_SCROLL_MASK);
-
-#ifndef LXPLUG
-    g_signal_connect (vol->plugin[0], "button-release-event", G_CALLBACK (volumepulse_button_release_event), vol);
-    g_signal_connect (vol->plugin[1], "button-release-event", G_CALLBACK (micpulse_button_release_event), vol);
-
-    vol->gesture[0] = gtk_gesture_long_press_new (vol->plugin[0]);
-    gtk_gesture_single_set_touch_only (GTK_GESTURE_SINGLE (vol->gesture[0]), touch_only);
-    g_signal_connect (vol->gesture[0], "pressed", G_CALLBACK (volmic_gesture_pressed), vol);
-    gtk_event_controller_set_propagation_phase (GTK_EVENT_CONTROLLER (vol->gesture[0]), GTK_PHASE_BUBBLE);
-
-    vol->gesture[1] = gtk_gesture_long_press_new (vol->plugin[1]);
-    gtk_gesture_single_set_touch_only (GTK_GESTURE_SINGLE (vol->gesture[1]), touch_only);
-    g_signal_connect (vol->gesture[1], "pressed", G_CALLBACK (volmic_gesture_pressed), vol);
-    gtk_event_controller_set_propagation_phase (GTK_EVENT_CONTROLLER (vol->gesture[1]), GTK_PHASE_BUBBLE);
-#endif
-
-
-    /* Set up variables */
-    vol->menu_devices[0] = NULL;
-    vol->menu_devices[1] = NULL;
-    vol->popup_window[0] = NULL;
-    vol->popup_window[1] = NULL;
-    vol->profiles_dialog = NULL;
-    vol->conn_dialog = NULL;
-    vol->hdmi_names[0] = NULL;
-    vol->hdmi_names[1] = NULL;
-
-#ifdef LXPLUG
-    if (!g_strcmp0 (getenv ("USER"), "rpi-first-boot-wizard")) vol->wizard = TRUE;
-    else vol->wizard = FALSE;
-#endif
-
-    vol->pipewire = !system ("ps ax | grep pipewire-pulse | grep -qv grep");
-    if (vol->pipewire)
-    {
-        DEBUG ("using pipewire");
-    }
-    else
-    {
-        DEBUG ("using pulseaudio");
-    }
-
-    /* Delete any old ALSA config */
-    vsystem ("rm -f ~/.asoundrc");
-
-    /* Find HDMIs */
-    hdmi_init (vol);
-
-    /* Set up PulseAudio */
-    pulse_init (vol);
-
-    /* Set up Bluez D-Bus interface */
-    bluetooth_init (vol);
-
-    /* Show the widget and return */
-    gtk_widget_show_all (vol->plugin[0]);
-    gtk_widget_show_all (vol->plugin[1]);
-#ifdef LXPLUG
-    volumepulse_update_display (vol);
-    micpulse_update_display (vol);
-    return vol->box;
-#endif
-}
-
-/* Plugin destructor */
-
-void volumepulse_destructor (gpointer user_data)
-{
-    VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
-
-    close_widget (&vol->profiles_dialog);
-    close_widget (&vol->conn_dialog);
-    close_widget (&vol->menu_devices[0]);
-    close_widget (&vol->menu_devices[1]);
-#ifdef LXPLUG
-    close_widget (&vol->popup_window[0]);
-    close_widget (&vol->popup_window[1]);
-#else
-    close_popup ();
-#endif
-
-    bluetooth_terminate (vol);
-    pulse_terminate (vol);
-
-    /* Deallocate all memory. */
-#ifndef LXPLUG
-    if (vol->gesture[0]) g_object_unref (vol->gesture[0]);
-    if (vol->gesture[1]) g_object_unref (vol->gesture[1]);
-#endif
-    g_free (vol);
-}
-
-/* Callback when control message arrives */
-
-#ifdef LXPLUG
-gboolean volumepulse_control_msg (GtkWidget *plugin, const char *cmd)
-{
-    VolumePulsePlugin *vol = lxpanel_plugin_get_data (plugin);
-#else
+/* Handler for control message */
 gboolean volumepulse_control_msg (VolumePulsePlugin *vol, const char *cmd)
 {
-#endif
     if (!gtk_widget_is_visible (vol->plugin[0])) return TRUE;
 
     if (!strncmp (cmd, "mute", 4))
@@ -611,31 +471,170 @@ gboolean volumepulse_control_msg (VolumePulsePlugin *vol, const char *cmd)
     return FALSE;
 }
 
+void volumepulse_init (VolumePulsePlugin *vol)
+{
+    if (!g_strcmp0 (getenv ("USER"), "rpi-first-boot-wizard")) vol->wizard = TRUE;
+    else vol->wizard = FALSE;
+
+    /* Allocate icon as a child of top level */
+    vol->tray_icon[0] = gtk_image_new ();
+    gtk_container_add (GTK_CONTAINER (vol->plugin[0]), vol->tray_icon[0]);
+    vol->tray_icon[1] = gtk_image_new ();
+    gtk_container_add (GTK_CONTAINER (vol->plugin[1]), vol->tray_icon[1]);
+
+    /* Set up button */
+    gtk_button_set_relief (GTK_BUTTON (vol->plugin[0]), GTK_RELIEF_NONE);
+    g_signal_connect (vol->plugin[0], "button-press-event", G_CALLBACK (volumepulse_button_press_event), vol);
+    g_signal_connect (vol->plugin[0], "scroll-event", G_CALLBACK (volumepulse_mouse_scrolled), vol);
+    gtk_widget_add_events (vol->plugin[0], GDK_SCROLL_MASK);
+
+    gtk_button_set_relief (GTK_BUTTON (vol->plugin[1]), GTK_RELIEF_NONE);
+    g_signal_connect (vol->plugin[1], "button-press-event", G_CALLBACK (micpulse_button_press_event), vol);
+    g_signal_connect (vol->plugin[1], "scroll-event", G_CALLBACK (micpulse_mouse_scrolled), vol);
+    gtk_widget_add_events (vol->plugin[1], GDK_SCROLL_MASK);
+
+#ifndef LXPLUG
+    g_signal_connect (vol->plugin[0], "button-release-event", G_CALLBACK (volumepulse_button_release_event), vol);
+    g_signal_connect (vol->plugin[1], "button-release-event", G_CALLBACK (micpulse_button_release_event), vol);
+
+    vol->gesture[0] = gtk_gesture_long_press_new (vol->plugin[0]);
+    gtk_gesture_single_set_touch_only (GTK_GESTURE_SINGLE (vol->gesture[0]), touch_only);
+    g_signal_connect (vol->gesture[0], "pressed", G_CALLBACK (volmic_gesture_pressed), vol);
+    gtk_event_controller_set_propagation_phase (GTK_EVENT_CONTROLLER (vol->gesture[0]), GTK_PHASE_BUBBLE);
+
+    vol->gesture[1] = gtk_gesture_long_press_new (vol->plugin[1]);
+    gtk_gesture_single_set_touch_only (GTK_GESTURE_SINGLE (vol->gesture[1]), touch_only);
+    g_signal_connect (vol->gesture[1], "pressed", G_CALLBACK (volmic_gesture_pressed), vol);
+    gtk_event_controller_set_propagation_phase (GTK_EVENT_CONTROLLER (vol->gesture[1]), GTK_PHASE_BUBBLE);
+#endif
+
+    /* Set up variables */
+    vol->menu_devices[0] = NULL;
+    vol->menu_devices[1] = NULL;
+    vol->popup_window[0] = NULL;
+    vol->popup_window[1] = NULL;
+    vol->profiles_dialog = NULL;
+    vol->conn_dialog = NULL;
+    vol->hdmi_names[0] = NULL;
+    vol->hdmi_names[1] = NULL;
+
+    vol->pipewire = !system ("ps ax | grep pipewire-pulse | grep -qv grep");
+    if (vol->pipewire)
+    {
+        DEBUG ("using pipewire");
+    }
+    else
+    {
+        DEBUG ("using pulseaudio");
+    }
+
+    /* Delete any old ALSA config */
+    vsystem ("rm -f ~/.asoundrc");
+
+    /* Find HDMIs */
+    hdmi_init (vol);
+
+    /* Set up PulseAudio */
+    pulse_init (vol);
+
+    /* Set up Bluez D-Bus interface */
+    bluetooth_init (vol);
+
+    /* Show the widget and return */
+    gtk_widget_show_all (vol->plugin[0]);
+    gtk_widget_show_all (vol->plugin[1]);
+
+    volumepulse_update_display (vol);
+    micpulse_update_display (vol);
+}
+
+void volumepulse_destructor (gpointer user_data)
+{
+    VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
+
+    close_widget (&vol->profiles_dialog);
+    close_widget (&vol->conn_dialog);
+    close_widget (&vol->menu_devices[0]);
+    close_widget (&vol->menu_devices[1]);
+#ifdef LXPLUG
+    close_widget (&vol->popup_window[0]);
+    close_widget (&vol->popup_window[1]);
+#else
+    close_popup ();
+#endif
+
+    bluetooth_terminate (vol);
+    pulse_terminate (vol);
+
+#ifndef LXPLUG
+    if (vol->gesture[0]) g_object_unref (vol->gesture[0]);
+    if (vol->gesture[1]) g_object_unref (vol->gesture[1]);
+#endif
+
+    g_free (vol);
+}
+
+/*----------------------------------------------------------------------------*/
+/* LXPanel plugin functions                                                   */
+/*----------------------------------------------------------------------------*/
 #ifdef LXPLUG
 
-/* Callback when panel configuration changes */
+/* Constructor */
+static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *settings)
+{
+    /* Allocate and initialize plugin context */
+    VolumePulsePlugin *vol = g_new0 (VolumePulsePlugin, 1);
 
-void volumepulse_configuration_changed (LXPanel *panel, GtkWidget *plugin)
+    setlocale (LC_ALL, "");
+    bindtextdomain (GETTEXT_PACKAGE, PACKAGE_LOCALE_DIR);
+    bind_textdomain_codeset (GETTEXT_PACKAGE, "UTF-8");
+
+    /* Allocate top level widget and set into plugin widget pointer */
+    vol->panel = panel;
+    vol->settings = settings;
+    vol->box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
+    vol->plugin[0] = gtk_button_new ();
+    gtk_box_pack_start (GTK_BOX (vol->box), vol->plugin[0], TRUE, TRUE, 0);
+    vol->plugin[1] = gtk_button_new ();
+    gtk_box_pack_start (GTK_BOX (vol->box), vol->plugin[1], TRUE, TRUE, 0);
+
+    lxpanel_plugin_set_data (vol->box, vol, volumepulse_destructor);
+
+    volumepulse_init (vol);
+
+    return vol->box;
+}
+
+/* Handler for system config changed message from panel */
+void volumepulse_configuration_changed (LXPanel *, GtkWidget *plugin)
 {
     VolumePulsePlugin *vol = lxpanel_plugin_get_data (plugin);
 
     volumepulse_update_display (vol);
+    micpulse_update_display (vol);
 }
 
+/* Handler for control message */
+gboolean volumepulse_control (GtkWidget *plugin, const char *cmd)
+{
+    VolumePulsePlugin *vol = lxpanel_plugin_get_data (plugin);
+
+    return volumepulse_control_msg (vol, cmd);
+}
 
 FM_DEFINE_MODULE (lxpanel_gtk, volumepulse)
 
 /* Plugin descriptor */
-
 LXPanelPluginInit fm_module_init_lxpanel_gtk =
 {
     .name = N_("Volume Control (PulseAudio)"),
     .description = N_("Display and control volume for PulseAudio"),
     .new_instance = volumepulse_constructor,
     .reconfigure = volumepulse_configuration_changed,
-    .control = volumepulse_control_msg,
+    .control = volumepulse_control,
     .gettext_package = GETTEXT_PACKAGE
 };
 #endif
+
 /* End of file */
 /*----------------------------------------------------------------------------*/

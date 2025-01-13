@@ -1,5 +1,5 @@
-/*
-Copyright (c) 2020 Raspberry Pi (Trading) Ltd.
+/*============================================================================
+Copyright (c) 2020-2025 Raspberry Pi Holdings Ltd.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -23,23 +23,11 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
 ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
+============================================================================*/
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
-
-#include <glib.h>
-#include <glib/gi18n.h>
-#include <glib/gprintf.h>
-#include <gtk/gtk.h>
-#include <pulse/pulseaudio.h>
-
-#ifdef LXPLUG
-#include "plugin.h"
-#else
-#include "lxutils.h"
-#endif
+/*----------------------------------------------------------------------------*/
+/* Typedefs and macros */
+/*----------------------------------------------------------------------------*/
 
 #define DEBUG_ON
 #ifdef DEBUG_ON
@@ -48,12 +36,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define DEBUG(fmt,args...)
 #endif
 
-#ifndef VOLUMEPULSE_STRUCT
-#define VOLUMEPULSE_STRUCT
-
 typedef struct {
-    /* plugin */
-    GtkWidget *plugin[2];               /* Pointers to buttons */
 #ifdef LXPLUG
     LXPanel *panel;                     /* Back pointer to panel */
     config_setting_t *settings;         /* Plugin settings */
@@ -63,8 +46,9 @@ typedef struct {
     gboolean bottom;
     GtkGesture *gesture[2];
 #endif
-    gboolean wizard;
+    GtkWidget *plugin[2];               /* Pointers to buttons */
 
+    gboolean wizard;                    /* Used in wizard? */
     gboolean pipewire;                  /* Pipewire running? */
 
     /* graphics */
@@ -113,8 +97,6 @@ typedef struct {
     gboolean bt_card_found;
 } VolumePulsePlugin;
 
-#endif
-
 /* Functions in volumepulse.c needed in other modules */
 
 extern void vol_menu_show (VolumePulsePlugin *vol);
@@ -124,7 +106,6 @@ extern void mic_menu_add_item (VolumePulsePlugin *vol, const char *label, const 
 extern void profiles_dialog_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name);
 extern void volumepulse_update_display (VolumePulsePlugin *vol);
 extern void micpulse_update_display (VolumePulsePlugin *vol);
-
 
 /* End of file */
 /*----------------------------------------------------------------------------*/

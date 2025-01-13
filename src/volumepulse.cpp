@@ -1,4 +1,5 @@
 #include <glibmm.h>
+#include <pulse/pulseaudio.h>
 #include "volumepulse.hpp"
 
 extern "C" {
@@ -53,7 +54,6 @@ void WayfireVolumepulse::init (Gtk::HBox *container)
     vol->plugin[0] = (GtkWidget *)((*plugin_vol).gobj());
     vol->plugin[1] = (GtkWidget *)((*plugin_mic).gobj());
     vol->icon_size = icon_size;
-    vol->wizard = WayfireShellApp::get().wizard;
     icon_timer = Glib::signal_idle().connect (sigc::mem_fun (*this, &WayfireVolumepulse::set_icon));
     bar_pos_changed_cb ();
 

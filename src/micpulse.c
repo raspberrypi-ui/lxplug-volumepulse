@@ -1,5 +1,5 @@
-/*
-Copyright (c) 2022 Raspberry Pi (Trading) Ltd.
+/*============================================================================
+Copyright (c) 2020-2025 Raspberry Pi Holdings Ltd.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -23,7 +23,16 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
 ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
+============================================================================*/
+
+#include <glib/gi18n.h>
+#include <pulse/pulseaudio.h>
+
+#ifdef LXPLUG
+#include "plugin.h"
+#else
+#include "lxutils.h"
+#endif
 
 #include "volumepulse.h"
 #include "commongui.h"
@@ -102,8 +111,7 @@ void mic_menu_add_item (VolumePulsePlugin *vol, const char *label, const char *n
 /* Plugin handlers and graphics                                               */
 /*----------------------------------------------------------------------------*/
 
-/* Update icon and tooltip */
-
+/* Handler for system config changed message from panel */
 void micpulse_update_display (VolumePulsePlugin *vol)
 {
     pulse_count_devices (vol, TRUE);
@@ -142,7 +150,7 @@ void micpulse_update_display (VolumePulsePlugin *vol)
 
     /* update tooltip */
     char *tooltip = g_strdup_printf ("%s %d", _("Mic volume"), level);
-    gtk_widget_set_tooltip_text (vol->plugin[1], tooltip);
+    if (!vol->wizard) gtk_widget_set_tooltip_text (vol->plugin[1], tooltip);
     g_free (tooltip);
 }
 
