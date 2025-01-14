@@ -41,7 +41,15 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bluetooth.h"
 
 /*----------------------------------------------------------------------------*/
-/* Static function prototypes                                                 */
+/* Typedefs and macros */
+/*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*/
+/* Plug-in global data                                                        */
+/*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*/
+/* Prototypes                                                                 */
 /*----------------------------------------------------------------------------*/
 
 /* Helpers */
@@ -58,6 +66,10 @@ static void profiles_dialog_relocate_last_item (GtkWidget *box);
 static void profiles_dialog_combo_changed (GtkComboBox *combo, VolumePulsePlugin *vol);
 static void profiles_dialog_ok (GtkButton *button, VolumePulsePlugin *vol);
 static gboolean profiles_dialog_delete (GtkWidget *wid, GdkEvent *event, VolumePulsePlugin *vol);
+
+/*----------------------------------------------------------------------------*/
+/* Function definitions                                                       */
+/*----------------------------------------------------------------------------*/
 
 /*----------------------------------------------------------------------------*/
 /* Generic helper functions                                                   */

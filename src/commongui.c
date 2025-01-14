@@ -42,7 +42,15 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "commongui.h"
 
 /*----------------------------------------------------------------------------*/
-/* Static function prototypes                                                 */
+/* Typedefs and macros */
+/*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*/
+/* Plug-in global data                                                        */
+/*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*/
+/* Prototypes                                                                 */
 /*----------------------------------------------------------------------------*/
 
 static void popup_window_scale_changed_vol (GtkRange *range, VolumePulsePlugin *vol);
@@ -51,6 +59,10 @@ static void popup_window_scale_changed_mic (GtkRange *range, VolumePulsePlugin *
 static void popup_window_mute_toggled_mic (GtkWidget *widget, VolumePulsePlugin *vol);
 static void menu_mark_default_input (GtkWidget *widget, gpointer data);
 static void menu_mark_default_output (GtkWidget *widget, gpointer data);
+
+/*----------------------------------------------------------------------------*/
+/* Function definitions                                                       */
+/*----------------------------------------------------------------------------*/
 
 /*----------------------------------------------------------------------------*/
 /* Generic helper functions                                                   */

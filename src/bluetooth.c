@@ -42,7 +42,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bluetooth.h"
 
 /*----------------------------------------------------------------------------*/
-/* Local macros and definitions                                               */
+/* Typedefs and macros */
 /*----------------------------------------------------------------------------*/
 
 #define BT_SERV_AUDIO_SOURCE    "0000110A"
@@ -53,7 +53,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BT_PULSE_RETRIES    50
 
 /*----------------------------------------------------------------------------*/
-/* Static function prototypes                                                 */
+/* Plug-in global data                                                        */
+/*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*/
+/* Prototypes                                                                 */
 /*----------------------------------------------------------------------------*/
 
 static char *bt_to_pa_name (const char *bluez_name, char *type, char *profile);
@@ -72,6 +76,9 @@ static void bt_connect_dialog_update (VolumePulsePlugin *vol, const char *msg);
 static void bt_connect_dialog_ok (GtkButton *button, VolumePulsePlugin *vol);
 static gboolean bt_is_connected (VolumePulsePlugin *vol, const char *path);
 
+/*----------------------------------------------------------------------------*/
+/* Function definitions                                                       */
+/*----------------------------------------------------------------------------*/
 
 /*----------------------------------------------------------------------------*/
 /* Bluetooth name remapping                                                   */

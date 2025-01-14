@@ -40,7 +40,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "pulse.h"
 
 /*----------------------------------------------------------------------------*/
-/* Local macros and definitions                                               */
+/* Typedefs and macros */
 /*----------------------------------------------------------------------------*/
 
 /*
@@ -81,7 +81,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define PA_VOL_SCALE 655    /* GTK volume scale is 0-100; PA scale is 0-65535 */
 
 /*----------------------------------------------------------------------------*/
-/* Static function prototypes                                                 */
+/* Plug-in global data                                                        */
+/*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*/
+/* Prototypes                                                                 */
 /*----------------------------------------------------------------------------*/
 
 static void pa_cb_state (pa_context *pacontext, void *userdata);
@@ -128,6 +132,10 @@ static void pa_card_check_bt_input_profile (GtkWidget *widget, gpointer data);
 static void pa_cb_add_devices_to_profile_dialog (pa_context *c, const pa_card_info *i, int eol, void *userdata);
 static void pa_cb_count_inputs (pa_context *c, const pa_card_info *i, int eol, void *userdata);
 static void pa_cb_count_outputs (pa_context *c, const pa_card_info *i, int eol, void *userdata);
+
+/*----------------------------------------------------------------------------*/
+/* Function definitions                                                       */
+/*----------------------------------------------------------------------------*/
 
 /*----------------------------------------------------------------------------*/
 /* PulseAudio controller initialisation / teardown                            */
