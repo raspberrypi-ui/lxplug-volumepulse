@@ -512,17 +512,8 @@ void volumepulse_init (VolumePulsePlugin *vol)
     g_signal_connect (vol->plugin[1], "button-press-event", G_CALLBACK (volmic_button_press_event), vol);
     g_signal_connect (vol->plugin[1], "button-release-event", G_CALLBACK (micpulse_button_release_event), vol);
 
-    vol->gesture[0] = gtk_gesture_long_press_new (vol->plugin[0]);
-    gtk_gesture_single_set_touch_only (GTK_GESTURE_SINGLE (vol->gesture[0]), touch_only);
-    g_signal_connect (vol->gesture[0], "pressed", G_CALLBACK (volmic_gesture_pressed), vol);
-    g_signal_connect (vol->gesture[0], "end", G_CALLBACK (vol_gesture_end), vol);
-    gtk_event_controller_set_propagation_phase (GTK_EVENT_CONTROLLER (vol->gesture[0]), GTK_PHASE_BUBBLE);
-
-    vol->gesture[1] = gtk_gesture_long_press_new (vol->plugin[1]);
-    gtk_gesture_single_set_touch_only (GTK_GESTURE_SINGLE (vol->gesture[1]), touch_only);
-    g_signal_connect (vol->gesture[1], "pressed", G_CALLBACK (volmic_gesture_pressed), vol);
-    g_signal_connect (vol->gesture[1], "end", G_CALLBACK (mic_gesture_end), vol);
-    gtk_event_controller_set_propagation_phase (GTK_EVENT_CONTROLLER (vol->gesture[1]), GTK_PHASE_BUBBLE);
+    vol->gesture[0] = add_long_press (vol->plugin[0], G_CALLBACK (vol_gesture_end), vol);
+    vol->gesture[1] = add_long_press (vol->plugin[1], G_CALLBACK (mic_gesture_end), vol);
 #endif
 
     /* Set up variables */

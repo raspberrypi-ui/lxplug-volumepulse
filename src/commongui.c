@@ -481,15 +481,9 @@ gboolean micpulse_button_release_event (GtkWidget *, GdkEventButton *event, Volu
     return TRUE;
 }
 
-void volmic_gesture_pressed (GtkGestureLongPress *, gdouble x, gdouble y, VolumePulsePlugin *)
+void vol_gesture_end (GtkGestureLongPress *, GdkEventSequence *, gpointer data)
 {
-    pressed = PRESS_LONG;
-    press_x = x;
-    press_y = y;
-}
-
-void vol_gesture_end (GtkGestureLongPress *, GdkEventSequence *, VolumePulsePlugin *vol)
-{
+    VolumePulsePlugin *vol = (VolumePulsePlugin *) data;
     if (pressed == PRESS_LONG)
     {
         vol_menu_show (vol);
@@ -497,8 +491,9 @@ void vol_gesture_end (GtkGestureLongPress *, GdkEventSequence *, VolumePulsePlug
     }
 }
 
-void mic_gesture_end (GtkGestureLongPress *, GdkEventSequence *, VolumePulsePlugin *vol)
+void mic_gesture_end (GtkGestureLongPress *, GdkEventSequence *, gpointer data)
 {
+    VolumePulsePlugin *vol = (VolumePulsePlugin *) data;
     if (pressed == PRESS_LONG)
     {
         mic_menu_show (vol);
