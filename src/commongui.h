@@ -39,11 +39,14 @@ extern void menu_set_bluetooth_device_input (GtkWidget *widget, VolumePulsePlugi
 extern void popup_window_create (VolumePulsePlugin *vol, gboolean input_control);
 
 extern gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
-extern gboolean volumepulse_button_release_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
-extern void volumepulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *evt, VolumePulsePlugin *vol);
 extern gboolean micpulse_button_press_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
+extern gboolean volmic_button_press_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
+extern gboolean volumepulse_button_release_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
 extern gboolean micpulse_button_release_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
 extern void volmic_gesture_pressed (GtkGestureLongPress *, gdouble, gdouble, VolumePulsePlugin *vol);
+extern void vol_gesture_end (GtkGestureLongPress *, GdkEventSequence *, VolumePulsePlugin *vol);
+extern void mic_gesture_end (GtkGestureLongPress *, GdkEventSequence *, VolumePulsePlugin *vol);
+extern void volumepulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *evt, VolumePulsePlugin *vol);
 extern void micpulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *evt, VolumePulsePlugin *vol);
 
 /* End of file */

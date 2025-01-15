@@ -50,6 +50,7 @@ typedef struct {
 
     gboolean wizard;                    /* Used in wizard? */
     gboolean pipewire;                  /* Pipewire running? */
+    gboolean popup_shown;
 
     /* graphics */
     GtkWidget *tray_icon[2];            /* Displayed icon */
