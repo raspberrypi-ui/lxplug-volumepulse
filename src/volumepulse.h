@@ -36,6 +36,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define DEBUG(fmt,args...)
 #endif
 
+#define update_display_both(vol) update_display(vol,FALSE);update_display(vol,TRUE);
+
 typedef struct {
 #ifdef LXPLUG
     LXPanel *panel;                     /* Back pointer to panel */
@@ -100,13 +102,9 @@ typedef struct {
 
 /* Functions in volumepulse.c needed in other modules */
 
-extern void vol_menu_show (VolumePulsePlugin *vol);
-extern void mic_menu_show (VolumePulsePlugin *vol);
-extern void vol_menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name);
-extern void mic_menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name);
+extern void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input);
 extern void profiles_dialog_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name);
-extern void volumepulse_update_display (VolumePulsePlugin *vol);
-extern void micpulse_update_display (VolumePulsePlugin *vol);
+extern void update_display (VolumePulsePlugin *vol, gboolean input);
 
 /* End of file */
 /*----------------------------------------------------------------------------*/

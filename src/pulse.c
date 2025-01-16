@@ -319,8 +319,7 @@ static gboolean pa_update_disp_cb (gpointer userdata)
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
     vol->pa_idle_timer = 0;
-    volumepulse_update_display (vol);
-    micpulse_update_display (vol);
+    update_display_both (vol);
     return FALSE;
 }
 
@@ -857,7 +856,7 @@ static void pa_cb_get_info_inputs (pa_context *, const pa_card_info *i, int eol,
             if (nam)
             {
                 DEBUG ("pa_cb_get_info_inputs %s", dev);
-                mic_menu_add_item (vol, nam, dev);
+                menu_add_item (vol, nam, dev, TRUE);
             }
         }
     }
@@ -881,7 +880,7 @@ static void pa_cb_get_info_internal (pa_context *, const pa_card_info *i, int eo
                 {
                     if (!strcmp (nam, "bcm2835 Headphones") && vsystem ("raspi-config nonint has_analog")) return;
                     DEBUG ("pa_cb_get_info_internal %s", dev);
-                    vol_menu_add_item (vol, nam, dev);
+                    menu_add_item (vol, nam, dev, FALSE);
                 }
             }
         }
@@ -906,7 +905,7 @@ static void pa_cb_get_info_external (pa_context *, const pa_card_info *i, int eo
                 {
                     DEBUG ("pa_cb_get_info_external %s", dev);
                     menu_add_separator (vol, vol->menu_devices[0]);
-                    vol_menu_add_item (vol, nam, dev);
+                    menu_add_item (vol, nam, dev, FALSE);
                 }
             }
         }

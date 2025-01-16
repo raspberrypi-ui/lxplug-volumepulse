@@ -50,8 +50,7 @@ void WayfireVolumepulse::bar_pos_changed_cb (void)
 void WayfireVolumepulse::icon_size_changed_cb (void)
 {
     vol->icon_size = icon_size;
-    volumepulse_update_display (vol);
-    micpulse_update_display (vol);
+    update_display_both (vol);
 }
 
 void WayfireVolumepulse::command (const char *cmd)
@@ -61,8 +60,7 @@ void WayfireVolumepulse::command (const char *cmd)
 
 bool WayfireVolumepulse::set_icon (void)
 {
-    volumepulse_update_display (vol);
-    micpulse_update_display (vol);
+    update_display_both (vol);
     return false;
 }
 

@@ -34,8 +34,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern "C" {
 #include "volumepulse.h"
 extern void volumepulse_init (VolumePulsePlugin *vol);
-extern void volumepulse_update_display (VolumePulsePlugin *vol);
-extern void micpulse_update_display (VolumePulsePlugin *vol);
 extern gboolean volumepulse_control_msg (VolumePulsePlugin *vol, const char *cmd);
 extern void volumepulse_destructor (gpointer user_data);
 }

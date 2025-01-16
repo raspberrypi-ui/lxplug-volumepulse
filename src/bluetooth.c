@@ -145,8 +145,7 @@ static void bt_cb_object_removed (GDBusObjectManager *, GDBusObject *object, gpo
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
 
     DEBUG ("Bluetooth object %s removed", g_dbus_object_get_object_path (object));
-    volumepulse_update_display (vol);
-    micpulse_update_display (vol);
+    update_display_both (vol);
 }
 
 /* Callback for BlueZ device property change - used to detect connection */
@@ -163,8 +162,7 @@ static void bt_cb_interface_properties (GDBusObjectManagerClient *, GDBusObjectP
     {
         if (g_variant_get_boolean (var) == TRUE)
         {
-            volumepulse_update_display (vol);
-            micpulse_update_display (vol);
+            update_display_both (vol);
         }
         g_variant_unref (var);
     }
@@ -271,8 +269,7 @@ static gboolean bt_conn_set_profile (gpointer user_data)
         g_free (pacard);
     }
 
-    volumepulse_update_display (vol);
-    micpulse_update_display (vol);
+    update_display_both (vol);
     return FALSE;
 }
 
@@ -313,8 +310,7 @@ static gboolean bt_conn_set_sink_source (gpointer user_data)
     vol->bt_retry_timer = 0;
     DEBUG ("Set sink / source polled %d times", vol->bt_retry_count);
 
-    volumepulse_update_display (vol);
-    micpulse_update_display (vol);
+    update_display_both (vol);
     return FALSE;
 }
 
@@ -598,8 +594,7 @@ void bluetooth_add_devices_to_menu (VolumePulsePlugin *vol, gboolean input_contr
                         {
                             // create a menu if there isn't one already
                             menu_add_separator (vol, vol->menu_devices[input_control ? 1 : 0]);
-                            if (input_control) mic_menu_add_item (vol, g_variant_get_string (name, NULL), objpath);
-                            else vol_menu_add_item (vol, g_variant_get_string (name, NULL), objpath);
+                            menu_add_item (vol, g_variant_get_string (name, NULL), objpath, input_control);
                         }
                         g_variant_unref (name);
                         g_variant_unref (icon);

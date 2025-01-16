@@ -211,7 +211,7 @@ static void popup_window_scale_changed_vol (GtkRange *range, VolumePulsePlugin *
     /* Update the PulseAudio volume */
     pulse_set_volume (vol, gtk_range_get_value (range), FALSE);
 
-    volumepulse_update_display (vol);
+    update_display (vol, FALSE);
 }
 
 static void popup_window_scale_changed_mic (GtkRange *range, VolumePulsePlugin *vol)
@@ -221,7 +221,7 @@ static void popup_window_scale_changed_mic (GtkRange *range, VolumePulsePlugin *
     /* Update the PulseAudio volume */
     pulse_set_volume (vol, gtk_range_get_value (range), TRUE);
 
-    micpulse_update_display (vol);
+    update_display (vol, TRUE);
 }
 
 /* Handler for "toggled" signal on popup window mute checkbox */
@@ -231,7 +231,7 @@ static void popup_window_mute_toggled_vol (GtkWidget *widget, VolumePulsePlugin 
     /* Toggle the PulseAudio mute */
     pulse_set_mute (vol, gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (widget)), FALSE);
 
-    volumepulse_update_display (vol);
+    update_display (vol, FALSE);
 }
 
 static void popup_window_mute_toggled_mic (GtkWidget *widget, VolumePulsePlugin *vol)
@@ -239,7 +239,7 @@ static void popup_window_mute_toggled_mic (GtkWidget *widget, VolumePulsePlugin 
     /* Toggle the PulseAudio mute */
     pulse_set_mute (vol, gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (widget)), TRUE);
 
-    micpulse_update_display (vol);
+    update_display (vol, TRUE);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -356,16 +356,14 @@ void menu_set_alsa_device_output (GtkWidget *widget, VolumePulsePlugin *vol)
 {
     pulse_change_sink (vol, gtk_widget_get_name (widget));
     pulse_move_output_streams (vol);
-
-    volumepulse_update_display (vol);
+    update_display (vol, FALSE);
 }
 
 void menu_set_alsa_device_input (GtkWidget *widget, VolumePulsePlugin *vol)
 {
     pulse_change_source (vol, gtk_widget_get_name (widget));
     pulse_move_input_streams (vol);
-
-    micpulse_update_display (vol);
+    update_display (vol, TRUE);
 }
 
 /* Handler for menu click to set a Bluetooth device as output or input */
