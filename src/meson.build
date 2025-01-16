@@ -4,7 +4,6 @@ libpulse = dependency('libpulse')
 
 lsources = files(
   'volumepulse.c',
-  'micpulse.c',
   'commongui.c',
   'pulse.c',
   'bluetooth.c'

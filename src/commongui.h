@@ -28,6 +28,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern char *get_string (const char *fmt, ...);
 extern int vsystem (const char *fmt, ...);
 extern void close_widget (GtkWidget **wid);
+extern const char *device_display_name (VolumePulsePlugin *vol, const char *name);
 
 extern gboolean menu_create (VolumePulsePlugin *vol, gboolean input_control);
 extern void menu_add_separator (VolumePulsePlugin *vol, GtkWidget *menu);
@@ -36,17 +37,12 @@ extern void menu_set_bluetooth_device_output (GtkWidget *widget, VolumePulsePlug
 extern void menu_set_alsa_device_input (GtkWidget *widget, VolumePulsePlugin *vol);
 extern void menu_set_bluetooth_device_input (GtkWidget *widget, VolumePulsePlugin *vol);
 
-extern void popup_window_create (VolumePulsePlugin *vol, gboolean input_control);
+extern void popup_window_show (VolumePulsePlugin *vol, gboolean input_control);
 
-extern gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
-extern gboolean micpulse_button_press_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
-extern gboolean volmic_button_press_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
-extern gboolean volumepulse_button_release_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
-extern gboolean micpulse_button_release_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
-extern void vol_gesture_end (GtkGestureLongPress *, GdkEventSequence *, gpointer data);
-extern void mic_gesture_end (GtkGestureLongPress *, GdkEventSequence *, gpointer data);
 extern void volumepulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *evt, VolumePulsePlugin *vol);
 extern void micpulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *evt, VolumePulsePlugin *vol);
+
+extern void profiles_dialog_show (VolumePulsePlugin *vol);
 
 /* End of file */
 /*----------------------------------------------------------------------------*/
