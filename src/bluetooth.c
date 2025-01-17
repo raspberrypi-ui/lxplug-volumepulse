@@ -42,7 +42,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bluetooth.h"
 
 /*----------------------------------------------------------------------------*/
-/* Typedefs and macros */
+/* Typedefs and macros                                                        */
 /*----------------------------------------------------------------------------*/
 
 #define BT_SERV_AUDIO_SOURCE    "0000110A"

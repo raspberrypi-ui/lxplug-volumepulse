@@ -1,5 +1,5 @@
-/*
-Copyright (c) 2020 Raspberry Pi (Trading) Ltd.
+/*============================================================================
+Copyright (c) 2020-2025 Raspberry Pi Holdings Ltd.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -23,7 +23,7 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
 ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
+============================================================================*/
 
 extern char *get_string (const char *fmt, ...);
 extern int vsystem (const char *fmt, ...);
@@ -43,6 +43,7 @@ extern void volumepulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *evt, Vo
 extern void micpulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *evt, VolumePulsePlugin *vol);
 
 extern void profiles_dialog_show (VolumePulsePlugin *vol);
+extern void profiles_dialog_add_combo (VolumePulsePlugin *vol, GtkListStore *ls, GtkWidget *dest, int sel, const char *label, const char *name);
 
 /* End of file */
 /*----------------------------------------------------------------------------*/
