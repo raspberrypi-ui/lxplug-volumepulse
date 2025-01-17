@@ -466,6 +466,10 @@ gboolean volumepulse_control_msg (VolumePulsePlugin *vol, const char *cmd)
 
 void volumepulse_init (VolumePulsePlugin *vol)
 {
+    setlocale (LC_ALL, "");
+    bindtextdomain (GETTEXT_PACKAGE, PACKAGE_LOCALE_DIR);
+    bind_textdomain_codeset (GETTEXT_PACKAGE, "UTF-8");
+
     if (!g_strcmp0 (getenv ("USER"), "rpi-first-boot-wizard")) vol->wizard = TRUE;
     else vol->wizard = FALSE;
 
@@ -573,10 +577,6 @@ static GtkWidget *volumepulse_constructor (LXPanel *panel, config_setting_t *set
 {
     /* Allocate and initialize plugin context */
     VolumePulsePlugin *vol = g_new0 (VolumePulsePlugin, 1);
-
-    setlocale (LC_ALL, "");
-    bindtextdomain (GETTEXT_PACKAGE, PACKAGE_LOCALE_DIR);
-    bind_textdomain_codeset (GETTEXT_PACKAGE, "UTF-8");
 
     /* Allocate top level widget and set into plugin widget pointer */
     vol->panel = panel;
