@@ -387,9 +387,7 @@ static void bt_connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...
     g_vasprintf (&msg, fmt, arg);
     va_end (arg);
 
-#ifdef LXPLUG
     textdomain (GETTEXT_PACKAGE);
-#endif
 
     builder = gtk_builder_new_from_file (PACKAGE_DATA_DIR "/ui/lxpanel-modal.ui");
     vol->conn_dialog = (GtkWidget *) gtk_builder_get_object (builder, "modal");
