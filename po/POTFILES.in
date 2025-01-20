@@ -1,6 +1,11 @@
 [encoding: UTF-8]
-plugins/volumepulse/volumepulse.c
-plugins/volumepulse/pulse.c
-plugins/volumepulse/bluetooth.c
-plugins/volumepulse/commongui.c
-plugins/volumepulse/micpulse.c
+src/bluetooth.c
+src/bluetooth.h
+src/commongui.c
+src/commongui.h
+src/pulse.c
+src/pulse.h
+src/volumepulse.c
+src/volumepulse.cpp
+src/volumepulse.h
+src/volumepulse.hpp
