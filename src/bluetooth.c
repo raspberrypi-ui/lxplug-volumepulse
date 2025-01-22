@@ -390,6 +390,7 @@ static void bt_connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...
     textdomain (GETTEXT_PACKAGE);
 
     builder = gtk_builder_new_from_file (PACKAGE_DATA_DIR "/ui/lxplug-volumepulse.ui");
+
     vol->conn_dialog = (GtkWidget *) gtk_builder_get_object (builder, "modal");
     vol->conn_label = (GtkWidget *) gtk_builder_get_object (builder, "modal_msg");
     vol->conn_ok = (GtkWidget *) gtk_builder_get_object (builder, "modal_ok");
@@ -401,7 +402,6 @@ static void bt_connect_dialog_show (VolumePulsePlugin *vol, const char *fmt, ...
     gtk_widget_hide (vol->conn_ok);
 
     gtk_widget_show (vol->conn_dialog);
-    gtk_window_set_decorated (GTK_WINDOW (vol->conn_dialog), FALSE);
 
     g_free (msg);
 }
