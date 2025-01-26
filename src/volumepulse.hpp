@@ -32,10 +32,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <gtkmm/button.h>
 
 extern "C" {
+#include "lxutils.h"
 #include "volumepulse.h"
-extern void volumepulse_init (VolumePulsePlugin *vol);
-extern gboolean volumepulse_control_msg (VolumePulsePlugin *vol, const char *cmd);
-extern void volumepulse_destructor (gpointer user_data);
 }
 
 class WayfireVolumepulse : public WayfireWidget

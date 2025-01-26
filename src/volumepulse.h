@@ -25,6 +25,10 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ============================================================================*/
 
+/*----------------------------------------------------------------------------*/
+/* Typedefs and macros                                                        */
+/*----------------------------------------------------------------------------*/
+
 #define DEBUG_ON
 #ifdef DEBUG_ON
 #define DEBUG(fmt,args...) if(getenv("DEBUG_VP"))g_message("vp: " fmt,##args)
@@ -97,10 +101,16 @@ typedef struct
     gboolean bt_card_found;
 } VolumePulsePlugin;
 
-/* Functions in volumepulse.c needed in other modules */
+/*----------------------------------------------------------------------------*/
+/* Prototypes                                                                 */
+/*----------------------------------------------------------------------------*/
 
 extern void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input);
 extern void update_display (VolumePulsePlugin *vol, gboolean input);
+
+extern void volumepulse_init (VolumePulsePlugin *vol);
+extern gboolean volumepulse_control_msg (VolumePulsePlugin *vol, const char *cmd);
+extern void volumepulse_destructor (gpointer user_data);
 
 /* End of file */
 /*----------------------------------------------------------------------------*/
