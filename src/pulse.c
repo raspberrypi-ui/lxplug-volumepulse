@@ -319,7 +319,7 @@ static gboolean pa_update_disp_cb (gpointer userdata)
     VolumePulsePlugin *vol = (VolumePulsePlugin *) userdata;
 
     vol->pa_idle_timer = 0;
-    update_display_both (vol);
+    volumepulse_update_display (vol);
     return FALSE;
 }
 

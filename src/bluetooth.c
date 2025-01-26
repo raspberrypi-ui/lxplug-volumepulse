@@ -145,7 +145,7 @@ static void bt_cb_object_removed (GDBusObjectManager *, GDBusObject *object, gpo
     VolumePulsePlugin *vol = (VolumePulsePlugin *) user_data;
 
     DEBUG ("Bluetooth object %s removed", g_dbus_object_get_object_path (object));
-    update_display_both (vol);
+    volumepulse_update_display (vol);
 }
 
 /* Callback for BlueZ device property change - used to detect connection */
@@ -162,7 +162,7 @@ static void bt_cb_interface_properties (GDBusObjectManagerClient *, GDBusObjectP
     {
         if (g_variant_get_boolean (var) == TRUE)
         {
-            update_display_both (vol);
+            volumepulse_update_display (vol);
         }
         g_variant_unref (var);
     }
@@ -269,7 +269,7 @@ static gboolean bt_conn_set_profile (gpointer user_data)
         g_free (pacard);
     }
 
-    update_display_both (vol);
+    volumepulse_update_display (vol);
     return FALSE;
 }
 
@@ -310,7 +310,7 @@ static gboolean bt_conn_set_sink_source (gpointer user_data)
     vol->bt_retry_timer = 0;
     DEBUG ("Set sink / source polled %d times", vol->bt_retry_count);
 
-    update_display_both (vol);
+    volumepulse_update_display (vol);
     return FALSE;
 }
 

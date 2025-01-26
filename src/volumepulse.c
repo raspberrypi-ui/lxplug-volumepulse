@@ -342,64 +342,10 @@ void micpulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *event, VolumePuls
 }
 
 /* Handler for system config changed message from panel */
-void update_display (VolumePulsePlugin *vol, gboolean input)
+void volumepulse_update_display (VolumePulsePlugin *vol)
 {
-    const char *icon;
-
-    pulse_count_devices (vol, input);
-    if ((!input || !vol->wizard) && vol->pa_devices + bluetooth_count_devices (vol, input) > 0)
-    {
-        gtk_widget_show_all (vol->plugin[input ? 1 : 0]);
-        gtk_widget_set_sensitive (vol->plugin[input ? 1 : 0], TRUE);
-    }
-    else
-    {
-        gtk_widget_hide (vol->plugin[input ? 1 : 0]);
-        gtk_widget_set_sensitive (vol->plugin[input ? 1 : 0], FALSE);
-    }
-
-    /* read current mute and volume status */
-    gboolean mute = pulse_get_mute (vol, input);
-    int level = pulse_get_volume (vol, input);
-    if (mute) level = 0;
-
-    /* update icon */
-    if (input)
-    {
-        if (mute) icon = "audio-input-mic-muted";
-        else icon = "audio-input-microphone";
-    }
-    else
-    {
-        if (mute) icon = "audio-volume-muted";
-        else
-        {
-            if (level >= 66) icon = "audio-volume-high";
-            else if (level >= 33) icon = "audio-volume-medium";
-            else if (level > 0) icon = "audio-volume-low";
-            else icon = "audio-volume-silent";
-        }
-    }
-    wrap_set_taskbar_icon (vol, vol->tray_icon[input ? 1 : 0], icon);
-
-    /* update popup window controls */
-    if (vol->popup_window[input ? 1 : 0])
-    {
-        g_signal_handler_block (vol->popup_mute_check[input ? 1 : 0], vol->mute_check_handler[input ? 1 : 0]);
-        gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (vol->popup_mute_check[input ? 1 : 0]), mute);
-        g_signal_handler_unblock (vol->popup_mute_check[input ? 1 : 0], vol->mute_check_handler[input ? 1 : 0]);
-
-        g_signal_handler_block (vol->popup_volume_scale[input ? 1 : 0], vol->volume_scale_handler[input ? 1 : 0]);
-        gtk_range_set_value (GTK_RANGE (vol->popup_volume_scale[input ? 1 : 0]), level);
-        g_signal_handler_unblock (vol->popup_volume_scale[input ? 1 : 0], vol->volume_scale_handler[input ? 1 : 0]);
-
-        gtk_widget_set_sensitive (vol->popup_volume_scale[input ? 1 : 0], !mute);
-    }
-
-    /* update tooltip */
-    char *tooltip = g_strdup_printf ("%s %d", input ? _("Mic volume") : _("Volume control"), level);
-    if (!vol->wizard) gtk_widget_set_tooltip_text (vol->plugin[input ? 1 : 0], tooltip);
-    g_free (tooltip);
+    update_display (vol, FALSE);
+    update_display (vol, TRUE);
 }
 
 /* Handler for control message */
@@ -538,7 +484,7 @@ void volumepulse_init (VolumePulsePlugin *vol)
     gtk_widget_show_all (vol->plugin[0]);
     gtk_widget_show_all (vol->plugin[1]);
 
-    update_display_both (vol);
+    volumepulse_update_display (vol);
 }
 
 void volumepulse_destructor (gpointer user_data)
@@ -613,7 +559,7 @@ static gboolean micpulse_button_press_event (GtkWidget *widget, GdkEventButton *
 static void volumepulse_configuration_changed (LXPanel *, GtkWidget *plugin)
 {
     VolumePulsePlugin *vol = lxpanel_plugin_get_data (plugin);
-    update_display_both (vol);
+    volumepulse_update_display (vol);
 }
 
 /* Handler for control message */

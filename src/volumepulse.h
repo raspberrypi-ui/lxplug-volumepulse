@@ -36,8 +36,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define DEBUG(fmt,args...)
 #endif
 
-#define update_display_both(vol) update_display(vol,FALSE);update_display(vol,TRUE);
-
 typedef struct 
 {
 #ifdef LXPLUG
@@ -106,9 +104,9 @@ typedef struct
 /*----------------------------------------------------------------------------*/
 
 extern void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input);
-extern void update_display (VolumePulsePlugin *vol, gboolean input);
 
 extern void volumepulse_init (VolumePulsePlugin *vol);
+extern void volumepulse_update_display (VolumePulsePlugin *vol);
 extern gboolean volumepulse_control_msg (VolumePulsePlugin *vol, const char *cmd);
 extern void volumepulse_destructor (gpointer user_data);
 
