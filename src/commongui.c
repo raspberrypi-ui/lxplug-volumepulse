@@ -352,6 +352,65 @@ gboolean menu_create (VolumePulsePlugin *vol, gboolean input_control)
     return TRUE;
 }
 
+/* Add a device entry to the menu */
+
+void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input)
+{
+    GList *list, *l;
+    int count;
+    const char *disp_label = device_display_name (vol, label);
+
+    GtkWidget *mi = gtk_check_menu_item_new_with_label (disp_label);
+    gtk_widget_set_name (mi, name);
+    if (strstr (name, "bluez"))
+    {
+        if (input)
+            g_signal_connect (mi, "activate", G_CALLBACK (menu_set_bluetooth_device_input), (gpointer) vol);
+        else
+            g_signal_connect (mi, "activate", G_CALLBACK (menu_set_bluetooth_device_output), (gpointer) vol);
+    }
+    else
+    {
+        if (input)
+        {
+            g_signal_connect (mi, "activate", G_CALLBACK (menu_set_alsa_device_input), (gpointer) vol);
+            gtk_widget_set_tooltip_text (mi, _("Input from this device not available in the current profile"));
+        }
+        else
+        {
+            g_signal_connect (mi, "activate", G_CALLBACK (menu_set_alsa_device_output), (gpointer) vol);
+            gtk_widget_set_tooltip_text (mi, _("Output to this device not available in the current profile"));
+        }
+        gtk_widget_set_sensitive (mi, FALSE);
+    }
+
+    // find the start point of the last section - either a separator or the beginning of the list
+    list = gtk_container_get_children (GTK_CONTAINER (vol->menu_devices[input ? 1 : 0]));
+    count = g_list_length (list);
+    l = g_list_last (list);
+    while (l)
+    {
+        if (G_OBJECT_TYPE (l->data) == GTK_TYPE_SEPARATOR_MENU_ITEM) break;
+        count--;
+        l = l->prev;
+    }
+
+    // if l is NULL, init to element after start; if l is non-NULL, init to element after separator
+    if (!l) l = list;
+    else l = l->next;
+
+    // loop forward from the first element, comparing against the new label
+    while (l)
+    {
+        if (g_strcmp0 (disp_label, gtk_menu_item_get_label (GTK_MENU_ITEM (l->data))) < 0) break;
+        count++;
+        l = l->next;
+    }
+
+    gtk_menu_shell_insert (GTK_MENU_SHELL (vol->menu_devices[input ? 1 : 0]), mi, count);
+    g_list_free (list);
+}
+
 /* Add a separator to the menu (but only if there isn't already one there...) */
 
 void menu_add_separator (VolumePulsePlugin *vol, GtkWidget *menu)

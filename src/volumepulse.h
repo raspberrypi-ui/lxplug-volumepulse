@@ -103,8 +103,6 @@ typedef struct
 /* Prototypes                                                                 */
 /*----------------------------------------------------------------------------*/
 
-extern void menu_add_item (VolumePulsePlugin *vol, const char *label, const char *name, gboolean input);
-
 extern void volumepulse_init (VolumePulsePlugin *vol);
 extern void volumepulse_update_display (VolumePulsePlugin *vol);
 extern gboolean volumepulse_control_msg (VolumePulsePlugin *vol, const char *cmd);
