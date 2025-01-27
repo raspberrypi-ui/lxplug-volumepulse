@@ -57,6 +57,8 @@ static void popup_window_scale_changed_vol (GtkRange *range, VolumePulsePlugin *
 static void popup_window_mute_toggled_vol (GtkWidget *widget, VolumePulsePlugin *vol);
 static void popup_window_scale_changed_mic (GtkRange *range, VolumePulsePlugin *vol);
 static void popup_window_mute_toggled_mic (GtkWidget *widget, VolumePulsePlugin *vol);
+static gboolean menu_create (VolumePulsePlugin *vol, gboolean input_control);
+static void menu_open_profile_dialog (GtkWidget *, VolumePulsePlugin *vol);
 static void menu_mark_default_input (GtkWidget *widget, gpointer data);
 static void menu_mark_default_output (GtkWidget *widget, gpointer data);
 static void profiles_dialog_relocate_last_item (GtkWidget *box);
@@ -310,9 +312,22 @@ static void popup_window_mute_toggled_mic (GtkWidget *widget, VolumePulsePlugin 
 /* Device select menu                                                         */
 /*----------------------------------------------------------------------------*/
 
+void menu_show (VolumePulsePlugin *vol, gboolean input)
+{
+    // create the menu
+    menu_create (vol, input);
+
+    // lock menu if a dialog is open
+    if (vol->conn_dialog || vol->profiles_dialog)
+        gtk_container_foreach (GTK_CONTAINER (vol->menu_devices[input ? 1 : 0]), (void *) gtk_widget_set_sensitive, FALSE);
+
+    // show the menu
+    gtk_widget_show_all (vol->menu_devices[input ? 1 : 0]);
+}
+
 /* Create the device select menu */
 
-gboolean menu_create (VolumePulsePlugin *vol, gboolean input_control)
+static gboolean menu_create (VolumePulsePlugin *vol, gboolean input_control)
 {
     GtkWidget *mi;
     GList *items;
@@ -346,10 +361,30 @@ gboolean menu_create (VolumePulsePlugin *vol, gboolean input_control)
         mi = gtk_menu_item_new_with_label (_("No audio devices found"));
         gtk_widget_set_sensitive (GTK_WIDGET (mi), FALSE);
         gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices[index]), mi);
-        return FALSE;
     }
-    else g_list_free (items);
-    return TRUE;
+    else
+    {
+        g_list_free (items);
+
+        // add profiles item
+        if (!input_control)
+        {
+            // add the profiles menu item to the top level menu
+            mi = gtk_separator_menu_item_new ();
+            gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices[index]), mi);
+
+            mi = gtk_menu_item_new_with_label (_("Device Profiles..."));
+            g_signal_connect (mi, "activate", G_CALLBACK (menu_open_profile_dialog), (gpointer) vol);
+            gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices[index]), mi);
+        }
+    }
+}
+
+/* Handler for menu click to open the profiles dialog */
+
+static void menu_open_profile_dialog (GtkWidget *, VolumePulsePlugin *vol)
+{
+    profiles_dialog_show (vol);
 }
 
 /* Add a device entry to the menu */

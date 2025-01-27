@@ -52,19 +52,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /* Prototypes                                                                 */
 /*----------------------------------------------------------------------------*/
 
-/* Helpers */
 static int get_value (const char *fmt, ...);
 static void hdmi_init (VolumePulsePlugin *vol);
-
-/* Menu popup */
-static void menu_show (VolumePulsePlugin *vol, gboolean input);
-static void menu_open_profile_dialog (GtkWidget *widget, VolumePulsePlugin *vol);
-
 static void mouse_scrolled (GtkScale *, GdkEventScroll *evt, VolumePulsePlugin *vol, gboolean input);
 static gboolean button_release (GtkWidget *, GdkEventButton *event, VolumePulsePlugin *vol, gboolean input);
 
 #ifdef LXPLUG
-/* Button handlers */
 static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
 static gboolean micpulse_button_press_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
 #endif
@@ -139,41 +132,6 @@ static void hdmi_init (VolumePulsePlugin *vol)
         if (vol->hdmi_names[i]) g_free (vol->hdmi_names[i]);
         vol->hdmi_names[i] = g_strdup (_("HDMI"));
     }
-}
-
-/*----------------------------------------------------------------------------*/
-/* Device select menu                                                         */
-/*----------------------------------------------------------------------------*/
-
-static void menu_show (VolumePulsePlugin *vol, gboolean input)
-{
-    GtkWidget *mi;
-
-    // create the menu
-    if (menu_create (vol, input) && !input)
-    {
-        // add the profiles menu item to the top level menu
-        mi = gtk_separator_menu_item_new ();
-        gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices[0]), mi);
-
-        mi = gtk_menu_item_new_with_label (_("Device Profiles..."));
-        g_signal_connect (mi, "activate", G_CALLBACK (menu_open_profile_dialog), (gpointer) vol);
-        gtk_menu_shell_append (GTK_MENU_SHELL (vol->menu_devices[0]), mi);
-    }
-
-    // lock menu if a dialog is open
-    if (vol->conn_dialog || vol->profiles_dialog)
-        gtk_container_foreach (GTK_CONTAINER (vol->menu_devices[input ? 1 : 0]), (void *) gtk_widget_set_sensitive, FALSE);
-
-    // show the menu
-    gtk_widget_show_all (vol->menu_devices[input ? 1 : 0]);
-}
-
-/* Handler for menu click to open the profiles dialog */
-
-static void menu_open_profile_dialog (GtkWidget *, VolumePulsePlugin *vol)
-{
-    profiles_dialog_show (vol);
 }
 
 /*----------------------------------------------------------------------------*/
