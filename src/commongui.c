@@ -46,18 +46,20 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /*----------------------------------------------------------------------------*/
 
 /*----------------------------------------------------------------------------*/
-/* Plug-in global data                                                        */
+/* Global data                                                                */
 /*----------------------------------------------------------------------------*/
 
 /*----------------------------------------------------------------------------*/
 /* Prototypes                                                                 */
 /*----------------------------------------------------------------------------*/
 
+static void mouse_scrolled (GtkScale *, GdkEventScroll *evt, VolumePulsePlugin *vol, gboolean input);
+static void vol_destroyed (GtkWidget *widget, gpointer data);
 static void popup_window_scale_changed_vol (GtkRange *range, VolumePulsePlugin *vol);
 static void popup_window_mute_toggled_vol (GtkWidget *widget, VolumePulsePlugin *vol);
 static void popup_window_scale_changed_mic (GtkRange *range, VolumePulsePlugin *vol);
 static void popup_window_mute_toggled_mic (GtkWidget *widget, VolumePulsePlugin *vol);
-static gboolean menu_create (VolumePulsePlugin *vol, gboolean input_control);
+static void menu_create (VolumePulsePlugin *vol, gboolean input_control);
 static void menu_open_profile_dialog (GtkWidget *, VolumePulsePlugin *vol);
 static void menu_mark_default_input (GtkWidget *widget, gpointer data);
 static void menu_mark_default_output (GtkWidget *widget, gpointer data);
@@ -207,6 +209,42 @@ void update_display (VolumePulsePlugin *vol, gboolean input)
 }
 
 /*----------------------------------------------------------------------------*/
+/* Mouse scrolling                                                            */
+/*----------------------------------------------------------------------------*/
+
+static void mouse_scrolled (GtkScale *, GdkEventScroll *evt, VolumePulsePlugin *vol, gboolean input)
+{
+    if (pulse_get_mute (vol, input)) return;
+
+    /* Update the PulseAudio volume by a step */
+    int val = pulse_get_volume (vol, input);
+
+    if (evt->direction == GDK_SCROLL_UP || evt->direction == GDK_SCROLL_LEFT
+        || (evt->direction == GDK_SCROLL_SMOOTH && (evt->delta_x < 0 || evt->delta_y < 0)))
+    {
+        if (val < 100) val += 2;
+    }
+    else if (evt->direction == GDK_SCROLL_DOWN || evt->direction == GDK_SCROLL_RIGHT
+        || (evt->direction == GDK_SCROLL_SMOOTH && (evt->delta_x > 0 || evt->delta_y > 0)))
+    {
+        if (val > 0) val -= 2;
+    }
+    pulse_set_volume (vol, val, input);
+
+    update_display (vol, input);
+}
+
+void volumepulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *event, VolumePulsePlugin *vol)
+{
+    mouse_scrolled (scale, event, vol, FALSE);
+}
+
+void micpulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *event, VolumePulsePlugin *vol)
+{
+    mouse_scrolled (scale, event, vol, TRUE);
+}
+
+/*----------------------------------------------------------------------------*/
 /* Volume scale popup window                                                  */
 /*----------------------------------------------------------------------------*/
 
@@ -255,7 +293,7 @@ void popup_window_show (VolumePulsePlugin *vol, gboolean input_control)
 
     /* Value-changed and scroll-event signals. */
     vol->volume_scale_handler[index] = g_signal_connect (vol->popup_volume_scale[index], "value-changed", input_control ? G_CALLBACK (popup_window_scale_changed_mic) : G_CALLBACK (popup_window_scale_changed_vol), vol);
-    g_signal_connect (vol->popup_volume_scale[index], "scroll-event", G_CALLBACK (volumepulse_mouse_scrolled), vol);
+    g_signal_connect (vol->popup_volume_scale[index], "scroll-event", input_control ? G_CALLBACK (micpulse_mouse_scrolled) : G_CALLBACK (volumepulse_mouse_scrolled), vol);
 
     /* Create a check button as the child of the vertical box. */
     vol->popup_mute_check[index] = gtk_check_button_new_with_label (_("Mute"));
@@ -327,7 +365,7 @@ void menu_show (VolumePulsePlugin *vol, gboolean input)
 
 /* Create the device select menu */
 
-static gboolean menu_create (VolumePulsePlugin *vol, gboolean input_control)
+static void menu_create (VolumePulsePlugin *vol, gboolean input_control)
 {
     GtkWidget *mi;
     GList *items;

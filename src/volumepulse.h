@@ -38,16 +38,17 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 typedef struct 
 {
+    GtkWidget *plugin[2];
+
 #ifdef LXPLUG
     LXPanel *panel;                     /* Back pointer to panel */
     config_setting_t *settings;         /* Plugin settings */
-    GtkWidget *box;                     /* Back pointer to widget */
+    GtkWidget *box;                     /* Box to hold both plugin widgets */
 #else
     int icon_size;                      /* Variables used under wf-panel */
     gboolean bottom;
     GtkGesture *gesture[2];
 #endif
-    GtkWidget *plugin[2];               /* Pointers to buttons */
 
     gboolean wizard;                    /* Used in wizard? */
     gboolean pipewire;                  /* Pipewire running? */

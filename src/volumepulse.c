@@ -45,7 +45,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /*----------------------------------------------------------------------------*/
 
 /*----------------------------------------------------------------------------*/
-/* Plug-in global data                                                        */
+/* Global data                                                                */
 /*----------------------------------------------------------------------------*/
 
 /*----------------------------------------------------------------------------*/
@@ -54,12 +54,16 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 static int get_value (const char *fmt, ...);
 static void hdmi_init (VolumePulsePlugin *vol);
-static void mouse_scrolled (GtkScale *, GdkEventScroll *evt, VolumePulsePlugin *vol, gboolean input);
 static gboolean button_release (GtkWidget *, GdkEventButton *event, VolumePulsePlugin *vol, gboolean input);
-
 #ifdef LXPLUG
 static gboolean volumepulse_button_press_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
 static gboolean micpulse_button_press_event (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
+#else
+static gboolean volmic_button_press (GtkWidget *, GdkEventButton *, VolumePulsePlugin *vol);
+static gboolean volumepulse_button_release (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
+static gboolean micpulse_button_release (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol);
+static void vol_gesture_end (GtkGestureLongPress *, GdkEventSequence *, gpointer data);
+static void mic_gesture_end (GtkGestureLongPress *, GdkEventSequence *, gpointer data);
 #endif
 
 /*----------------------------------------------------------------------------*/
@@ -166,18 +170,8 @@ static gboolean button_release (GtkWidget *, GdkEventButton *event, VolumePulseP
     return TRUE;
 }
 
-gboolean volumepulse_button_release (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol)
-{
-    return button_release (widget, event, vol, FALSE);
-}
-
-gboolean micpulse_button_release (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol)
-{
-    return button_release (widget, event, vol, TRUE);
-}
-
 #ifndef LXPLUG
-gboolean volmic_button_press (GtkWidget *, GdkEventButton *, VolumePulsePlugin *vol)
+static gboolean volmic_button_press (GtkWidget *, GdkEventButton *, VolumePulsePlugin *vol)
 {
     pressed = PRESS_NONE;
     if (vol->popup_window[0] || vol->popup_window[1]) vol->popup_shown = TRUE;
@@ -185,8 +179,18 @@ gboolean volmic_button_press (GtkWidget *, GdkEventButton *, VolumePulsePlugin *
     return FALSE;
 }
 
+static gboolean volumepulse_button_release (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol)
+{
+    return button_release (widget, event, vol, FALSE);
+}
+
+static gboolean micpulse_button_release (GtkWidget *widget, GdkEventButton *event, VolumePulsePlugin *vol)
+{
+    return button_release (widget, event, vol, TRUE);
+}
+
 /* Handler for long-press gesture */
-void vol_gesture_end (GtkGestureLongPress *, GdkEventSequence *, gpointer data)
+static void vol_gesture_end (GtkGestureLongPress *, GdkEventSequence *, gpointer data)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) data;
     if (pressed == PRESS_LONG)
@@ -196,7 +200,7 @@ void vol_gesture_end (GtkGestureLongPress *, GdkEventSequence *, gpointer data)
     }
 }
 
-void mic_gesture_end (GtkGestureLongPress *, GdkEventSequence *, gpointer data)
+static void mic_gesture_end (GtkGestureLongPress *, GdkEventSequence *, gpointer data)
 {
     VolumePulsePlugin *vol = (VolumePulsePlugin *) data;
     if (pressed == PRESS_LONG)
@@ -206,39 +210,6 @@ void mic_gesture_end (GtkGestureLongPress *, GdkEventSequence *, gpointer data)
     }
 }
 #endif
-
-/* Handler for mouse scroll */
-static void mouse_scrolled (GtkScale *, GdkEventScroll *evt, VolumePulsePlugin *vol, gboolean input)
-{
-    if (pulse_get_mute (vol, input)) return;
-
-    /* Update the PulseAudio volume by a step */
-    int val = pulse_get_volume (vol, input);
-
-    if (evt->direction == GDK_SCROLL_UP || evt->direction == GDK_SCROLL_LEFT
-        || (evt->direction == GDK_SCROLL_SMOOTH && (evt->delta_x < 0 || evt->delta_y < 0)))
-    {
-        if (val < 100) val += 2;
-    }
-    else if (evt->direction == GDK_SCROLL_DOWN || evt->direction == GDK_SCROLL_RIGHT
-        || (evt->direction == GDK_SCROLL_SMOOTH && (evt->delta_x > 0 || evt->delta_y > 0)))
-    {
-        if (val > 0) val -= 2;
-    }
-    pulse_set_volume (vol, val, input);
-
-    update_display (vol, input);
-}
-
-void volumepulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *event, VolumePulsePlugin *vol)
-{
-    mouse_scrolled (scale, event, vol, FALSE);
-}
-
-void micpulse_mouse_scrolled (GtkScale *scale, GdkEventScroll *event, VolumePulsePlugin *vol)
-{
-    mouse_scrolled (scale, event, vol, TRUE);
-}
 
 /* Handler for system config changed message from panel */
 void volumepulse_update_display (VolumePulsePlugin *vol)
